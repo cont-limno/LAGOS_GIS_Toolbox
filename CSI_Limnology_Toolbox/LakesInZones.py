@@ -1,8 +1,8 @@
-# Name:JoinZones2Lakes.py
+# Name:LakesInZones.py
 # Purpose: Gives a count and area of all, 4ha, 10ha and 4-10ha lakes by zone.
 # Author: Scott Stopyak
 # Created: 19/11/2013
-# Copyright:(c) Scott Stopyak 2013
+# Copyright:(c) Scott Stopyak, Patricia Soranno 2013
 # Licence: Distributed under the terms of GNU GPL
 #_______________________________________________________________________________
 
@@ -10,8 +10,9 @@ import arcpy, os
 
 # Parameters
 infolder = arcpy.GetParameterAsText(0) # Workspace with zone feature classes
-lakes = arcpy.GetParameterAsText(1) # Lake polygon feature class
+inlakes = arcpy.GetParameterAsText(1) # Lake polygon feature class
 topoutfolder = arcpy.GetParameterAsText(2) # Output folder
+
 
 # Create output geodatabase in outfolder
 try:
@@ -22,9 +23,9 @@ outfolder = os.path.join(topoutfolder, "LakesByZone.gdb")
 
 # Add LakeHa field if it doesn't exist
 try:
-    arcpy.AddField_management(lakes, "LakeHa", "DOUBLE")
+    arcpy.AddField_management(inlakes, "LakeHa", "DOUBLE")
     expha = "!shape.area@hectares!"
-    arcpy.CalculateField_management(lakes, "LakeHa", expha, "PYTHON")
+    arcpy.CalculateField_management(inlakes, "LakeHa", expha, "PYTHON")
 except:
     pass
 
@@ -32,6 +33,10 @@ except:
 mem = "in_memory"
 arcpy.env.workspace = mem
 arcpy.env.overwriteOutput = True
+
+# Lakes to points conversion
+arcpy.FeatureToPoint_management(inlakes, "lakes", "INSIDE")
+lakes = "lakes"
 
 # Make 4, 10, and 4-10, 1-10 hectare lake layers in memory.
 exp4 = """"LakeHa" >= 1 AND "LakeHa" < 10 """

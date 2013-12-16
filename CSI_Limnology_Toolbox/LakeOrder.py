@@ -53,7 +53,7 @@ fmid = arcpy.FieldMap()
 fmstrahler = arcpy.FieldMap()
 
 fmcon.addInputField(csilakes, "Connection")
-fmid.addInputField(csilakes, "Permanent_Identifier")
+fmid.addInputField(csilakes, "Permanent_")
 fmstrahler.addInputField("drainpts", "Strahler")
 
 fmid_name = fmid.outputField

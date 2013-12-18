@@ -45,7 +45,7 @@ spatialRefZones = zone_sr.SpatialReference
 arcpy.Project_management(zones, os.path.join(scratch, "zones"), albers,'',spatialRefZones)
 lines_sr = arcpy.Describe(lines)
 spatialRefLines = lines_sr.SpatialReference
-arcpy.Project_management(zones,os.path.join(scratch, "lines"), albers,'',spatialRefLines)
+arcpy.Project_management(lines,os.path.join(scratch, "lines"), albers,'',spatialRefLines)
 arcpy.env.workspace = scratch
 arcpy.RefreshCatalog(topoutfolder)
 

@@ -12,15 +12,20 @@ import arcpy, os
 infolder = arcpy.GetParameterAsText(0) # Workspace with zone feature classes
 idfield = arcpy.GetParameterAsText(1) # Field that is the unique id for every extent poly
 wetlands = arcpy.GetParameterAsText(2) # Wetland polygon feature class
-topoutfolder = arcpy.GetParameterAsText(3) # Output folder
+top_outfolder = arcpy.GetParameterAsText(3) # Output folder
 arcpy.env.overwriteOutput = True
+foldname = os.path.splitext(os.path.basename(wetlands))[0]
+if not os.path.exists(os.path.join(top_outfolder, foldname)):
+    os.mkdir(os.path.join(top_outfolder, foldname))
+
+topoutfolder = os.path.join(top_outfolder, foldname) 
 
 # Create output geodatabase in outfolder
 try:
-    arcpy.CreateFileGDB_management(topoutfolder, "WetlandsByZone")
+    arcpy.CreateFileGDB_management(topoutfolder, "WetlandsInZones")
 except:
     pass
-outfolder = os.path.join(topoutfolder, "WetlandsByZone.gdb")
+outfolder = os.path.join(topoutfolder, "WetlandsInZones.gdb")
 
 # Add WetlandHa field if it doesn't exist
 try:
@@ -37,9 +42,12 @@ arcpy.env.workspace = mem
 arcpy.env.overwriteOutput = True
 
 # Make wetlands in memory.
-exp = """"ATTRIBUTE" LIKE 'P%'"""
-arcpy.Select_analysis(wetlands, "wetlands", exp)
+exp = """"ATTRIBUTE" LIKE 'P%'AND "WETLAND_TY" <> 'Freshwater_Pond'"""
+arcpy.Select_analysis(wetlands, "wetlandspoly", exp)
 arcpy.RefreshCatalog(mem)
+
+# Convert wetlands to points
+arcpy.FeatureToPoint_management("wetlandspoly", "wetlands", "INSIDE")
 
 # List extent feature classes
 fcs = []

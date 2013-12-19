@@ -37,8 +37,8 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
     outputDir = os.path.join(finalOutPath,"NHD" + sr2Process)
     if not os.path.exists(outputDir):
         os.mkdir(outputDir)
-    nhd_source = os.path.join(nhdPath,gdbName)
-    nhd_destination = os.path.join(outputDir,gdbName)
+    nhd_source = os.path.join(nhdPath, gdbName)
+    nhd_destination = os.path.join(outputDir, gdbName)
 
     if not os.path.exists(nhd_source):
         shutil.copytree(nhd_source, nhd_destination)
@@ -72,21 +72,51 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
     #####################################################################
     clip_fc = "in_memory/ned_clip"
     fields = ["FILE_ID"]
+    missing_NEDs = []
     with arcpy.da.SearchCursor(clip_fc, fields) as cursor:
         for row in cursor:
             file_id = row[0].replace("g","")
             cu.multi_msg(file_id)
 
-            # copy ned tiles to output location
-            ned_source = os.path.join(nedPath,file_id)
-            ned_destination = os.path.join(outputDir,file_id)
-            if not os.path.exists(ned_source):
-                cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
-            else:
-                if not os.path.exists(ned_destination):
-                    shutil.copytree(ned_source, ned_destination)
+            # unzipping if needed
+            def unzip_file(file_id):
+                # clunky but this works in USA: zipped files sometimes called
+                # something like n36w87 instead of n36w087 so try all 3
+                filename_variants = [os.path.join(nedPath, f) for f in [file_id + ".zip",
+                file_id[0:4] + file_id[5:] + ".zip",
+                file_id[0] + file_id[2:] + ".zip"]]
+                filename_to_use = ''
+                for f in filename_variants:
+                    if not os.path.exists(f):
+                        continue
+                    else:
+                        filename_to_use = f
+
+                if filename_to_use:
+                    cu.multi_msg("Unzipping file %s" % filename_to_use)
+                    zf = zipfile.ZipFile(filename_to_use)
+                    zf.extractall(outputDir)
                 else:
-                    cu.multi_msg("Output folder for this NED tile already exists.")
+                    cu.multi_msg("ERROR: A tile for %s does not exist in the specified location" % file_id)
+                    missing_NEDS.append(file_id)
+
+            if zipped:
+                unzip(file_id)
+            else:
+
+                # copy ned tiles to output location
+                ned_source = os.path.join(nedPath,file_id)
+                ned_destination = os.path.join(outputDir,file_id)
+                if not os.path.exists(ned_source):
+                    cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
+                    missing_NEDs.append(file_id)
+                else:
+                    if not os.path.exists(ned_destination):
+                        shutil.copytree(ned_source, ned_destination)
+                    else:
+                        cu.multi_msg("Output folder for this NED tile already exists.")
+    if missing_NEDs:
+        cu.multi_msg("WARNING: NED tile directories did not exist for the following: %s" % ','.join(missing_NEDs))
 
 
 

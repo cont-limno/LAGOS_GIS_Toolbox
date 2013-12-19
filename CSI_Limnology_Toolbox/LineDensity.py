@@ -49,10 +49,6 @@ arcpy.Project_management(lines,os.path.join(scratch, "lines"), albers,'',spatial
 arcpy.env.workspace = scratch
 arcpy.RefreshCatalog(topoutfolder)
 
-# Add length field to lines (meters)
-arcpy.AddField_management("lines", "LengthM", "DOUBLE")
-arcpy.CalculateField_management("lines", "LengthM", "!shape.length@meters!", "PYTHON")
-
 # Add hectares field to zones
 arcpy.AddField_management("zones", "ZoneAreaHa", "DOUBLE")
 arcpy.CalculateField_management("zones", "ZoneAreaHa", "!shape.area@hectares!", "PYTHON")
@@ -69,6 +65,10 @@ except:
     except:
         arcpy.AddMessage("The output location is locking up and not allowing output to be written to it. Try it again with antivirus off and/or in a different location.")
     pass    
+
+# Recalculate lengths
+arcpy.AddField_management("lines_identity", "LengthM", "DOUBLE")
+arcpy.CalculateField_management("lines_identity", "LengthM", '!shape.length@meters!', "PYTHON")
 
 # Summarize statistics by zone
 name = os.path.splitext(os.path.basename(zones))[0]

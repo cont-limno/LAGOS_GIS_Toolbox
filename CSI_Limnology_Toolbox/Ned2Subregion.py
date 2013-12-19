@@ -1,6 +1,6 @@
 #--------------------------------------------------------------------------------
 #Name:     Ned2Subregion
-# Purpose:  The purpose of this script is to create a directory of NED tiles for a NHD subregion and 
+# Purpose:  The purpose of this script is to create a directory of NED tiles for a NHD subregion and
 #           copy in an NHD subregion file geodatabase for the purpose of HPCC processing
 #
 # Reqs:     1) nhdPath => file directory path of NHD subregion gdbs
@@ -18,87 +18,104 @@
 # Author:   Ed Bissell
 #
 # Created:   4/2/2013
-#           
+#
 #
 #-------------------------------------------------------------------------------
 
-import os,fnmatch
+import fnmatch, os, shutil, zipfile
 import arcpy
 from arcpy import env
-import shutil
+import csiutils as cu
 
-
-arcpy.env.overwriteOutput = True
-
-
-# User defined settings:
-nhdPath = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
-nedPath = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
-wbd = arcpy.GetParameterAsText(2)           #FC of 4 digit HUC Subregions
-nedFootprints = arcpy.GetParameterAsText(3)  
-sr2Process = arcpy.GetParameterAsText(4)    # Subregion to process, (4 digit HUC designation, include leading 0)
-finalOutPath = arcpy.GetParameterAsText(5)    # Output folder
-
-#nhdPath = "C:/NHD"
-#nedPath = "C:/NED"
-#wbd = "S:/FWL/labs/soranno/CSIGIS/GISData/NED_FootPrint_Subregions.gdb/HUC_4"
-#nedFootprints = "S:/FWL/labs/soranno/CSIGIS/GISData/NED_FootPrint_Subregions.gdb/nedfootprints"
-#nedFootprints = "C:/Dropbox/PrivatEd/NEDProcessing/NED_FootPrint_Subregions.gdb/nedfootprints"
-#sr2Process = "0508"
-#finalOutPath = "C:/PreHPCC"
-
-#Store intermediate data in memory rather than writing out to disk
-outPath = "in_memory"
-
-
-def Run():
+def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED):
 
     #####################################################################
-    print "1) Creating Directory Structure and Copying NHD Geodatabase"
+    cu.multi_msg("1) Creating Directory Structure and Copying NHD Geodatabase")
     #####################################################################
     srName = "NHD" + sr2Process
     gdbName = "NHDH" + sr2Process + ".gdb"
     outputDir = os.path.join(finalOutPath,"NHD" + sr2Process)
     if not os.path.exists(outputDir):
         os.mkdir(outputDir)
-    if not os.path.exists(os.path.join(outputDir,gdbName)):
-        shutil.copytree(os.path.join(nhdPath,gdbName), (os.path.join(outputDir,gdbName)))
+    nhd_source = os.path.join(nhdPath,gdbName)
+    nhd_destination = os.path.join(outputDir,gdbName)
 
+    if not os.path.exists(nhd_source):
+        shutil.copytree(nhd_source, nhd_destination)
+
+    # set initial environments
+    env.overwriteOutput = True
+    arcpy.env.workspace = outputDir
 
     ####################################################################
-    print "2) Getting WBD Poly For Subregion and Buffering by 5000m"
+    cu.multi_msg("2) Getting WBD Poly For Subregion and Buffering by 5000m")
     #####################################################################
-    arcpy.env.workspace = wbd
+
+    # Buffer only this subregion
     whereClause = "HUC_4 = '" + sr2Process + "'"
-    print("making featurelayer")
+    cu.multi_msg("making featurelayer")
     arcpy.MakeFeatureLayer_management(wbd, "wbd_poly", whereClause)
-    print("making wbd_poly featurelayer complete")
-    print("buffering")
-    arcpy.Buffer_analysis("wbd_poly", outPath + os.sep + "wbd_buf", 5000) 
-    print("buffering complete")
+    cu.multi_msg("making wbd_poly featurelayer complete")
+    cu.multi_msg("buffering")
+    arcpy.Buffer_analysis("wbd_poly", "in_memory/wbd_buf", 5000)
+    cu.multi_msg("buffering complete")
 
     #####################################################################
-    print "3) Clipping NED Tile polys from Buffered NHD Subregion From WBD"
+    cu.multi_msg("3) Clipping NED Tile polys from Buffered NHD Subregion From WBD")
     #####################################################################
-    ##tempData = arcpy.CreateScratchName(workspace=arcpy.env.scratchGDB)   
-    arcpy.Clip_analysis(nedFootprints, outPath + os.sep + "wbd_buf", outPath + os.sep + "ned_clip")
-    print("clipping complete")
+
+    arcpy.Clip_analysis(nedFootprints, "in_memory/wbd_buf", "in_memory/ned_clip")
+    cu.multi_msg("clipping complete")
 
     #####################################################################
-    print "4) Getting File_ID of clipped NED footprint polys and copying NED data to output location"
+    cu.multi_msg("4) Getting File_ID of clipped NED footprint polys and copying NED data to output location")
     #####################################################################
-    fc = outPath + os.sep + "ned_clip"
+    clip_fc = "in_memory/ned_clip"
     fields = ["FILE_ID"]
-    with arcpy.da.SearchCursor(fc,fields) as cursor:
+    with arcpy.da.SearchCursor(clip_fc, fields) as cursor:
         for row in cursor:
             file_id = row[0].replace("g","")
-            print(file_id)
-            ## copy ned tiles to output location
-            if not os.path.exists(os.path.join(nedPath,file_id)):
-                print("ERROR: Tile " + file_id + " does not exist in the specified location")            
-            else:
-                if not os.path.exists(os.path.join(outputDir,file_id)):
-                    shutil.copytree(os.path.join(nedPath,file_id), (os.path.join(outputDir,file_id)))
+            cu.multi_msg(file_id)
 
-Run()
+            # copy ned tiles to output location
+            ned_source = os.path.join(nedPath,file_id)
+            ned_destination = os.path.join(outputDir,file_id)
+            if not os.path.exists(ned_source):
+                cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
+            else:
+                if not os.path.exists(ned_destination):
+                    shutil.copytree(ned_source, ned_destination)
+                else:
+                    cu.multi_msg("Output folder for this NED tile already exists.")
+
+
+
+# If module called directly, run with test parameters
+if __name__ == '__main__':
+
+    #test the script with the following parameters
+    test_nhdPath = "C:/NHD"
+    test_nedPath = "C:/NED"
+    test_wbd = "S:/FWL/labs/soranno/CSIGIS/GISData/NED_FootPrint_Subregions.gdb/HUC_4"
+    test_nedFootprints = "S:/FWL/labs/soranno/CSIGIS/GISData/NED_FootPrint_Subregions.gdb/nedfootprints"
+    test_sr2Process = "0508"
+    test_finalOutPath = "C:/PreHPCC"
+    test_zippedNED = 'True'
+    stage_files(test_nhdPath, test_nedPath, test_wbd,
+                test_nedFootprints, test_sr2Process,
+                test_finalOutPath, test_zippedNED)
+
+
+# Otherwise when called from toolbox run the tool
+# with parameters passed
+
+nhdPath = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
+nedPath = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
+wbd = arcpy.GetParameterAsText(2)           #FC of 4 digit HUC Subregions
+nedFootprints = arcpy.GetParameterAsText(3)
+sr2Process = arcpy.GetParameterAsText(4)    # Subregion to process, (4 digit HUC designation, include leading 0)
+finalOutPath = arcpy.GetParameterAsText(5)    # Output folder
+zippedNED = arcpy.GetParameterAsText(6) # Whether NED tiles are zipped or not
+
+stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED)
 print("Complete")

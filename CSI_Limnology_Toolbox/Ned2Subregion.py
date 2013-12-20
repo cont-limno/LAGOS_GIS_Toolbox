@@ -35,8 +35,6 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
     srName = "NHD" + sr2Process
     gdbName = "NHDH" + sr2Process + ".gdb"
     outputDir = os.path.join(finalOutPath,"NHD" + sr2Process)
-    if not os.path.exists(outputDir):
-        os.mkdir(outputDir)
     nhd_source = os.path.join(nhdPath, gdbName)
     nhd_destination = os.path.join(outputDir, gdbName)
 
@@ -119,29 +117,12 @@ def unzip_file(file_id, nedPath, outputDir):
                     cu.multi_msg("Unzipping file %s" % filename_to_use)
                     zf = zipfile.ZipFile(filename_to_use)
                     zf.extractall(outputDir)
+                    return True
                 else:
                     cu.multi_msg("ERROR: A tile for %s does not exist in the specified location" % file_id)
                     return False
 
-# If module called directly, run with test parameters
-if __name__ == '__main__':
-
-    #test the script with the following parameters
-    test_nhdPath = r"C:\GISData\NHD_bySubregion"
-    test_nedPath = r"E:\Downloaded_NED"
-    test_wbd = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\HUC4_inStudyArea"
-    test_nedFootprints = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\NEDTiles"
-    test_sr2Process = "0109"
-    test_finalOutPath = r"C:\GISData\Scratch_njs"
-    test_zippedNED = 'True'
-    stage_files(test_nhdPath, test_nedPath, test_wbd,
-                test_nedFootprints, test_sr2Process,
-                test_finalOutPath, test_zippedNED)
-
-else:
-    # Otherwise when called from toolbox run the tool
-    # with parameters passed
-
+def main():
     nhdPath = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
     nedPath = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
     wbd = arcpy.GetParameterAsText(2)           #FC of 4 digit HUC Subregions
@@ -152,3 +133,24 @@ else:
 
     stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED)
     print("Complete")
+
+#######################################
+#TESTING
+########################################
+def test():
+    """Tests the stage_files function. Call in place of main() to test."""
+    cu.multi_msg("WARNING: TESTING MODE!!! If not desired edit script to call main() instead.")
+    test_nhdPath = r"C:\GISData\NHD_bySubregion"
+    test_nedPath = r"E:\Downloaded_NED"
+    test_wbd = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\HUC4_inStudyArea"
+    test_nedFootprints = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\NEDTiles"
+    test_sr2Process = "0109"
+    test_finalOutPath = r"C:\GISData\Scratch_njs"
+    test_zippedNED = 'True'
+    stage_files(test_nhdPath, test_nedPath, test_wbd,
+                    test_nedFootprints, test_sr2Process,
+                     test_finalOutPath, test_zippedNED)
+
+
+if __name__ == '__main__':
+    main()

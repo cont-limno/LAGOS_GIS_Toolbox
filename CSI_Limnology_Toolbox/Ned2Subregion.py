@@ -40,7 +40,7 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
     nhd_source = os.path.join(nhdPath, gdbName)
     nhd_destination = os.path.join(outputDir, gdbName)
 
-    if not os.path.exists(nhd_source):
+    if not os.path.exists(nhd_destination):
         shutil.copytree(nhd_source, nhd_destination)
 
     # set initial environments
@@ -70,16 +70,39 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
     #####################################################################
     cu.multi_msg("4) Getting File_ID of clipped NED footprint polys and copying NED data to output location")
     #####################################################################
+
+
+
     clip_fc = "in_memory/ned_clip"
     fields = ["FILE_ID"]
-    missing_NEDs = []
+    missing_NED_list = []
     with arcpy.da.SearchCursor(clip_fc, fields) as cursor:
         for row in cursor:
             file_id = row[0].replace("g","")
-            cu.multi_msg(file_id)
 
             # unzipping if needed
-            def unzip_file(file_id):
+
+            if zippedNED:
+                unzipped_file = unzip_file(file_id, nedPath, outputDir)
+                if not unzipped_file:
+                    missing_NED_list.append(file_id)
+            else:
+
+                # copy ned tiles to output location
+                ned_source = os.path.join(nedPath,file_id)
+                ned_destination = os.path.join(outputDir,file_id)
+                if not os.path.exists(ned_source):
+                    cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
+                    missing_NED_list.append(file_id)
+                else:
+                    if not os.path.exists(ned_destination):
+                        shutil.copytree(ned_source, ned_destination)
+                    else:
+                        cu.multi_msg("Output folder for this NED tile already exists.")
+    if missing_NED_list:
+        cu.multi_msg("WARNING: NED tile directories did not exist for the following: %s" % ','.join(missing_NED_list))
+
+def unzip_file(file_id, nedPath, outputDir):
                 # clunky but this works in USA: zipped files sometimes called
                 # something like n36w87 instead of n36w087 so try all 3
                 filename_variants = [os.path.join(nedPath, f) for f in [file_id + ".zip",
@@ -98,54 +121,34 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
                     zf.extractall(outputDir)
                 else:
                     cu.multi_msg("ERROR: A tile for %s does not exist in the specified location" % file_id)
-                    missing_NEDS.append(file_id)
-
-            if zipped:
-                unzip(file_id)
-            else:
-
-                # copy ned tiles to output location
-                ned_source = os.path.join(nedPath,file_id)
-                ned_destination = os.path.join(outputDir,file_id)
-                if not os.path.exists(ned_source):
-                    cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
-                    missing_NEDs.append(file_id)
-                else:
-                    if not os.path.exists(ned_destination):
-                        shutil.copytree(ned_source, ned_destination)
-                    else:
-                        cu.multi_msg("Output folder for this NED tile already exists.")
-    if missing_NEDs:
-        cu.multi_msg("WARNING: NED tile directories did not exist for the following: %s" % ','.join(missing_NEDs))
-
-
+                    return False
 
 # If module called directly, run with test parameters
 if __name__ == '__main__':
 
     #test the script with the following parameters
-    test_nhdPath = "C:/NHD"
-    test_nedPath = "C:/NED"
-    test_wbd = "S:/FWL/labs/soranno/CSIGIS/GISData/NED_FootPrint_Subregions.gdb/HUC_4"
-    test_nedFootprints = "S:/FWL/labs/soranno/CSIGIS/GISData/NED_FootPrint_Subregions.gdb/nedfootprints"
-    test_sr2Process = "0508"
-    test_finalOutPath = "C:/PreHPCC"
+    test_nhdPath = r"C:\GISData\NHD_bySubregion"
+    test_nedPath = r"E:\Downloaded_NED"
+    test_wbd = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\HUC4_inStudyArea"
+    test_nedFootprints = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\NEDTiles"
+    test_sr2Process = "0109"
+    test_finalOutPath = r"C:\GISData\Scratch_njs"
     test_zippedNED = 'True'
     stage_files(test_nhdPath, test_nedPath, test_wbd,
                 test_nedFootprints, test_sr2Process,
                 test_finalOutPath, test_zippedNED)
 
+else:
+    # Otherwise when called from toolbox run the tool
+    # with parameters passed
 
-# Otherwise when called from toolbox run the tool
-# with parameters passed
+    nhdPath = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
+    nedPath = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
+    wbd = arcpy.GetParameterAsText(2)           #FC of 4 digit HUC Subregions
+    nedFootprints = arcpy.GetParameterAsText(3)
+    sr2Process = arcpy.GetParameterAsText(4)    # Subregion to process, (4 digit HUC designation, include leading 0)
+    finalOutPath = arcpy.GetParameterAsText(5)    # Output folder
+    zippedNED = arcpy.GetParameterAsText(6) # Whether NED tiles are zipped or not
 
-nhdPath = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
-nedPath = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
-wbd = arcpy.GetParameterAsText(2)           #FC of 4 digit HUC Subregions
-nedFootprints = arcpy.GetParameterAsText(3)
-sr2Process = arcpy.GetParameterAsText(4)    # Subregion to process, (4 digit HUC designation, include leading 0)
-finalOutPath = arcpy.GetParameterAsText(5)    # Output folder
-zippedNED = arcpy.GetParameterAsText(6) # Whether NED tiles are zipped or not
-
-stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED)
-print("Complete")
+    stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED)
+    print("Complete")

@@ -23,3 +23,11 @@ def multi_msg(message):
     print(message)
     arcpy.AddMessage(message)
 
+def cleanup(intermediate_items_list):
+    """Safely deletes intermediate outputs using ArcGIS method only if they exist. Accepts a path expressed as a string or a list/tuple of paths. Uses ArcGIS existence test so geodatabase items are okay in addition to ordinary OS paths."""
+    if type(intermediate_items_list) is str:
+        intermediate_items_list = [intermediate_items_list]
+    for item in intermediate_items_list:
+        if arcpy.Exists(item):
+            arcpy.Delete_management(item)
+

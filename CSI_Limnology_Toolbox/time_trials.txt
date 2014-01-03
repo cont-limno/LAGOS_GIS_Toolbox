@@ -1,5 +1,20 @@
+-------------
 NED2Subregion
 -------------
-Test params: those listed in main for subregion 0109 (NED data on USB 
+Test params: those listed in test() for subregion 0109 (NED data on USB 
 2.0 drive, NHD data on local drive)
+Called from: Command line (64-bit)
 Time: 21 seconds
+
+Test params: using NHD0701 (large), NED data on USB 2.0 drive, NHD on 
+local
+Calling program: ArcCatalog (64-bit)
+Time: 3 minutes 25 seconds
+
+--------
+PreHPCC
+-------
+
+Test params: those listed in test for subregion 0109, whole enchilada
+Called from: Command line (64-bit)
+Time: 12 minutes 36 seconds

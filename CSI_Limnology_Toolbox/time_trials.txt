@@ -17,4 +17,9 @@ PreHPCC
 
 Test params: those listed in test for subregion 0109, whole enchilada
 Called from: Command line (64-bit)
-Time: 12 minutes 36 seconds
+Time: 6 minutes 48 seconds
+
+Test params: using NHD0701 (large), all on local hard drive
+Called from: ArcCatalog (background processing)
+Time: 21 minutes 15 seconds
+

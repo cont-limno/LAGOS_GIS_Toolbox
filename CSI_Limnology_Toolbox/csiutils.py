@@ -29,5 +29,17 @@ def cleanup(intermediate_items_list):
         intermediate_items_list = [intermediate_items_list]
     for item in intermediate_items_list:
         if arcpy.Exists(item):
-            arcpy.Delete_management(item)
+            try:
+                arcpy.Delete_management(item)
+            except Exception as e:
+                cu.multi_msg(e.message)
+                continue
+
+def directory_size(directory):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(directory):
+            for f in filenames:
+                f_abspath = os.path.join(dirpath, f)
+                total_size += os.path.getsize(f_abspath)
+    return float(total_size)
 

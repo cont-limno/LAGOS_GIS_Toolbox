@@ -11,12 +11,14 @@ import csiutils as cu
 
 ####################################################################################################################################################
 # Mosiac NED tiles and clip to subregion.
-def mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers, outfolder):
+def mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, projection, in_memory, outfolder):
     # Set up environments
     arcpy.ResetEnvironments()
-    env.overwriteOutput = "TRUE"
+    env.overwriteOutput = True
     env.compression = "LZ77" # compress temp tifs for speed
-    arcpy.env.resample = "BILINEAR" # proper for elevation data
+    env.resample = "BILINEAR" # proper for elevation data
+    env.pyramids = "NONE"
+    env.outputCoordinateSystem = projection
 
     env.workspace = nhd
 
@@ -26,7 +28,7 @@ def mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers
 
     # Apply a 5000 meter buffer around subregion
     arcpy.Buffer_analysis("Subregion", subregion_buffer, "5000 meters")
-    arcpy.AddMessage("Buffered subregion.")
+    cu.multi_msg("Buffered subregion.")
 
     # Walk through the folder with NEDs to make a list of rasters
     mosaicrasters = []
@@ -35,20 +37,25 @@ def mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers
             name = os.path.join(dirpath, filename)
             mosaicrasters.append(name)
 
-    arcpy.AddMessage("Found NED ArcGrids.")
+    cu.multi_msg("Found NED ArcGrids.")
 
     # Update environments
-    arcpy.env.extent = subregion_buffer
-    arcpy.env.workspace = outfolder
+    env.extent = subregion_buffer
+    if in_memory:
+        env.workspace = 'in_memory'
+        raster_extension = ''
+    else:
+        env.workspace = outfolder
+        raster_extension = '.tif'
 
     # Assign names to intermediate outputs in outfolder
-    mosaic_NAD = "mosaicNAD.tif"
+    mosaic_NAD = "mosaicNAD" + raster_extension
 
     # Intermediate mosaic: projected during creation with bilinear
     # interpolation and rough extent settings but clipped to poly later
     cu.multi_msg("Creating initial mosaic. This may take a while...")
-    arcpy.MosaicToNewRaster_management(mosaicrasters, outfolder, mosaic_NAD,
-    albers, "32_BIT_FLOAT", "", "1", "LAST")
+    arcpy.MosaicToNewRaster_management(mosaicrasters, env.workspace, mosaic_NAD,
+    projection, "32_BIT_FLOAT", "", "1", "LAST")
 
 
 
@@ -68,12 +75,12 @@ def mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers
 #################################################################################################################################################
 # Burning Streams
 
-def burn(subregion_ned, subregion_buffer, nhd, albers, burnt_ned, outfolder):
+def burn(subregion_ned, subregion_buffer, nhd, projection, burnt_ned, in_memory, outfolder):
     arcpy.ResetEnvironments()
     env.overwriteOutput = "TRUE"
     env.extent = subregion_buffer
     env.snapRaster = subregion_ned
-    env.outputCoordinateSystem = albers
+    env.outputCoordinateSystem = projection
     env.compression = "LZ77" # compress temp tifs for speed
 
     env.workspace = outfolder
@@ -85,51 +92,55 @@ def burn(subregion_ned, subregion_buffer, nhd, albers, burnt_ned, outfolder):
     cu.multi_msg("Prepared NHDFlowline for rasterizing.")
 
     # Feature to Raster- rasterize the NHDFlowline
-    flow_line_raster = "in_memory/flow_line_raster"
+    flow_line_raster = "flow_line_raster.tif"
     arcpy.FeatureToRaster_conversion(flow_line, "FID", flow_line_raster, "10")
     cu.multi_msg("Converted flowlines to raster.")
 
     # Raster Calculator- burns in streams, beveling in from 500m
     cu.multi_msg("Burning streams into raster. This may take a while....")
-    burnt = Raster(subregion_ned) - (10 * (flow_line_raster > 0)) - (0.02 * (500 - EucDistance(flow_line, cell_size = "10") < 500))
+    distance = EucDistance(flow_line, cell_size = "10")
+    streams = Reclassify(Raster(flow_line_raster) > 0, "Value", "1 1; NoData 0")
+    burnt = Raster(subregion_ned) - (10 * streams) - (0.02 * (500 - distance) * (distance < 500))
     burnt.save(burnt_ned)
     cu.multi_msg("Burned the streams into the NED, 10m deep and beveling in from 500m out.")
 
     # Delete intermediate rasters and shapefiles
-    cu.cleanup([flow_line, flow_line_raster])
+    cu.cleanup([flow_line, flow_line_raster, streams, burnt])
     cu.multi_msg("Burn process completed")
 
 ###############################################################################################################################################
 
-def clip(raster, nhd, nhdsubregion, albers, outfolder):
+def clip(raster, nhd, nhdsubregion, projection, outfolder):
 
     arcpy.ResetEnvironments()
     env.overwriteOutput = "TRUE"
     arcpy.env.workspace = nhd
-    arcpy.env.outputCoordinateSystem = albers
+    arcpy.env.outputCoordinateSystem = projection
     arcpy.env.compression = "NONE" # only final tifs are generated
     arcpy.env.pyramid = "NONE"
 
     # Create a feature dataset in NHD file geodatabase named "HUC8_Albers" in Albers projection
     out_feature_dataset = "HUC8_Albers"
-    arcpy.CreateFeatureDataset_management(env.workspace, out_feature_dataset, albers)
+    arcpy.CreateFeatureDataset_management(env.workspace, out_feature_dataset, projection)
     arcpy.RefreshCatalog(nhd)
 
     # HUC8 polygons each saved as separate fc inheriting albers from environ
     huc8_fc = "WBD_HU8"
     field = "HUC_8"
+    arcpy.MakeFeatureLayer_management(huc8_fc, "huc8_layer")
 
     with arcpy.da.SearchCursor(huc8_fc, field) as cursor:
         for row in cursor:
-            whereClause = '!%s! = %s' % (field, row[0])
-            arcpy.MakeFeatureLayer_management(huc8_fc, "this_huc8", whereClause)
-            arcpy.CopyFeatures_management("this_huc8", os.path.join(out_feature_dataset, "HUC" + row[0]))
+            if row[0].startswith(nhdsubregion):
+                whereClause = ''' "%s" = '%s' ''' % (field, row[0])
+                arcpy.SelectLayerByAttribute_management("huc8_layer", 'NEW_SELECTION', whereClause)
+                arcpy.CopyFeatures_management("huc8_layer", os.path.join(out_feature_dataset, "HUC" + row[0]))
 
     #retrieve only the single huc8 fcs and not the one with all of them
     fcs = arcpy.ListFeatureClasses("HUC%s*" % nhdsubregion, "Polygon", out_feature_dataset)
     fcs_buffered = [os.path.join(out_feature_dataset, fc + "_buffer") for fc in fcs]
     out_clips = [os.path.join(outfolder, "huc8clips" + nhdsubregion,
-    fc[3:] + ".tif") for fc in fcs]
+    "NED" + fc[3:] + ".tif") for fc in fcs]
 
     # Buffer HUC8 feature classes by 5000m
     for fc, fc_buffered in zip(fcs, fcs_buffered):
@@ -146,8 +157,15 @@ def clip(raster, nhd, nhdsubregion, albers, outfolder):
     arcpy.Compact_management(nhd)
 
     cu.multi_msg("Clipping complete.")
+
 #END OF DEF clip
 
+def is_inmemory(allowed_size, input_directory):
+    original_size = cu.directory_size(input_directory)
+    if original_size < allowed_size:
+        return True
+    else:
+        return False
 
 # "Output" is mosaic with file path = subregion_ned
 def main():
@@ -189,20 +207,29 @@ def main():
     # USGS Albers (Our project's projection)
     albers = arcpy.SpatialReference(102039)
 
+    # Determine whether to work in memory or not
+    available_ram = 14 # in GB
+    available_ram_bytes = available_ram * (1024 ** 3)
+    ram_limit = available_ram_bytes/2
+    in_memory = is_inmemory(ram_limit, nedfolder)
+
     arcpy.CheckOutExtension("Spatial")
     if not input_mosaic:
-        mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers, outfolder)
+        mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers, in_memory, outfolder)
     if not input_burnt:
-        burn(subregion_ned, subregion_buffer, nhd, albers, burnt_ned, outfolder)
+        burn(subregion_ned, subregion_buffer, nhd, albers, burnt_ned, in_memory, outfolder)
     try:
         clip(burnt_ned, nhd, nhdsubregion, albers, outfolder)
         shutil.rmtree(burntfolder)
         cu.multi_msg("Complete. HUC8 burned clips are now ready for flow direction.")
+    except arcpy.ExecuteError:
+        cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
+        (subregion_ned, burnt_ned))
+        arcpy.AddError(arcpy.GetMessages(2))
     except Exception as e:
         cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
         (subregion_ned, burnt_ned))
         cu.multi_msg(e.message)
-    arcpy.CheckInExtension("Spatial")
 
 def test():
     # Defaults on optional tools is an empty string ''
@@ -243,20 +270,31 @@ def test():
     # USGS Albers (Our project's projection)
     albers = arcpy.SpatialReference(102039)
 
+# Determine whether to work in memory or not
+    available_ram = 14 # in GB
+    available_ram_bytes = available_ram * (1024 ** 3)
+    ram_limit = available_ram_bytes/2
+    in_memory = is_inmemory(ram_limit, nedfolder)
+
     arcpy.CheckOutExtension("Spatial")
     if not input_mosaic:
-        mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers, outfolder)
+        mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, albers, in_memory, outfolder)
     if not input_burnt:
-        burn(subregion_ned, subregion_buffer, nhd, albers, burnt_ned, outfolder)
+        burn(subregion_ned, subregion_buffer, nhd, albers, burnt_ned, in_memory, outfolder)
     try:
         clip(burnt_ned, nhd, nhdsubregion, albers, outfolder)
         shutil.rmtree(burntfolder)
         cu.multi_msg("Complete. HUC8 burned clips are now ready for flow direction.")
+    except arcpy.ExecuteError as e:
+        cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
+        (subregion_ned, burnt_ned))
+        cu.multi_msg(e.message)
     except Exception as e:
         cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
         (subregion_ned, burnt_ned))
         cu.multi_msg(e.message)
-    arcpy.CheckInExtension("Spatial")
+    finally:
+        arcpy.CheckInExtension("Spatial")
 
 if __name__ == "__main__":
     main()

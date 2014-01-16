@@ -1,3 +1,10 @@
+Each step is tested alone without any other heavy-duty use of resources 
+like network bandwidth or running another memory-intensive task at the 
+same time.
+
+Each step is typically tested with a smaller subregion (0109) and a 
+larger subregion (0701) to provide a range of times you can expect.
+
 -------------
 NED2Subregion
 -------------
@@ -15,11 +22,59 @@ Time: 3 minutes 25 seconds
 PreHPCC
 -------
 
-Test params: those listed in test for subregion 0109, whole enchilada
+Test params: those listed in PreHPCC.test()--subregion 0109, all local 
+hard drive
 Called from: Command line (64-bit)
-Time: 6 minutes 48 seconds
+Time: 5 minutes 22 seconds
+Input size: 2.4 GB staged directory
+Output size: 1.4GB mosaic, 1.5GB of HUC8 clip tifs
 
 Test params: using NHD0701 (large), all on local hard drive
 Called from: ArcCatalog (background processing)
-Time: 21 minutes 15 seconds
+Time: 23 minutes 30 seconds
+Input size: 7.3 GB staged directory
+Output size: 4.7GB mosaic, 5.7GB of HUC8 clip tifs
+
+--------------
+File transfer from local to HPCC using Globus
+--------------
+Test params: Subregion 0109 results, both mosaic and HUC8 tifs
+Size: 2.9 GB
+Time: 5 minutes
+
+Test params: Subregion 0701 results, both mosaic and HUC8 tifs
+Size: 10.3 GB
+Time: 16 minutes
+
+--------------
+Fill (TauDEM, on HPCC)
+
+Test params: Subregion 0109 HUC8 clips 
+Called using: job queue, jobs are processed concurrently so for 
+example the trials below took under 3 minutes altogether.
+Time: min time 21s (160MB file), max time 2 minute 36 
+seconds (560MB file)
+
+Test params: Subregion 0701 HUC8 clips
+Called using: job queue as before
+Time: min time 1 minute 14 seconds (287MB file), max time 14 minutes 21 
+seconds (530MB file)
+
+------------
+File transfer from HPCC to local using Globus
+------------
+If you transfer new "filled" files only (*fel*tif)
+0109: 3 minutes
+0701: 8 minutes
+
+
+-------------
+Create HU8 Walls
+-------------
+Test params: Those for subregion 0109 in HU8Walls.test(), all local 
+drive
+Time: 1 minute 10 seconds
+Input size: 1.5GB directory
+Output size: 2.1GB directory
+
 

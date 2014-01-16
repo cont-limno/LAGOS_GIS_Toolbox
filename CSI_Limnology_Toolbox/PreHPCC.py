@@ -49,25 +49,32 @@ def mosaic(nhd, nhdsubregion, nedfolder, subregion_buffer, subregion_ned, projec
         raster_extension = '.tif'
 
     # Assign names to intermediate outputs in outfolder
-    mosaic_NAD = "mosaicNAD" + raster_extension
+    mosaic_unproj = "mosaic_t1" + raster_extension
+    mosaic_proj = "mosaic_t2" + raster_extension
 
-    # Intermediate mosaic: projected during creation with bilinear
-    # interpolation and rough extent settings but clipped to poly later
+    # Mosaic, then project
+    # Cannot do this in one step using MosaicToNewRaster's projection parameter
+    # because you cannot set the cell size correctly
     cu.multi_msg("Creating initial mosaic. This may take a while...")
-    arcpy.MosaicToNewRaster_management(mosaicrasters, env.workspace, mosaic_NAD,
-    projection, "32_BIT_FLOAT", "", "1", "LAST")
 
+    arcpy.MosaicToNewRaster_management(mosaicrasters, env.workspace,
+    mosaic_unproj, "", "32_BIT_FLOAT", "", "1", "LAST")
 
+    cu.multi_msg("Projecting mosaic...")
+
+    arcpy.ProjectRaster_management(mosaic_unproj, mosaic_proj,
+    projection, "BILINEAR", "10")
 
     #final mosaic environs, may be needed with TauDEM so uncompressed
     env.compression = "NONE"
     env.pyramids = "PYRAMIDS -1 SKIP_FIRST" # need to check outputs efficiently
     cu.multi_msg("Clipping final mosaic...")
-    arcpy.Clip_management(mosaic_NAD, '', subregion_ned, subregion_buffer,
+
+    arcpy.Clip_management(mosaic_proj, '', subregion_ned, subregion_buffer,
      "0", "ClippingGeometry")
 
     # Clean up
-    cu.cleanup(mosaic_NAD)
+    cu.cleanup([mosaic_unproj, mosaic_proj])
     cu.multi_msg("Mosaicked NED tiles and clipped to HUC4 extent.")
 
 # END OF DEF mosaic
@@ -105,7 +112,7 @@ def burn(subregion_ned, subregion_buffer, nhd, projection, burnt_ned, in_memory,
     cu.multi_msg("Burned the streams into the NED, 10m deep and beveling in from 500m out.")
 
     # Delete intermediate rasters and shapefiles
-    cu.cleanup([flow_line, flow_line_raster, streams, burnt])
+    cu.cleanup([flow_line, flow_line_raster])
     cu.multi_msg("Burn process completed")
 
 ###############################################################################################################################################

@@ -10,7 +10,7 @@ csv = os.path.join(outfolder, name + ".csv")
 
 def TableToCSV(fc,CSVFile):
     
-    fields = [f.name for f in arcpy.ListFields(fc) if f.type <> 'Geometry']
+    fields = [f.name for f in arcpy.ListFields(fc) if f.type <> 'Geometry' and f.name <> 'Shape_Area' and f.name <> 'Shape_Length' and f.name <> 'TARGET_FID']
     with open(CSVFile, 'w') as f:
         f.write(','.join(fields)+'\n') #csv headers
         with arcpy.da.SearchCursor(fc, fields) as cursor:

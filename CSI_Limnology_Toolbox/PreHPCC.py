@@ -121,10 +121,10 @@ def clip(raster, nhd, nhdsubregion, projection, outfolder):
 
     arcpy.ResetEnvironments()
     env.overwriteOutput = "TRUE"
-    arcpy.env.workspace = nhd
-    arcpy.env.outputCoordinateSystem = projection
-    arcpy.env.compression = "NONE" # only final tifs are generated
-    arcpy.env.pyramid = "NONE"
+    env.workspace = nhd
+    env.outputCoordinateSystem = projection
+    env.compression = "NONE" # only final tifs are generated
+    env.pyramid = "NONE"
 
     # Create a feature dataset in NHD file geodatabase named "HUC8_Albers" in Albers projection
     out_feature_dataset = "HUC8_Albers"

@@ -47,6 +47,7 @@ def wall(nhd_gdb, infolder, outfolder, mosaic, height = '100'):
         walled_ned.save(os.path.join(outfolder, os.path.basename(raster)))
 
     arcpy.Delete_management(walls)
+    arcpy.ResetEnvironments() # to keep next run from inheriting extent
 
 
 def main():

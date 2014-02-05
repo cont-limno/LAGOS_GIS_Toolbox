@@ -13,5 +13,5 @@ flowras = Raster(inraster)
 flowras_reclass = Reclassify(flowras, "Value",
             RemapValue([[1,1],[2,128],[3,64],[4,32],[5,16],[6,8],[7,4],[8,2]]))
 
-outname = os.path.join(outfolder, "D8FDR" + os.path.basename(inraster)[3:10] + ".tif")
+outname = os.path.join(outfolder, "D8FDR" + os.path.basename(inraster)[3:11] + ".tif")
 flowras_reclass.save(outname)

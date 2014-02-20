@@ -47,6 +47,7 @@ for fc in fclist:
     
 
 for fc in fcs:
+    arcpy.RepairGeometry_management(fc)
     name = os.path.splitext(os.path.basename(fc))[0]
     arcpy.sa.ZonalStatisticsAsTable(fc, idfield, raster, os.path.join(outfolder, tablesgdb, name))
  

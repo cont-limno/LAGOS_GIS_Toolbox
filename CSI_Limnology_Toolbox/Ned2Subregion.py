@@ -129,7 +129,7 @@ def main():
     nedFootprints = arcpy.GetParameterAsText(3)
     sr2Process = arcpy.GetParameterAsText(4)    # Subregion to process, (4 digit HUC designation, include leading 0)
     finalOutPath = arcpy.GetParameterAsText(5)    # Output folder
-    zippedNED = arcpy.GetParameterAsText(6) # Whether NED tiles are zipped or not
+    zippedNED = arcpy.GetParameter(6) # Whether NED tiles are zipped or not
 
     stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED)
     print("Complete")
@@ -146,7 +146,7 @@ def test():
     test_nedFootprints = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\NEDTiles"
     test_sr2Process = "0109"
     test_finalOutPath = r"C:\GISData\Scratch_njs"
-    test_zippedNED = 'True'
+    test_zippedNED = True
     stage_files(test_nhdPath, test_nedPath, test_wbd,
                     test_nedFootprints, test_sr2Process,
                      test_finalOutPath, test_zippedNED)

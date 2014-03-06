@@ -11,7 +11,7 @@ infield = arcpy.GetParameterAsText(1)
 raster = arcpy.GetParameterAsText(2)
 outfolder = arcpy.GetParameterAsText(3)
 joinfield = arcpy.GetParameterAsText(4)
-#################################################################################################        
+#################################################################################################
 polyname = os.path.basename(inzone)
 if not os.path.exists(os.path.join(outfolder, polyname)):
     os.mkdir(os.path.join(outfolder, polyname))
@@ -68,7 +68,7 @@ arcpy.Split_analysis(zone, zone, "tempid", mem)
 arcpy.AddMessage("Done Splitting features.")
 
 arcpy.RefreshCatalog(outfolder)
-            
+
 fcs = arcpy.ListFeatureClasses("*")
 
 arcpy.AddMessage("Starting iteration.")
@@ -77,7 +77,7 @@ for fc in fcs:
     zstable = ZonalStatisticsAsTable(fc, infield, raster, os.path.join(mem, name + "zonal"))
     tatable = TabulateArea(fc, infield, raster, "Value", os.path.join(mem, name + "areas"))
     arcpy.Delete_management(fc)
-    
+
 arcpy.AddMessage("Finished iteration. Starting merge.")
 list = arcpy.ListTables("*zonal")
 arcpy.Merge_management(list, os.path.join(tablefolder, "ZonalStats.dbf"))
@@ -90,6 +90,7 @@ arcpy.JoinField_management(finalta,infield,inzone,infield, [joinfield])
 arcpy.AddMessage("Done.")
 
 
+#
 
 
 
@@ -97,5 +98,6 @@ arcpy.AddMessage("Done.")
 
 
 
-                           
+
+
 

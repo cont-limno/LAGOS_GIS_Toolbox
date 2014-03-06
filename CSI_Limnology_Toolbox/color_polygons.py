@@ -5,7 +5,6 @@ import numpy
 # All of the following is from the ESRI Spatial Analyst team's tool called
 # "Zonal Statistics as Table for Overlapping Features"
 def colorPolygons(feature_class, feature_field, out_directory):
-    import os, arcpy, tempfile, numpy, collections, random, sys
     arcpy.env.overwriteOutput = True
 
     # Create temporary directory

@@ -12,9 +12,10 @@ arcpy.CheckOutExtension('Spatial')
 def line_density(zones, zonefield, lines, topoutfolder):
     # Make output folder
     name = "LineDensity_" + os.path.splitext(os.path.basename(zones))[0]
-    if not os.path.exists(os.path.join(topoutfolder, name)):
-        os.mkdir(os.path.join(topoutfolder, name))
     outfolder = os.path.join(topoutfolder, name)
+    if not os.path.exists(outfolder):
+        os.mkdir(outfolder)
+
 
     # Environmental Settings
     mem = "in_memory"
@@ -67,8 +68,9 @@ def line_density(zones, zonefield, lines, topoutfolder):
 
     # Summarize statistics by zone
     name = os.path.splitext(os.path.basename(zones))[0]
-    arcpy.Statistics_analysis("lines_identity", os.path.join(outfolder, "LineDensity_" + name), "LengthM SUM", zonefield)
     table = arcpy.CreateUniqueName("LineDensity_" + name, outfolder)
+    arcpy.Statistics_analysis("lines_identity", table, "LengthM SUM", zonefield)
+
 
     # Join ZoneAreaHa to table
     arcpy.JoinField_management(table, zonefield, "zones" , zonefield, ["ZoneAreaHa"])

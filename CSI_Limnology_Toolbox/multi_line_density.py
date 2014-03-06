@@ -3,7 +3,7 @@ import os, tempfile
 import arcpy
 from LineDensity import line_density
 
-def multi_line_density(non_overlapping_subsets_dir, zonefield, lines, temp_dir):
+def multi_line_density(non_overlapping_subsets_dir, zonefield, lines, temp_dir, out_table):
     arcpy.env.workspace = non_overlapping_subsets_dir
     fcs = arcpy.ListFeatureClasses("*NoOverlap*")
     fcs = [os.path.join(non_overlapping_subsets_dir, fc) for fc in fcs]
@@ -30,7 +30,7 @@ def main():
         counter += 1
     os.mkdir(temp_dir)
     arcpy.AddMessage("Temp directory located at %s" % temp_dir)
-    multi_line_density(non_overlapping_subsets_dir, zonefield, lines, temp_dir)
+    multi_line_density(non_overlapping_subsets_dir, zonefield, lines, temp_dir, out_table)
 
 
 if __name__ == '__main__':

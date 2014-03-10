@@ -24,52 +24,26 @@ def line_density(zones, zonefield, lines, out_table):
     arcpy.env.outputCoordinateSystem = albers
     arcpy.env.extent = zones
 
-    # Create scratch workspace
-##    try:
-##        arcpy.CreateFileGDB_management(outfolder, "scratch")
-##
-##    except:
-##        pass
-##    scratch = os.path.join(outfolder, "scratch.gdb")
-##    arcpy.RefreshCatalog(outfolder)
-
-    # Project features to memory workspace
-##    zone_sr = arcpy.Describe(zones)
-##    spatialRefZones = zone_sr.SpatialReference
-##    arcpy.Project_management(zones, os.path.join(scratch, "zones"), albers,'',spatialRefZones)
-##    lines_sr = arcpy.Describe(lines)
-##    spatialRefLines = lines_sr.SpatialReference
-##    arcpy.Project_management(lines,os.path.join(scratch, "lines"), albers,'',spatialRefLines)
-##    arcpy.env.workspace = scratch
-##    arcpy.RefreshCatalog(topoutfolder)
-
+    # Zones will be coerced to albers, have to check lines though
     arcpy.CopyFeatures_management(zones, "zones_temp")
+    if arcpy.Describe(lines).spatialReference.factoryCode != albers.factoryCode:
+        arcpy.AddError("Lines feature class does not have desired projection (Albers USGS). Re-project to factory code 102039 and try again.")
+        sys.exit(1)
 
     # Add hectares field to zones
     arcpy.AddField_management("zones_temp", "ZoneAreaHa", "DOUBLE")
     arcpy.CalculateField_management("zones_temp", "ZoneAreaHa", "!shape.area@hectares!", "PYTHON")
 
     # Perform identity analysis to join fields and crack lines at polygon boundaries
-##    try:
     cu.multi_msg("Cracking lines at polygon boundaries...")
     arcpy.Identity_analysis(lines, "zones_temp", "lines_identity")
     cu.multi_msg("Cracking lines complete.")
-##    except:
-##        pass
-##        arcpy.RefreshCatalog(topoutfolder)
-##        try:
-##            arcpy.Identity_analysis("lines", "zones", "lines_identity")
-##        except:
-##            arcpy.AddMessage("The output location is locking up and not allowing output to be written to it. Try it again with antivirus off and/or in a different location.")
-##        pass
 
     # Recalculate lengths
     arcpy.AddField_management("lines_identity", "LengthM", "DOUBLE")
     arcpy.CalculateField_management("lines_identity", "LengthM", '!shape.length@meters!', "PYTHON")
 
     # Summarize statistics by zone
-##    name = os.path.splitext(os.path.basename(zones))[0]
-##    table = arcpy.CreateUniqueName("LineDensity_" + name, outfolder)
     arcpy.Statistics_analysis("lines_identity", "length_in_zone", "LengthM SUM", zonefield)
 
 
@@ -87,17 +61,12 @@ def line_density(zones, zonefield, lines, out_table):
     exp = "!SUM_LengthM! / !ZONEAREAHA!"
     arcpy.CalculateField_management("length_in_zone", "Density", exp, "PYTHON")
     arcpy.DeleteField_management("length_in_zone", "FREQUENCY")
-##    try:
-##        arcpy.Delete_management(scratch)
-##    except:
-##        pass
-##    arcpy.RefreshCatalog(topoutfolder)
 
     arcpy.CopyRows_management("length_in_zone", out_table)
 
-    # SAVING the lines fc if necessary in memory because it is large
     for tempitem in ['zones_temp', 'lines_identity', 'length_in_zone']:
         arcpy.Delete_management(tempitem)
+
     return out_table
 
 def main():

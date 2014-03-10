@@ -8,12 +8,20 @@
 # Copyright:   (c) smithn78 2013
 # Licence:     <your licence>
 #-------------------------------------------------------------------------------
-import os
-import arcpy
-import PreHPCC
+# testing
+import time
+from arcpy import env
+
+import LineDensity as tool
 
 def main():
-    PreHPCC.test()
+    t = time.time()
+    env.overwriteOutput = True
+    print("Starting test.")
+    tool.test()
+    time_took = time.time() - t
+    print("Tool took %.1f seconds to complete" % time_took)
 
 if __name__ == '__main__':
     main()
+

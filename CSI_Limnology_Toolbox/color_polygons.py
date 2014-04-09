@@ -1,27 +1,28 @@
 import collections, os, random, sys, tempfile
 import arcpy
 import numpy
+import csiutils as cu
 
 # All of the following is from the ESRI Spatial Analyst team's tool called
 # "Zonal Statistics as Table for Overlapping Features"
 def colorPolygons(feature_class, feature_field, out_directory):
     arcpy.env.overwriteOutput = True
 
-    # Create temporary directory
-    temp_dir = os.path.join(tempfile.gettempdir(), 'zonal')
-    index = 0
-    while os.path.exists(temp_dir):
-        temp_dir = os.path.join(tempfile.gettempdir(), 'zonal%d' % index)
-        index += 1
-    os.mkdir(temp_dir)
+##    # Create temporary directory
+##    temp_dir = os.path.join(tempfile.gettempdir(), 'zonal')
+##    index = 0
+##    while os.path.exists(temp_dir):
+##        temp_dir = os.path.join(tempfile.gettempdir(), 'zonal%d' % index)
+##        index += 1
+##    os.mkdir(temp_dir)
 
 
     # Initialize variables
-    temp_features = os.path.join(temp_dir, "dissolve.shp")
+    temp_features = 'in_memory/dissolve'
     bldissolved = False
     # Dissolve on non-ObjectID field
     desc = arcpy.Describe(feature_class)
-    arcpy.AddMessage("Dissolving features.")
+    cu.multi_msg("Dissolving features.")
     if hasattr(desc, "OIDFieldName"):
         if feature_field != desc.OIDFieldName:
             arcpy.Dissolve_management(feature_class, temp_features, \
@@ -41,7 +42,7 @@ def colorPolygons(feature_class, feature_field, out_directory):
         oid_field = feature_field
 
     # Calculate polygon contiguity
-    arcpy.AddMessage("Identifying overlapping polygons...")
+    cu.multi_msg("Identifying overlapping polygons...")
     arcpy.env.outputMFlag = "Disabled"
     result = arcpy.PolygonNeighbors_analysis(temp_features,
         'in_memory/neighbors', oid_field, "AREA_OVERLAP", "BOTH_SIDES")
@@ -50,13 +51,8 @@ def colorPolygons(feature_class, feature_field, out_directory):
                         "overlapping features.".format(temp_features))
         sys.exit(1)
 
-
-    arcpy.AddMessage("Identified overlapping polygons.")
-    print("Identified overlapping polygons.")
-
-    arcpy.AddMessage("Calculating feature subsets without overlaps...")
-    print("Calculating feature subsets without overlaps...")
-
+    cu.multi_msg("Identified overlapping polygons.")
+    cu.multi_msg("Calculating feature subsets without overlaps...")
 
     # Retrieve as array with columns src_FID and nbr_FID
     arr = arcpy.da.TableToNumPyArray('in_memory/neighbors',
@@ -140,11 +136,16 @@ def colorPolygons(feature_class, feature_field, out_directory):
     temp_lyr = "temp_layer"
     cl_separator = ' OR \"%s\" = ' % oid_field
     for index, cl in enumerate(classes):
-        arcpy.SetProgressorLabel(
-            "Processing layer %d of %d..." % (index+1, num_classes))
-        where_clause = '\"%s\" = %s' % (oid_field, \
+##        arcpy.SetProgressorLabel(
+##            "Processing layer %d of %d..." % (index+1, num_classes))
+        test = tuple(map(int, classes[cl]))
+        print("length of the tuple:" + str(len(test)))
+        where_clause = '\"%s\" IN %s' % (oid_field, \
+            test)
+        old_where_clause = '\"%s\" = %s' % (oid_field, \
             cl_separator.join(map(str, classes[cl])))
-        temp_table = os.path.join(temp_dir, "zone_%d.dbf" % index)
+        cu.multi_msg("CURRENT WHERE CLAUSE:\n" + where_clause)
+        cu.multi_msg("OLD WHERE CLAUSE:\n" + old_where_clause)
         arcpy.MakeFeatureLayer_management(temp_features, temp_lyr, \
             where_clause)
 
@@ -152,16 +153,22 @@ def colorPolygons(feature_class, feature_field, out_directory):
         # Save polygon layers to output folder
         outLayerBase = os.path.splitext(os.path.basename(feature_class))[0]
         outLayerName = arcpy.CreateUniqueName(outLayerBase + "_NoOverlap.shp", out_directory)
-        print("Saving feature class %s of %s with name %s" % (str(index + 1),
-            str(len(classes)), outLayerName))
+        cu.multi_msg("Saving feature class %s of %s with name %s" % (str(index + 1),
+            str(num_classes), outLayerName))
+##        arcpy.Select_analysis(temp_features, outLayerName, where_clause)
+
+        cu.multi_msg(arcpy.Exists(temp_lyr))
+        count = arcpy.GetCount_management(temp_lyr).getOutput(0)
+        cu.multi_msg("count of features: " + str(count))
         arcpy.CopyFeatures_management(temp_lyr, outLayerName)
         arcpy.Delete_management(temp_lyr)
     return out_directory
 
 def test():
-    feature_class = r'C:\GISData\Master_Geodata\MasterGeodatabase2014.gdb'
+
+    feature_class = 'C:/GISData/Scratch/Scratch.gdb/test_IWS'
     feature_field = 'NHD_ID'
-    out_directory = 'C:/GISData/Scratch/Test_ZonalOverlap_FULL'
+    out_directory = 'C:/GISData/Scratch/test_apr7'
     colorPolygons(feature_class, feature_field, out_directory)
 
 def main():

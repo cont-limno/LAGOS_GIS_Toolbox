@@ -51,18 +51,40 @@ def line_density(zones, zonefield, lines, out_table):
     arcpy.JoinField_management("length_in_zone", zonefield, "zones_temp" , zonefield, "ZoneAreaHa")
 
     # Delete rows in table with zero for zone area
-    with arcpy.da.UpdateCursor("length_in_zone", "ZoneAreaHa") as cursor:
-        for row in cursor:
-            if row[0] == 0:
-                cursor.deleteRow()
+##    with arcpy.da.UpdateCursor("length_in_zone", "ZoneAreaHa") as cursor:
+##        for row in cursor:
+##            if row[0] is None:
+##                cursor.deleteRow()
 
     # Add Density field and calc
-    arcpy.AddField_management("length_in_zone", "Density", "DOUBLE",'','','','',"NULLABLE")
+    arcpy.AddField_management("length_in_zone", "Density_MperHA", "DOUBLE",'','','','',"NULLABLE")
     exp = "!SUM_LengthM! / !ZONEAREAHA!"
-    arcpy.CalculateField_management("length_in_zone", "Density", exp, "PYTHON")
-    arcpy.DeleteField_management("length_in_zone", "FREQUENCY")
+    arcpy.CalculateField_management("length_in_zone", "Density_MperHA", exp, "PYTHON")
 
-    arcpy.CopyRows_management("length_in_zone", out_table)
+
+    # Join to the original table
+    keep_fields = ["ZoneID", "SUM_LengthM", "Density_MperHA"]
+    arcpy.JoinField_management('zones_temp', zonefield, "length_in_zone", zonefield, keep_fields[1:])
+
+    # Select only null records and change to 0
+    arcpy.MakeFeatureLayer_management('zones_temp', 'zones_temp_lyr')
+    arcpy.SelectLayerByAttribute_management('zones_temp_lyr', "NEW_SELECTION", '''"SUM_LengthM" is null''')
+    fields_to_calc = ["SUM_LengthM", "Density_MperHA"]
+    for f in fields_to_calc:
+        arcpy.CalculateField_management('zones_temp_lyr', f, 0, "PYTHON")
+
+    #Delete all the fields that aren't the ones I need
+    keep_fields = ["ZoneID", "SUM_LengthM", "Density_MperHA"]
+    all_fields = [f.name for f in arcpy.ListFields('zones_temp_lyr')]
+    for f in all_fields:
+        if f not in keep_fields:
+            try:
+                arcpy.DeleteField_management('zones_temp_lyr', f)
+            except:
+                continue
+    arcpy.SelectLayerByAttribute_management('zones_temp_lyr', 'CLEAR_SELECTION')
+
+    arcpy.CopyRows_management('zones_temp_lyr', out_table)
 
     for tempitem in ['zones_temp', 'lines_identity', 'length_in_zone']:
         arcpy.Delete_management(tempitem)

@@ -2,8 +2,9 @@ import os
 import arcpy
 from arcpy import env
 
-def refine_zonaltab_table(t, tab_area):
-    if tab_area:
+def refine_zonal_output(t, is_thematic):
+    drop_fields = ['COUNT', 'AREA', 'RANGE', 'SUM', 'ZONE_CODE']
+    if is_thematic:
         fields = arcpy.ListFields(t, "VALUE*")
         for f in fields:
             # convert area to hectares in a new field
@@ -18,31 +19,25 @@ def refine_zonaltab_table(t, tab_area):
             expr = "!%s!/!AREA!" % f.name
             arcpy.CalculateField_management(t, pct_field, expr, "PYTHON")
 
+            #Delete the old field
+            arcpy.DeleteField_management(t, f.name)
 
-        #Delete the old field
-        arcpy.DeleteField_management(t, f.name)
+    else:
+        # continuous variables don't have these in the output
+        drop_fields = drop_fields + ['VARIETY', 'MAJORITY', 'MINORITY', 'MEDIAN']
 
-    drop_fields = ['COUNT', 'AREA', 'RANGE', 'SUM', 'ZONE_CODE']
     for df in drop_fields:
         try:
             arcpy.DeleteField_management(t, df)
         except:
             continue
 
-##            #Add "AREA" field in hectares
-##            arcpy.AddField_management(t, "AREA_ha", "Double")
-##            expr = "!AREA!/10000"
-##            arcpy.CalculateField_management(t, "AREA_ha", expr, "PYTHON")
-
-##            #Delete old area field
-##            arcpy.DeleteField_management(t, "AREA")
-
-def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, tab_area):
+def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic):
     arcpy.AddMessage("Calculating zonal statistics...")
     temp_zonal_table = 'in_memory/zonal_stats_temp'
     arcpy.sa.ZonalStatisticsAsTable(zone_fc, zone_field, in_value_raster, temp_zonal_table)
 
-    if tab_area == True:
+    if is_thematic:
         temp_area_table = 'in_memory/tab_area_temp'
         desc = arcpy.Describe(in_value_raster)
         cell_size = desc.meanCellHeight
@@ -50,15 +45,17 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, tab_area):
         arcpy.sa.TabulateArea(zone_fc, zone_field, in_value_raster, 'Value', temp_area_table, cell_size)
 
         arcpy.CopyRows_management(temp_area_table, out_table)
+        arcpy.Delete_management(temp_area_table)
 
         zonal_stats_fields = ['VARIETY', 'MAJORITY', 'MINORITY', 'AREA', 'MEDIAN']
         arcpy.JoinField_management(out_table, zone_field, temp_zonal_table, zone_field, zonal_stats_fields)
 
-    if tab_area == False:
+    if not is_thematic:
         arcpy.CopyRows_management(temp_zonal_table, out_table)
 
     arcpy.AddMessage("Refining output table...")
-    refine_zonaltab_table(out_table, tab_area)
+    refine_zonal_output(out_table, is_thematic)
+    arcpy.Delete_management(temp_zonal_table)
 
     arcpy.AddMessage("Complete.")
 
@@ -67,10 +64,10 @@ def main():
     zone_field = arcpy.GetParameterAsText(1)
     in_value_raster = arcpy.GetParameterAsText(2)
     out_table = arcpy.GetParameterAsText(3)
-    tab_area = arcpy.GetParameter(4) #boolean
+    is_thematic = arcpy.GetParameter(4) #boolean
 
     arcpy.CheckOutExtension("Spatial")
-    stats_area_table(zone_fc, zone_field, in_value_raster, out_table, tab_area)
+    stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
     arcpy.CheckInExtension("Spatial")
 
 def test():
@@ -78,10 +75,10 @@ def test():
     zone_field = 'NHD_ID'
     in_value_raster = 'E:/Attribution_Rasters_2013/Cropland/crops_CDL_2006.tif'
     out_table = 'C:/GISData/Scratch/Scratch.gdb/test_newzonal_table'
-    tab_area = True
+    is_thematic = True
 
     arcpy.CheckOutExtension("Spatial")
-    stats_area_table(zone_fc, zone_field, in_value_raster, out_table, tab_area)
+    stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
     arcpy.CheckInExtension("Spatial")
 
 if __name__ == '__main__':

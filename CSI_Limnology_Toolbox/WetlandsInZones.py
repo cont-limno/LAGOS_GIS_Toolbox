@@ -6,78 +6,82 @@
 # Licence: Distributed under the terms of GNU GPL
 #_______________________________________________________________________________
 
-import arcpy, os
+import os
+import arcpy
+import csiutils as cu
 
-# Parameters
-infolder = arcpy.GetParameterAsText(0) # Workspace with zone feature classes
-idfield = arcpy.GetParameterAsText(1) # Field that is the unique id for every extent poly
-wetlands = arcpy.GetParameterAsText(2) # Wetland polygon feature class
-top_outfolder = arcpy.GetParameterAsText(3) # Output folder
-arcpy.env.overwriteOutput = True
-foldname = os.path.splitext(os.path.basename(wetlands))[0]
-if not os.path.exists(os.path.join(top_outfolder, foldname)):
-    os.mkdir(os.path.join(top_outfolder, foldname))
-
-topoutfolder = os.path.join(top_outfolder, foldname) 
-
-# Create output geodatabase in outfolder
-try:
-    arcpy.CreateFileGDB_management(topoutfolder, "WetlandsInZones")
-except:
-    pass
-outfolder = os.path.join(topoutfolder, "WetlandsInZones.gdb")
-
-# Add WetlandHa field if it doesn't exist
-try:
-    arcpy.AddField_management(wetlands, "WetlandHa", "DOUBLE")
-except:
-    pass
-expha = "!shape.area@hectares!"
-arcpy.CalculateField_management(wetlands, "WetlandHa", expha, "PYTHON")
-arcpy.RefreshCatalog(wetlands)
-
-# Set in memory as workspace. Intermediate output will be held in RAM.
-mem = "in_memory"
-arcpy.env.workspace = mem
-arcpy.env.overwriteOutput = True
-
-# Make wetlands in memory.
-exp = """"ATTRIBUTE" LIKE 'P%'AND "WETLAND_TY" <> 'Freshwater_Pond'"""
-arcpy.Select_analysis(wetlands, "wetlandspoly", exp)
-arcpy.RefreshCatalog(mem)
-
-# Convert wetlands to points
-arcpy.FeatureToPoint_management("wetlandspoly", "wetlands", "INSIDE")
-
-# List extent feature classes
-fcs = []
-for root, dirs, files in arcpy.da.Walk(infolder):
-    for file in files:
-        fcs.append(os.path.join(root,file))
-
-# Set workspace
-arcpy.env.workspace = mem
-
-# Spatial Join the wetlands to each extent
-for fc in fcs:
-    name = os.path.basename(fc)
-    fms = arcpy.FieldMappings()
-    fmid = arcpy.FieldMap()
-    fmha = arcpy.FieldMap()
-    fmid.addInputField(fc, idfield)
-    fmha.addInputField("wetlands", "WetlandHa")
-    fmha.mergeRule = 'Sum'
-    fms.addFieldMap(fmid)
-    fms.addFieldMap(fmha)
-    arcpy.SpatialJoin_analysis(fc, wetlands, os.path.join(outfolder,\
-     "Table_" + name + "_Wetlands"),'','',fms)
+def wetlands_in_zones(infolder, idfield, wetlands, top_outfolder):
 
 
-# Export feature classes to dbfs
-outlist = []
-for root, dirs, files in arcpy.da.Walk(outfolder):
-    for file in files:
-        outlist.append(os.path.join(root,file))
-for f in outlist:
-    arcpy.TableToDBASE_conversion(f,topoutfolder)
+    # Create output geodatabase in outfolder
+    out_gdb = os.path.join(top_outfolder, "WetlandsInZones.gdb")
+    if not arcpy.Exists(out_gdb):
+        arcpy.CreateFileGDB_management(top_outfolder, "WetlandsInZones")
+
+
+    # Add WetlandHa field if it doesn't exist
+    if len(arcpy.ListFields(wetlands, 'WetlandHa')) == 0:
+        arcpy.AddField_management(wetlands, "WetlandHa", "DOUBLE")
+    expha = "!shape.area@hectares!"
+    arcpy.CalculateField_management(wetlands, "WetlandHa", expha, "PYTHON")
+
+    # Set in memory as workspace. Intermediate output will be held in RAM.
+    mem = "in_memory"
+    arcpy.env.workspace = mem
+
+    # Make wetlands in memory.
+    exp = """"ATTRIBUTE" LIKE 'P%'AND "WETLAND_TY" <> 'Freshwater_Pond'"""
+    arcpy.Select_analysis(wetlands, "wetlandspoly", exp)
+
+    # Convert wetlands to points
+    arcpy.FeatureToPoint_management("wetlandspoly", "wetlands", "INSIDE")
+
+    # List extent feature classes
+    fcs = []
+    for root, dirs, files in arcpy.da.Walk(infolder):
+        for file in files:
+            fcs.append(os.path.join(root,file))
+
+    # Spatial Join the wetlands to each extent
+    out_fcs = []
+    for fc in fcs:
+        cu.multi_msg("Creating results for %s" % fc)
+        name = os.path.basename(fc)
+        fms = arcpy.FieldMappings()
+        fmid = arcpy.FieldMap()
+        fmha = arcpy.FieldMap()
+        fmid.addInputField(fc, idfield)
+        fmha.addInputField("wetlands", "WetlandHa")
+        fmha.mergeRule = 'Sum'
+        fms.addFieldMap(fmid)
+        fms.addFieldMap(fmha)
+        out_fc = os.path.join(out_gdb, name + "_Wetlands")
+        arcpy.SpatialJoin_analysis(fc, wetlands, out_fc ,'','',fms)
+        out_fcs.append(out_fc)
+
+
+    # Export feature classes attribute tables to tables
+    for f in out_fcs:
+        arcpy.CopyRows_management(f, os.path.join(out_gdb, "Table" + os.path.basename(f)))
+
+def main():
+    infolder = arcpy.GetParameterAsText(0) # Workspace with zone feature classes
+    idfield = arcpy.GetParameterAsText(1) # Field that is the unique id for every extent poly
+    wetlands = arcpy.GetParameterAsText(2) # Wetland polygon feature class
+    top_outfolder = arcpy.GetParameterAsText(3) # Output folder
+    wetlands_in_zones(infolder, idfield, wetlands, top_outfolder)
+
+def test():
+    arcpy.env.overwriteOutput = True
+    infolder = '' # Workspace with zone feature classes
+    idfield = '' # Field that is the unique id for every extent poly
+    wetlands = '' # Wetland polygon feature class
+    top_outfolder = '' # Output folder
+    wetlands_in_zones(infolder, idfield, wetlands, top_outfolder)
+
+if __name__ == '__main__':
+    main()
+
+
+
 

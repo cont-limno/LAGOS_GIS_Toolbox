@@ -22,73 +22,75 @@
 #
 #-------------------------------------------------------------------------------
 
-import fnmatch, os, shutil, zipfile
+import fnmatch, os, shutil, re, zipfile
 import arcpy
 from arcpy import env
 import csiutils as cu
 
-def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED):
+def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
+    env.workspace = 'in_memory'
 
     #####################################################################
     cu.multi_msg("1) Creating Directory Structure and Copying NHD Geodatabase")
     #####################################################################
-    srName = "NHD" + sr2Process
-    gdbName = "NHDH" + sr2Process + ".gdb"
-    outputDir = os.path.join(finalOutPath,"NHD" + sr2Process)
-    nhd_source = os.path.join(nhdPath, gdbName)
-    nhd_destination = os.path.join(outputDir, gdbName)
+    #finds the 4-digit huc code in the filename
+    huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
 
-    if not os.path.exists(nhd_destination):
-        shutil.copytree(nhd_source, nhd_destination)
+    out_subdir = os.path.join(out_dir, "NHD" + huc4_code)
+    if not os.path.exists(out_subdir):
+        os.mkdir(out_subdir)
+    nhd_gdb_copy  = os.path.join(out_subdir, os.path.basename(nhd_gdb))
+    arcpy.Copy_management(nhd_gdb,nhd_gdb_copy)
 
-    # set initial environments
-    env.overwriteOutput = True
-    arcpy.env.workspace = outputDir
+##    srName = "NHD" + sr2Process
+##    gdbName = "NHDH" + sr2Process + ".gdb"
+##    outputDir = os.path.join(finalOutPath,"NHD" + sr2Process)
+##    nhd_source = os.path.join(nhdPath, gdbName)
+##    nhd_destination = os.path.join(outputDir, gdbName)
+##
+##    if not os.path.exists(nhd_destination):
+##        shutil.copytree(nhd_source, nhd_destination)
+
+##    # set initial environments
+##    env.overwriteOutput = True
+##    arcpy.env.workspace = outputDir
 
     ####################################################################
-    cu.multi_msg("2) Getting WBD Poly For Subregion and Buffering by 5000m")
+    cu.multi_msg("2) Getting WBD Poly For Subregion and Buffering by 5000m...")
     #####################################################################
 
-    # Buffer only this subregion
-    whereClause = "HUC_4 = '" + sr2Process + "'"
-    cu.multi_msg("making featurelayer")
-    arcpy.MakeFeatureLayer_management(wbd, "wbd_poly", whereClause)
-    cu.multi_msg("making wbd_poly featurelayer complete")
-    cu.multi_msg("buffering")
-    arcpy.Buffer_analysis("wbd_poly", "in_memory/wbd_buf", 5000)
-    cu.multi_msg("buffering complete")
+    #select only this subregion from the wbd layer in the nhd_gdb (bordering
+    # subregions are included in there too) and buffer it
+    wbd_hu4 = os.path.join(nhd_gdb_copy, "WBD_HU4")
+    field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
+    whereClause =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb_copy, field_name), huc4_code)
+    arcpy.MakeFeatureLayer_management(wbd_hu4, "wbd_poly", whereClause)
+    arcpy.Buffer_analysis("wbd_poly", "wbd_buf", "5000 meters")
 
     #####################################################################
-    cu.multi_msg("3) Clipping NED Tile polys from Buffered NHD Subregion From WBD")
+    cu.multi_msg("3) Clipping NED Tile polys from Buffered NHD Subregion From WBD...")
     #####################################################################
-
-    arcpy.Clip_analysis(nedFootprints, "in_memory/wbd_buf", "in_memory/ned_clip")
-    cu.multi_msg("clipping complete")
+    arcpy.Clip_analysis(ned_footprints_fc, "wbd_buf", "ned_clip")
 
     #####################################################################
     cu.multi_msg("4) Getting File_ID of clipped NED footprint polys and copying NED data to output location")
     #####################################################################
-
-
-
-    clip_fc = "in_memory/ned_clip"
-    fields = ["FILE_ID"]
     missing_NED_list = []
-    with arcpy.da.SearchCursor(clip_fc, fields) as cursor:
+    with arcpy.da.SearchCursor("ned_clip", ["FILE_ID"]) as cursor:
         for row in cursor:
             file_id = row[0].replace("g","")
 
             # unzipping if needed
 
-            if zippedNED:
-                unzipped_file = unzip_file(file_id, nedPath, outputDir)
+            if is_zipped:
+                unzipped_file = unzip_ned(file_id, ned_dir, out_subdir)
                 if not unzipped_file:
                     missing_NED_list.append(file_id)
             else:
 
                 # copy ned tiles to output location
-                ned_source = os.path.join(nedPath,file_id)
-                ned_destination = os.path.join(outputDir,file_id)
+                ned_source = os.path.join(ned_dir, file_id)
+                ned_destination = os.path.join(out_subdir,  file_id)
                 if not os.path.exists(ned_source):
                     cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
                     missing_NED_list.append(file_id)
@@ -98,12 +100,17 @@ def stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, 
                     else:
                         cu.multi_msg("Output folder for this NED tile already exists.")
     if missing_NED_list:
-        cu.multi_msg("WARNING: NED tile directories did not exist for the following: %s" % ','.join(missing_NED_list))
+        warning_text = "WARNING: NED tiles did not exist for the following: %s" % ','.join(missing_NED_list)
+        arcpy.AddWarning(warning_text)
+        print(warning_text)
+    for item in ["wbd_buf", "ned_clip"]:
+        arcpy.Delete_management(item)
+    return out_subdir
 
-def unzip_file(file_id, nedPath, outputDir):
+def unzip_ned(file_id, ned_dir, out_dir):
                 # clunky but this works in USA: zipped files sometimes called
                 # something like n36w87 instead of n36w087 so try all 3
-                filename_variants = [os.path.join(nedPath, f) for f in [file_id + ".zip",
+                filename_variants = [os.path.join(ned_dir, f) for f in [file_id + ".zip",
                 file_id[0:4] + file_id[5:] + ".zip",
                 file_id[0] + file_id[2:] + ".zip"]]
                 filename_to_use = ''
@@ -116,40 +123,126 @@ def unzip_file(file_id, nedPath, outputDir):
                 if filename_to_use:
                     cu.multi_msg("Unzipping file %s" % filename_to_use)
                     zf = zipfile.ZipFile(filename_to_use)
-                    zf.extractall(outputDir)
+                    zf.extractall(out_dir)
                     return True
                 else:
                     cu.multi_msg("ERROR: A tile for %s does not exist in the specified location" % file_id)
                     return False
 
-def main():
-    nhdPath = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
-    nedPath = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
-    wbd = arcpy.GetParameterAsText(2)           #FC of 4 digit HUC Subregions
-    nedFootprints = arcpy.GetParameterAsText(3)
-    sr2Process = arcpy.GetParameterAsText(4)    # Subregion to process, (4 digit HUC designation, include leading 0)
-    finalOutPath = arcpy.GetParameterAsText(5)    # Output folder
-    zippedNED = arcpy.GetParameter(6) # Whether NED tiles are zipped or not
+####################################################################################################################################################
+# Mosiac NED tiles and clip to subregion.
+def mosaic(in_workspace, out_dir, is_large_data = False, projection = arcpy.SpatialReference(102039)) :
 
-    stage_files(nhdPath, nedPath, wbd, nedFootprints, sr2Process, finalOutPath, zippedNED)
+    # Set up environments
+    env.terrainMemoryUsage = True
+    env.compression = "LZ77" # compress temp tifs for speed
+    env.pyramids = "NONE" # for intermediates only
+    env.outputCoordinateSystem = projection
+
+    env.workspace = in_workspace
+    huc4_code = re.search('\d{4}', os.path.basename(in_workspace)).group()
+    nhd_gdb = os.path.join(in_workspace, 'NHDH%s.gdb' % huc4_code)
+
+    # Select the right HUC4 from WBD_HU4 and make it it's own layer.
+    wbd_hu4 = os.path.join(nhd_gdb, "WBD_HU4")
+    field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
+    whereClause =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc4_code)
+    arcpy.MakeFeatureLayer_management(wbd_hu4, "Subregion", whereClause)
+
+    # Apply a 5000 meter buffer around subregion
+    subregion_buffer = os.path.join(nhd_gdb, "Subregion_Buffered_5000m")
+    arcpy.Buffer_analysis("Subregion", subregion_buffer, "5000 meters")
+    cu.multi_msg("Buffered subregion.")
+
+    # Walk through the folder with NEDs to make a list of rasters
+    mosaic_rasters = []
+    for dirpath, dirnames, filenames in arcpy.da.Walk(in_workspace, datatype="RasterDataset"):
+        for filename in filenames:
+            name = os.path.join(dirpath, filename)
+            mosaic_rasters.append(name)
+
+    cu.multi_msg("Found NED ArcGrids.")
+
+    # Update environments
+    env.extent = subregion_buffer
+    if not is_large_data:
+        env.workspace = 'in_memory'
+        ext = ''
+    else:
+        env.workspace = out_dir
+        ext = '.tif'
+
+    # Assign names to intermediate outputs in outfolder
+    mosaic_unproj = "mosaic_t1" + ext
+    mosaic_proj = "mosaic_t2" + ext
+
+    # Mosaic, then project
+    # Cannot do this in one step using MosaicToNewRaster's projection parameter
+    # because you cannot set the cell size correctly
+    cu.multi_msg("Creating initial mosaic. This may take a while...")
+
+    arcpy.MosaicToNewRaster_management(mosaic_rasters, env.workspace,
+    mosaic_unproj, "", "32_BIT_FLOAT", "", "1", "LAST")
+
+    cu.multi_msg("Projecting mosaic...")
+
+    arcpy.ProjectRaster_management(mosaic_unproj, mosaic_proj,
+    projection, "BILINEAR", "10")
+
+    #final mosaic environs
+    env.pyramids = "PYRAMIDS -1 SKIP_FIRST" # need to check outputs efficiently
+    cu.multi_msg("Clipping final mosaic...")
+
+    out_mosaic = os.path.join(out_dir, "NED13_%s.tif" % huc4_code)
+    arcpy.Clip_management(mosaic_proj, '', out_mosaic, subregion_buffer,
+     "0", "ClippingGeometry")
+
+    # Clean up
+    cu.cleanup([mosaic_unproj, mosaic_proj])
+    cu.multi_msg("Mosaicked NED tiles and clipped to HUC4 extent.")
+
+# END OF DEF mosaic
+
+def delete_neds(workspace):
+    os.chdir(workspace)
+    for root, dirs, files in os.walk(workspace):
+        for d in dirs:
+            if re.match('n\d+w\d+', d):
+                print("Deleting NED folder %s" % d)
+                shutil.rmtree(d)
+
+
+def main():
+    nhd_gdb = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
+    ned_dir = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
+    ned_footprints_fc = arcpy.GetParameterAsText(3)
+    out_dir = arcpy.GetParameterAsText(5)    # Output folder
+    is_zipped = arcpy.GetParameter(6) # Whether NED tiles are zipped or not
+
+    mosaic_workspace = stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped)
+    projection = arcpy.GetParameter(7)
+    is_large_data = arcpy.GetParameterAsText(8)
+    mosaic(mosaic_workspace, mosaic_workspace, is_large_data, projection)
+    delete_neds(mosaic_workspace)
     print("Complete")
 
 #######################################
 #TESTING
 ########################################
 def test():
-    """Tests the stage_files function. Call in place of main() to test."""
+    """Tests the tool. Call in place of main() to test."""
     cu.multi_msg("WARNING: TESTING MODE!!! If not desired edit script to call main() instead.")
-    test_nhdPath = r"C:\GISData\NHD_bySubregion"
-    test_nedPath = r"E:\Downloaded_NED"
-    test_wbd = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\HUC4_inStudyArea"
-    test_nedFootprints = r"C:\GISData\Old_Watersheds.gdb\Boundaries_Basemap\NEDTiles"
-    test_sr2Process = "0109"
-    test_finalOutPath = r"C:\GISData\Scratch_njs"
-    test_zippedNED = True
-    stage_files(test_nhdPath, test_nedPath, test_wbd,
-                    test_nedFootprints, test_sr2Process,
-                     test_finalOutPath, test_zippedNED)
+    nhd_gdb = 'E:/RawNHD_byHUC/NHDH0109.gdb'
+    ned_dir = 'E:/Downloaded_NED'
+    ned_footprints_fc = 'C:/GISData/NED_FootPrint_Subregions.gdb/nedfootprints'
+    out_dir = 'C:/GISData/Scratch'
+    is_zipped = True
+
+    mosaic_workspace = stage_files(nhd_gdb, ned_dir, ned_footprints_fc,
+                        out_dir, is_zipped)
+    mosaic(mosaic_workspace, mosaic_workspace)
+    delete_neds(mosaic_workspace)
+    print("TEST RUN complete.")
 
 
 if __name__ == '__main__':

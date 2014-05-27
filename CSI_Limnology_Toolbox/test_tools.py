@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import LineDensity as tool
+import polygons_in_zones as tool
 
 def main():
     t = time.time()

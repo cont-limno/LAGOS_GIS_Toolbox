@@ -73,16 +73,44 @@ def check_geo_overlap(polygon_fc, unique_id, table_workspace = 'in_memory', acce
 # Created:  7/13/2012
 #----------------------------------------------------------------------------------------------
 
-def remove_lake_duplicates(lake_fc, unique_id, out_fc):
-    ws = 'in_memory'
+def remove_nhd_duplicates(in_fc, unique_id, out_fc):
+    """This function will resolve identifier duplications from any NHD-based
+    layer. Use when you need to be sure the identifier values are unique. Some
+    processing chains will result in duplications where edits to the feature
+    are apparently saved twice. This function will save the feature with the
+    newest time stamp and drop all the rest of the records with the same value
+    in the field you specify as unique_id. If there are no duplications, the
+    function will exit safely.
+
+    in_fc: the feature class that might have duplicates that is derived from an
+    NHD (National Hydrological Dataset) layer such as NHDWaterbodies or
+    NHDFlowlines
+
+    unique_id: The field you want to use as a primary key, or unique identifier
+    of features. Any value appearing more than once in this input will be
+    resolved in the output so that it only appears once. With the NHD, this will
+    usually be the 'Permanent_Identifier' column, which you may have already
+    renamed.
+    be the 'Permanent_Identifier' column
+
+    out_fc: the desired path for the output feature class"""
+    ws = 'C:/GISData/Scratch/fake_memory.gdb'
     env.workspace = ws
 
     print("Creating frequency table...")
-    arcpy.Frequency_analysis(lake_fc, "freqtable", unique_id)
+    arcpy.Frequency_analysis(in_fc, "freqtable", unique_id)
 
-    arcpy.CopyFeatures_management(lake_fc, "lakes_temp")
-    arcpy.AddField_management("lakes_temp", "NewestFDate", "SHORT")
-    arcpy.CalculateField_management("lakes_temp", "NewestFDate", 1, 'PYTHON')
+    # Pick out just the records we need to work with, the rest will be
+    # saved to the output and we will merge in the results from our working
+    # set later
+    arcpy.MakeFeatureLayer_management(in_fc, "fc_lyr")
+    arcpy.AddJoin_management("fc_lyr", unique_id, "freqtable", unique_id)
+    arcpy.Select_analysis("fc_lyr", out_fc, '''"FREQUENCY" = 1''')
+    arcpy.Select_analysis("fc_lyr", "fc_temp", '''"FREQUENCY" > 1''')
+    arcpy.RemoveJoin_management("fc_lyr")
+
+    arcpy.AddField_management("fc_temp", "NewestFDate", "SHORT")
+    arcpy.CalculateField_management("fc_temp", "NewestFDate", 1, 'PYTHON')
 
     arcpy.TableSelect_analysis("freqtable", "dupetable", '''"FREQUENCY" > 1''')
 
@@ -101,7 +129,7 @@ def remove_lake_duplicates(lake_fc, unique_id, out_fc):
 
             # update values to 0, we will change only one to 1 later
             # and get a list of all the dates
-            dates = [row[0] for row in arcpy.da.SearchCursor("lakes_temp", ("FDate"), whereClause)]
+            dates = [row[0] for row in arcpy.da.SearchCursor("fc_temp", ("FDate"), whereClause)]
 
             print("ID group %s" % s_id)
             print("Date object values: %s" % dates)
@@ -111,7 +139,7 @@ def remove_lake_duplicates(lake_fc, unique_id, out_fc):
             # sometimes more than one record with max date but
             # the following allows us to use "NewestFDate" = 1 later to
             # select ONLY ONE to keep
-            with arcpy.da.UpdateCursor("lakes_temp", ("FDate", "NewestFDate"), whereClause) as cursor:
+            with arcpy.da.UpdateCursor("fc_temp", ("FDate", "NewestFDate"), whereClause) as cursor:
                 i = 1
                 for row in cursor:
                     if row[0] == max(dates):
@@ -122,10 +150,11 @@ def remove_lake_duplicates(lake_fc, unique_id, out_fc):
                     cursor.updateRow(row)
 
         # create a new, distinct output rather than updating table in place
-        arcpy.Select_analysis("lakes_temp", out_fc, ''' "NewestFDate" = 1 ''')
-        arcpy.DeleteField_management(out_fc, "NewestFDate")
+        arcpy.Select_analysis("fc_temp", "newest_only", ''' "NewestFDate" = 1 ''')
+        arcpy.DeleteField_management("newest_only", "NewestFDate")
+        arcpy.Merge_management("newest_only", out_fc)
 
-        for intermediate in ["freqtable", "dupetable", "lakes_temp"]:
+        for intermediate in ["freqtable", "dupetable", "fc_temp"]:
             arcpy.Delete_management(intermediate)
 
     else:
@@ -136,7 +165,7 @@ def remove_lake_duplicates(lake_fc, unique_id, out_fc):
 # of the same lake and not some other type of overlap), look up the neighbor lake
 # and add the older of the two to a drop list, then run the drop all at once
 
-def remove_geographic_doubles(polygon_fc, out_fc, unique_id, keep_fc = '', keep_field = ''):
+def remove_geographic_doubles(polygon_fc, out_fc, unique_id, percent_overlap_allowed = 10, keep_fc = '', keep_field = ''):
     neighbor_table = 'in_memory/neighbortable'
     print('Calculating neighbor table...')
     arcpy.PolygonNeighbors_analysis(polygon_fc, neighbor_table, unique_id,
@@ -165,7 +194,7 @@ def remove_geographic_doubles(polygon_fc, out_fc, unique_id, keep_fc = '', keep_
         for row in cursor:
 
             # If this row represents a duplicate-type overlap
-            if row[0] >= .9 * row[1]:
+            if row[0] >= row[1] * (100 - percent_overlap_allowed)/100:
                 src_value = row[2]
                 nbr_value = row[3]
 ##                print("testing. pair: %s and %s" % (src_value, nbr_value))

@@ -5,7 +5,7 @@ import csiutils as cu
 
 # All of the following is from the ESRI Spatial Analyst team's tool called
 # "Zonal Statistics as Table for Overlapping Features"
-def colorPolygons(feature_class, feature_field, out_directory):
+def colorPolygons(feature_class, feature_field, out_gdb):
     arcpy.env.overwriteOutput = True
 
 ##    # Create temporary directory
@@ -150,9 +150,11 @@ def colorPolygons(feature_class, feature_field, out_directory):
             where_clause)
 
         # This part added by Nicole
-        # Save polygon layers to output folder
+        # Save polygon layers to output gdb
+        if not arcpy.Exists(out_gdb):
+            arcpy.CreateFileGDB_management(os.path.dirname(out_gdb), os.path.basename(out_gdb))
         outLayerBase = os.path.splitext(os.path.basename(feature_class))[0]
-        outLayerName = arcpy.CreateUniqueName(outLayerBase + "_NoOverlap.shp", out_directory)
+        outLayerName = arcpy.CreateUniqueName(outLayerBase + "_NoOverlap", out_gdb)
         cu.multi_msg("Saving feature class %s of %s with name %s" % (str(index + 1),
             str(num_classes), outLayerName))
 ##        arcpy.Select_analysis(temp_features, outLayerName, where_clause)
@@ -162,20 +164,20 @@ def colorPolygons(feature_class, feature_field, out_directory):
         cu.multi_msg("count of features: " + str(count))
         arcpy.CopyFeatures_management(temp_lyr, outLayerName)
         arcpy.Delete_management(temp_lyr)
-    return out_directory
+    return out_gdb
 
 def test():
 
     feature_class = 'C:/GISData/Scratch/Scratch.gdb/test_IWS'
     feature_field = 'NHD_ID'
-    out_directory = 'C:/GISData/Scratch/test_apr7'
-    colorPolygons(feature_class, feature_field, out_directory)
+    out_gdb = 'C:/GISData/Scratch/test_may27.gdb'
+    colorPolygons(feature_class, feature_field, out_gdb)
 
 def main():
     feature_class = arcpy.GetParameterAsText(0)
     feature_field = arcpy.GetParameterAsText(1)
-    out_directory = arcpy.GetParameterAsText(2)
-    colorPolygons(feature_class, feature_field, out_directory)
+    out_gdb = arcpy.GetParameterAsText(2)
+    colorPolygons(feature_class, feature_field, out_gdb)
 
 if __name__ == '__main__':
     main()

@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import polygons_in_zones as tool
+import PointDensityInPolygons as tool
 
 def main():
     t = time.time()

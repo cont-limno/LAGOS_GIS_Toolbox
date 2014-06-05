@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import PointDensityInPolygons as tool
+import overlap_stats as tool
 
 def main():
     t = time.time()

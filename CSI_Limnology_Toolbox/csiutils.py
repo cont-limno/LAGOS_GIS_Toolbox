@@ -23,25 +23,25 @@ def multi_msg(message):
     print(message)
     arcpy.AddMessage(message)
 
-def cleanup(intermediate_items_list):
-    """Safely deletes intermediate outputs using ArcGIS method only if they exist. Accepts a path expressed as a string or a list/tuple of paths. Uses ArcGIS existence test so geodatabase items are okay in addition to ordinary OS paths."""
-    if type(intermediate_items_list) is str:
-        intermediate_items_list = [intermediate_items_list]
-    for item in intermediate_items_list:
-        if arcpy.Exists(item):
-            try:
-                arcpy.Delete_management(item)
-            except Exception as e:
-                cu.multi_msg(e.message)
-                continue
+##def cleanup(intermediate_items_list):
+##    """Safely deletes intermediate outputs using ArcGIS method only if they exist. Accepts a path expressed as a string or a list/tuple of paths. Uses ArcGIS existence test so geodatabase items are okay in addition to ordinary OS paths."""
+##    if type(intermediate_items_list) is str:
+##        intermediate_items_list = [intermediate_items_list]
+##    for item in intermediate_items_list:
+##        if arcpy.Exists(item):
+##            try:
+##                arcpy.Delete_management(item)
+##            except Exception as e:
+##                cu.multi_msg(e.message)
+##                continue
 
-def directory_size(directory):
-    total_size = 0
-    for dirpath, dirnames, filenames in os.walk(directory):
-            for f in filenames:
-                f_abspath = os.path.join(dirpath, f)
-                total_size += os.path.getsize(f_abspath)
-    return float(total_size)
+##def directory_size(directory):
+##    total_size = 0
+##    for dirpath, dirnames, filenames in os.walk(directory):
+##            for f in filenames:
+##                f_abspath = os.path.join(dirpath, f)
+##                total_size += os.path.getsize(f_abspath)
+##    return float(total_size)
 
 def merge_many(merge_list, out_fc, group_size = 20):
     """arcpy merge a list without blowing up your system
@@ -67,13 +67,17 @@ def rename_field(inTable, oldFieldName, newFieldName, deleteOld = False):
     if deleteOld == True: arcpy.DeleteField_management(inTable, oldFieldName)
 
 
-def one_in_one_out(tool_table, calculated_fields, extent_fc, zone_field, output_table):
+def one_in_one_out(tool_table, calculated_fields, zone_fc, zone_field, output_table):
     """ Occasionally, ArcGIS tools we use do not produce an output record for
     every input feature. This function is used in the toolbox whenever we need
     to correct this problem, and should be called at the end of the script to
-    create the final output.
+    create the final output. This function also takes care of cleaning up
+    the output table so that it only has the ID field and the newly calculated
+    fields.
     tool_table: the intermediate table with missing features
-    extent_fc: the feature class with the zones
+    calculated_fields: the fields newly calculated by the tool that you wish to
+    appear in the output
+    zone_fc: the feature class with the zones
     zone_field: the field uniquely identifying each feature that was used in
     the creation of tool_table. Because this function is called within our
     scripts, the zone_field should always be the same in tool_table and
@@ -83,9 +87,9 @@ def one_in_one_out(tool_table, calculated_fields, extent_fc, zone_field, output_
     """
 
     # This function is mostly a hack on an outer right join. Want to join to
-    # extent_fc but select ONLY the ID field, and keep all records in extent_fc
+    # zone_fc but select ONLY the ID field, and keep all records in zone_fc
     # If you find a better way, update this.
-    arcpy.CopyRows_management(extent_fc, output_table)
+    arcpy.CopyRows_management(zone_fc, output_table)
     arcpy.JoinField_management(output_table, zone_field, tool_table, zone_field)
     calculated_fields.append(zone_field)
     field_names = [f.name for f in arcpy.ListFields(output_table)]
@@ -108,6 +112,27 @@ def redefine_nulls(in_table, in_fields, out_values):
     for f, v in zip(in_fields, out_values):
         null_expr = '''"{0}" is null'''.format(f)
         arcpy.SelectLayerByAttribute_management('table', 'NEW_SELECTION', null_expr)
-        calc_expr = v
+        calc_expr = """'{0}'""".format(v)
         arcpy.CalculateField_management('table', f, calc_expr, 'PYTHON')
 
+def resolution_comparison(feature_class, raster):
+    """Compare the feature resolution to the raster resolution.
+    Returns a value from 0-100 describing the percent of features that are
+    larger than the area of one cell in the raster"""
+    fc_count = int(arcpy.GetCount_management(feature_class).getOutput(0))
+
+    # ask what the area of a cell in the raster is
+    desc = arcpy.Describe(raster)
+    cell_size = desc.meanCellHeight
+    cell_area = desc.meanCellHeight * desc.meanCellWidth
+
+    # ask what proportion of features are smaller than that
+    small_count = 0
+    with arcpy.da.SearchCursor(feature_class, ["SHAPE@AREA"]) as cursor:
+        for row in cursor:
+            if row[0] < cell_area:
+                small_count += 1
+
+    percent_ok = 100*(1 - (small_count/float(fc_count)))
+
+    return((percent_ok))

@@ -151,8 +151,6 @@ def colorPolygons(feature_class, feature_field, out_gdb):
 
         # This part added by Nicole
         # Save polygon layers to output gdb
-        if not arcpy.Exists(out_gdb):
-            arcpy.CreateFileGDB_management(os.path.dirname(out_gdb), os.path.basename(out_gdb))
         outLayerBase = os.path.splitext(os.path.basename(feature_class))[0]
         outLayerName = arcpy.CreateUniqueName(outLayerBase + "_NoOverlap", out_gdb)
         cu.multi_msg("Saving feature class %s of %s with name %s" % (str(index + 1),
@@ -167,10 +165,9 @@ def colorPolygons(feature_class, feature_field, out_gdb):
     return out_gdb
 
 def test():
-
-    feature_class = 'C:/GISData/Scratch/Scratch.gdb/test_IWS'
-    feature_field = 'NHD_ID'
-    out_gdb = 'C:/GISData/Scratch/test_may27.gdb'
+    feature_class = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver3.gdb/IWS'
+    feature_field = 'ZoneID'
+    out_gdb = 'C:/GISData/Scratch/Scratch.gdb'
     colorPolygons(feature_class, feature_field, out_gdb)
 
 def main():

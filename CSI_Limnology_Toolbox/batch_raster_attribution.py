@@ -6,7 +6,7 @@ import zonal_tabarea
 
 # leave this function alone if you're just trying to reuse the script
 def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
-                            is_thematic_list, search_gdbs = []):
+                            is_thematic_list, search_gdbs = [], log_file = ''):
     """Runs a lot of Zonal Attribution for Raster Data (NON OVERLAPPING) at once.
     INPUTS
     all_rasters: a list of all the rasters you would like in the batch run
@@ -19,6 +19,7 @@ def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
                  will not rerun the calculation at this time. If you want to
                  replace tables with the same name, leave this blank or
                  delete/rename the old invalid table"""
+    search_gdbs.append(out_gdb)
 
     # first check that everything exists and warn the user
     all_paths = all_rasters + all_extents + [out_gdb] + search_gdbs
@@ -41,33 +42,53 @@ def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
 
                 # test for previously calculated table existence
                 is_previous_output = False
-                search_gdbs.append(out_gdb)
-                previous_table_candidates = [os.path.join(gdb, out_table_short) for
+                exists_candidates = [os.path.join(gdb, out_table_short) for
                                             gdb in search_gdbs]
-                for candidate in previous_table_candidates:
-                    if arcpy.Exists(candidate):
-                        is_previous_output = True
+                if any(map(lambda x: arcpy.Exists(x), exists_candidates)):
+                    is_previous_output = True
+##                    
+##                for candidate in previous_table_candidates:
+##                    if arcpy.Exists(candidate):
+##                        is_previous_output = True
 
                 # if there is no previous table do the calculation
                 out_table = os.path.join(out_gdb, out_table_short)
                 if is_previous_output is False:
                     t = time.time()
                     localtime = time.asctime(time.localtime(t))
-                    print("Calculating table {0} starting at {1}.".format(
-                            os.path.basename(out_table), localtime))
+                    start_msg = "Calculating table {0} starting at {1}.".format(
+                            os.path.basename(out_table), localtime)
+                    print(start_msg)
+                    if log_file:
+                        with open(log_file, 'a') as f:
+                            f.write(start_msg + '\n')
                     try:
                         zonal_tabarea.stats_area_table(e, zone_field, r, out_table,
                                                     is_thematic)
                         elapsed_time = (time.time() - t)/60
-                        print("Table {0} completed in {1} minutes.".format(
-                                os.path.basename(out_table), elapsed_time))
+                        finish_msg = "Table {0} completed in {1} minutes.".format(
+                                os.path.basename(out_table), elapsed_time)
+                        print(finish_msg)
+                        if log_file:
+                            with open(log_file, 'a') as f:
+                                f.write(finish_msg + '\n')
+
                     except Exception as e:
-                        print("Could not create table {0}".format(out_table))
+                        fail_msg = "Could not create table {0}".format(out_table)
+                        print(fail_msg)
                         print(e.message)
+                        if log_file:
+                            with open(log_file, 'a') as f:
+                                f.write(fail_msg + '\n')
+                                f.write(e.message + '\n')
                         continue
                 else:
-                    print("There is already a table for {0}".format(
-                            os.path.basename(out_table)))
+                    exists_msg = "There is already a table for {0}".format(
+                            os.path.basename(out_table))
+                    print(exists_msg)
+                    if log_file:
+                        with open(log_file, 'a') as f:
+                            f.write(exists_msg + '\n')
                     continue
 
 
@@ -118,7 +139,7 @@ for ndir in nadp_dirs:
     nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*0.tif')]) # 90, 2000, 2010
     nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*5.tif')]) # 85, 95, 2005
 
-others = [r'E:\Attribution_Rasters_2013\TerrainMosaics.gdb\TRI']
+others = []
 
 # make however you want, ideally order from coarse to fine resolution
 ALL_RASTERS = (nadp_list + groundwater_list + prism_list + cropland_list +
@@ -137,6 +158,8 @@ SEARCH_GDBS = ['C:/GISData/Attribution_April2014.gdb',
                 'C:/GISData/Attribution_May2014.gdb',
                 'C:/GISData/Attribution_May2014_MoreNADP.gdb']
 
+LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_jun5.txt'
+
 # go ahead and do it! leave this alone too if you're reusing the script
 batch_raster_attribution(ALL_RASTERS, ALL_EXTENTS, 'ZoneID', OUT_GDB,
-                            THEMATIC_FLAGS, SEARCH_GDBS)
+                            THEMATIC_FLAGS, SEARCH_GDBS, LOG_FILE)

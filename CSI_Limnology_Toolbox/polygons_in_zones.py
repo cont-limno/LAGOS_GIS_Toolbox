@@ -13,7 +13,7 @@ import arcpy
 import csiutils as cu
 
 def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
-    env.workspace = 'in_memory'
+    arcpy.env.workspace = 'in_memory'
     if interest_selection_expr:
         arcpy.MakeFeatureLayer_management(polygons_of_interest, "selected_polys", interest_selection_expr)
     else:
@@ -28,22 +28,22 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
     cu.rename_field(tab_table, 'AREA', 'Poly_AREA_ha', True)
     cu.rename_field(tab_table, 'PERCENTAGE', 'Poly_AREA_pct', True)
     spjoin_fc = 'spatial_join_output'
-    field_mapping ="""{0} "{0}" true true false 20 Text 0 0 ,First,#,
-                    {1},
-                    {0},-1,-1""".format(zone_field, zone_fc)
-    print(field_mapping)
     arcpy.SpatialJoin_analysis(zone_fc, "selected_polys", spjoin_fc,
                                  "JOIN_ONE_TO_ONE", "KEEP_ALL",
-                                 field_mapping, "INTERSECT")
-    arcpy.AddField_management(spjoin_fc, "WL_Count", 'Short')
+                                  match_option =  "INTERSECT")
+    arcpy.AddField_management(spjoin_fc, "Poly_Count", 'Short')
     arcpy.CalculateField_management(spjoin_fc, "Poly_Count", '!Join_Count!', "PYTHON")
 
-    arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, "WL_Count")
-    final_fields = ['WL_AREA_ha', 'WL_AREA_pct', 'WL_Count']
+    arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, "Poly_Count")
+    final_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']
 
     # make output nice
     cu.one_in_one_out(tab_table, final_fields, zone_fc, zone_field, output_table)
     cu.redefine_nulls(output_table, final_fields, [0, 0, 0])
+
+    # clean up
+    for item in ["selected_polys", tab_table, spjoin_fc]:
+        arcpy.Delete_management(item)
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

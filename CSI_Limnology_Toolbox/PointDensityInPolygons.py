@@ -102,8 +102,8 @@ def points_in_zones(zone_fc, zone_field, points_fc, output_table):
 def main():
     zone_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)
-    points_fc = arcpy.GetParameterAsText(3)
-    output_table = arcpy.GetParameterAsText(4)
+    points_fc = arcpy.GetParameterAsText(2)
+    output_table = arcpy.GetParameterAsText(3)
     points_in_zones(zone_fc, zone_field, points_fc, output_table)
 
 def test():

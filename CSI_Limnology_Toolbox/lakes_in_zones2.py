@@ -83,8 +83,10 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field):
     arcpy.CopyRows_management('Lakes4ha', output_table)
 
     # clean up
-    for item in ['lakes_4ha', 'Lakes4ha'] + temp_tables:
+    for item in ['Lakes4ha'] + temp_tables:
         arcpy.Delete_management(item)
+    if need_selection:
+        arcpy.Delete_management('lakes_4ha')
 
 def main():
     zones_fc = arcpy.GetParameterAsText(0)

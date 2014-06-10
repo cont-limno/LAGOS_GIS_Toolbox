@@ -6,10 +6,11 @@ import zonal_tabarea
 
 
 def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic):
-    temp_out_tables = ['C:/GISData/Scratch/fake_memory.gdb/' + os.path.basename(zfc) + "_temp_table" for zfc in non_overlapping_zones_list]
+    temp_out_tables = ['in_memory/' + os.path.basename(zfc) + "_temp_table" for zfc in non_overlapping_zones_list]
 
     arcpy.CheckOutExtension("Spatial")
     for zones, temp_table in zip(non_overlapping_zones_list, temp_out_tables):
+        cu.multi_msg('Calculating statistics for layer {0}'.format(zones))
         zonal_tabarea.stats_area_table(zones, zone_field, in_value_raster, temp_table, is_thematic)
     arcpy.CheckInExtension("Spatial")
 
@@ -33,7 +34,7 @@ def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_t
         print(warn_msg)
 
 def main():
-    non_overlapping_zones_list = arcpy.GetParameterAsText(0) # list
+    non_overlapping_zones_list = arcpy.GetParameterAsText(0).split(';') # list
     zone_field = arcpy.GetParameterAsText(1)
     in_value_raster = arcpy.GetParameterAsText(2)
     out_table = arcpy.GetParameterAsText(3)
@@ -42,12 +43,12 @@ def main():
     stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic)
 
 def test():
-    arcpy.env.workspace = 'C:/GISData/Scratch/Scratch.gdb'
-    non_overlapping_zones_list = arcpy.ListFeatureClasses('test_IWS_teeny_NoOverlap*')
-    zone_field = 'ZoneID'
-    in_value_raster = r'E:\Attribution_Rasters_2013\NewNADP\NO3\dep_no3_2012.tif'
-    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_IWS_dep_no3_2012'
-    is_thematic = False
+    arcpy.env.workspace = 'C:/GISData/Kendra_June2014.gdb'
+    non_overlapping_zones_list = arcpy.ListFeatureClasses('*NoOverlap')
+    zone_field = 'Permanent_Identifier'
+    in_value_raster = r'E:\Attribution_Rasters_2013\MRLC\nlcd2006.tif'
+    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_999999_failure'
+    is_thematic =True
 
     stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic)
 

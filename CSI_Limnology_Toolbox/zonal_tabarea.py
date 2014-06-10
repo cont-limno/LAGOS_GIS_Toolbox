@@ -1,4 +1,4 @@
-import os
+import os, tempfile
 import arcpy
 from arcpy import env
 import csiutils as cu
@@ -21,7 +21,7 @@ def refine_zonal_output(t, is_thematic):
             # find percent of total area in a new field
             pct_field = f.name.replace("VALUE", "Pct")
             arcpy.AddField_management(t, pct_field, f.type)
-            expr = "!%s!/!AREA!" % f.name
+            expr = "100 * !%s!/!AREA!" % f.name
             arcpy.CalculateField_management(t, pct_field, expr, "PYTHON")
 
             #Delete the old field
@@ -46,7 +46,27 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # calculate/doit
     env.snapRaster = in_value_raster
     env.cellSize = in_value_raster
-    arcpy.sa.ZonalStatisticsAsTable(zone_fc, zone_field, in_value_raster, temp_zonal_table)
+
+    # this has to be on disk for some reason to avoid background processing
+    # errors thrown up at random
+    # hence we get the following awkward horribleness
+    temp_dir = os.path.join(tempfile.gettempdir(), 'zonal')
+    index = 0
+    while os.path.exists(temp_dir):
+        temp_dir = os.path.join(tempfile.gettempdir(), 'zonal%d' % index)
+        index += 1
+    os.mkdir(temp_dir)
+    arcpy.CreateFileGDB_management(temp_dir, 'temp_zonal.gdb')
+
+    convert_raster = os.path.join(temp_dir, 'temp_zonal.gdb',
+                        cu.shortname(zone_fc) + '_converted')
+##    convert_raster = 'in_memory/converted'
+    cu.multi_msg('Creating raster {0}'.format(convert_raster))
+    arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
+
+    # do it
+    arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
+                                    temp_zonal_table, "DATA", "ALL")
 
     if is_thematic:
         #for some reason env.celLSize doesn't work
@@ -56,7 +76,9 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         # calculate/doit
         temp_area_table = 'in_memory/tab_area_temp'
         cu.multi_msg("Tabulating areas...")
-        arcpy.sa.TabulateArea(zone_fc, zone_field, in_value_raster, 'Value', temp_area_table, cell_size)
+
+        arcpy.sa.TabulateArea(convert_raster, zone_field, in_value_raster,
+                                'Value', temp_area_table, cell_size)
 
         # making the output table
         arcpy.CopyRows_management(temp_area_table, temp_entire_table)
@@ -78,7 +100,6 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     #final table gets a record even for no-data zones
     keep_fields = [f.name for f in arcpy.ListFields(temp_entire_table)]
     keep_fields.remove(zone_field.upper())
-    keep_fields.remove('OBJECTID')
     cu.one_in_one_out(temp_entire_table, keep_fields, zone_fc, zone_field, out_table)
 ##    cu.redefine_nulls(out_table, keep_fields, ["NA"]* len(keep_fields))
 
@@ -96,6 +117,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # cleanup
     arcpy.Delete_management(temp_zonal_table)
     arcpy.Delete_management(temp_entire_table)
+    arcpy.Delete_management(temp_dir)
     arcpy.CheckInExtension("Spatial")
 
 def main():

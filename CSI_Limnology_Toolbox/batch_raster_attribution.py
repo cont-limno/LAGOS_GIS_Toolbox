@@ -46,7 +46,7 @@ def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
                                             gdb in search_gdbs]
                 if any(map(lambda x: arcpy.Exists(x), exists_candidates)):
                     is_previous_output = True
-##                    
+##
 ##                for candidate in previous_table_candidates:
 ##                    if arcpy.Exists(candidate):
 ##                        is_previous_output = True
@@ -153,12 +153,10 @@ THEMATIC_FLAGS = map(lambda x: x in lulc_list or x in cropland_list, ALL_RASTERS
 MGDB = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver3.gdb/US_Extents'
 ALL_EXTENTS = [os.path.join(MGDB, e) for e in ['HU12', 'HU8', 'HU4', 'EDU', 'COUNTY', 'STATE']]
 
-OUT_GDB = 'C:/GISData/Attribution_June2014.gdb'
-SEARCH_GDBS = ['C:/GISData/Attribution_April2014.gdb',
-                'C:/GISData/Attribution_May2014.gdb',
-                'C:/GISData/Attribution_May2014_MoreNADP.gdb']
+OUT_GDB = 'C:/GISData/Attribution_June9_2014.gdb'
+SEARCH_GDBS = []
 
-LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_jun5.txt'
+LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_jun9.txt'
 
 # go ahead and do it! leave this alone too if you're reusing the script
 batch_raster_attribution(ALL_RASTERS, ALL_EXTENTS, 'ZoneID', OUT_GDB,

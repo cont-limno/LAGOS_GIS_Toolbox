@@ -42,19 +42,6 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     nhd_gdb_copy  = os.path.join(out_subdir, os.path.basename(nhd_gdb))
     arcpy.Copy_management(nhd_gdb,nhd_gdb_copy)
 
-##    srName = "NHD" + sr2Process
-##    gdbName = "NHDH" + sr2Process + ".gdb"
-##    outputDir = os.path.join(finalOutPath,"NHD" + sr2Process)
-##    nhd_source = os.path.join(nhdPath, gdbName)
-##    nhd_destination = os.path.join(outputDir, gdbName)
-##
-##    if not os.path.exists(nhd_destination):
-##        shutil.copytree(nhd_source, nhd_destination)
-
-##    # set initial environments
-##    env.overwriteOutput = True
-##    arcpy.env.workspace = outputDir
-
     ####################################################################
     cu.multi_msg("2) Getting WBD Poly For Subregion and Buffering by 5000m...")
     #####################################################################
@@ -129,9 +116,10 @@ def unzip_ned(file_id, ned_dir, out_dir):
                     cu.multi_msg("ERROR: A tile for %s does not exist in the specified location" % file_id)
                     return False
 
+
 ####################################################################################################################################################
 # Mosiac NED tiles and clip to subregion.
-def mosaic(in_workspace, out_dir, is_large_data = False, projection = arcpy.SpatialReference(102039)) :
+def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialReference(102039)) :
 
     # Set up environments
     env.terrainMemoryUsage = True
@@ -158,23 +146,33 @@ def mosaic(in_workspace, out_dir, is_large_data = False, projection = arcpy.Spat
     mosaic_rasters = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(in_workspace, datatype="RasterDataset"):
         for filename in filenames:
-            name = os.path.join(dirpath, filename)
-            mosaic_rasters.append(name)
+            print(filename)
+            if filename.startswith('grd'):
+                name = os.path.join(dirpath, filename)
+                mosaic_rasters.append(name)
+
 
     cu.multi_msg("Found NED ArcGrids.")
 
     # Update environments
     env.extent = subregion_buffer
-    if not is_large_data:
+    approx_size_dir_GB = len(mosaic_rasters) * .5
+
+    if approx_size_dir_GB < .5 * int(available_ram):
         env.workspace = 'in_memory'
-        ext = ''
+        memory_msg = ("Attempting to use in_memory workspace. If you " +
+                    " experience problems during the exectuion of this tool, " +
+                    "try running it again with a lower value " +
+                    "entered for 'Available RAM'.")
+        cu.multi_msg(memory_msg)
+
     else:
         env.workspace = out_dir
-        ext = '.tif'
+    env.outputCoordinateSystem = mosaic_rasters[0]
 
     # Assign names to intermediate outputs in outfolder
-    mosaic_unproj = "mosaic_t1" + ext
-    mosaic_proj = "mosaic_t2" + ext
+    mosaic_unproj = "mosaic_t1"
+    mosaic_proj = "mosaic_t2"
 
     # Mosaic, then project
     # Cannot do this in one step using MosaicToNewRaster's projection parameter
@@ -191,6 +189,7 @@ def mosaic(in_workspace, out_dir, is_large_data = False, projection = arcpy.Spat
 
     #final mosaic environs
     env.pyramids = "PYRAMIDS -1 SKIP_FIRST" # need to check outputs efficiently
+    env.outputCoordinateSystem = projection
     cu.multi_msg("Clipping final mosaic...")
 
     out_mosaic = os.path.join(out_dir, "NED13_%s.tif" % huc4_code)
@@ -198,8 +197,10 @@ def mosaic(in_workspace, out_dir, is_large_data = False, projection = arcpy.Spat
      "0", "ClippingGeometry")
 
     # Clean up
-    cu.cleanup([mosaic_unproj, mosaic_proj])
+    for item in [mosaic_unproj, mosaic_proj]:
+        arcpy.Delete_management(item)
     cu.multi_msg("Mosaicked NED tiles and clipped to HUC4 extent.")
+
 
 # END OF DEF mosaic
 
@@ -215,34 +216,32 @@ def delete_neds(workspace):
 def main():
     nhd_gdb = arcpy.GetParameterAsText(0)          # NHD subregion file geodatabase
     ned_dir = arcpy.GetParameterAsText(1)    # Folder containing NED ArcGrids
-    ned_footprints_fc = arcpy.GetParameterAsText(3)
-    out_dir = arcpy.GetParameterAsText(5)    # Output folder
-    is_zipped = arcpy.GetParameter(6) # Whether NED tiles are zipped or not
-
+    ned_footprints_fc = arcpy.GetParameterAsText(2)
+    out_dir = arcpy.GetParameterAsText(3)    # Output folder
+    is_zipped = arcpy.GetParameter(4) # Whether NED tiles are zipped or not
     mosaic_workspace = stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped)
-    projection = arcpy.GetParameter(7)
-    is_large_data = arcpy.GetParameterAsText(8)
-    mosaic(mosaic_workspace, mosaic_workspace, is_large_data, projection)
+
+    available_ram = arcpy.GetParameterAsText(5)
+    mosaic(mosaic_workspace, mosaic_workspace, available_ram)
     delete_neds(mosaic_workspace)
-    print("Complete")
+
 
 #######################################
 #TESTING
 ########################################
 def test():
-    """Tests the tool. Call in place of main() to test."""
-    cu.multi_msg("WARNING: TESTING MODE!!! If not desired edit script to call main() instead.")
-    nhd_gdb = 'E:/RawNHD_byHUC/NHDH0109.gdb'
+    """Tests the tool. Call from another module to test."""
+    nhd_gdb = 'E:/RawNHD_byHUC/NHDH0415.gdb'
     ned_dir = 'E:/Downloaded_NED'
     ned_footprints_fc = 'C:/GISData/NED_FootPrint_Subregions.gdb/nedfootprints'
     out_dir = 'C:/GISData/Scratch'
     is_zipped = True
+    available_ram = '12'
 
     mosaic_workspace = stage_files(nhd_gdb, ned_dir, ned_footprints_fc,
                         out_dir, is_zipped)
-    mosaic(mosaic_workspace, mosaic_workspace)
+    mosaic(mosaic_workspace, mosaic_workspace, available_ram)
     delete_neds(mosaic_workspace)
-    print("TEST RUN complete.")
 
 
 if __name__ == '__main__':

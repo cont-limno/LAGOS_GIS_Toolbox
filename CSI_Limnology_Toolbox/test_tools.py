@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import wetlands_in_zones2 as tool
+import clip_to_hu8 as tool
 
 def main():
     t = time.time()

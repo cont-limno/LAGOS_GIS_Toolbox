@@ -139,13 +139,8 @@ def colorPolygons(feature_class, feature_field, out_gdb):
 ##        arcpy.SetProgressorLabel(
 ##            "Processing layer %d of %d..." % (index+1, num_classes))
         test = tuple(map(int, classes[cl]))
-        print("length of the tuple:" + str(len(test)))
         where_clause = '\"%s\" IN %s' % (oid_field, \
             test)
-        old_where_clause = '\"%s\" = %s' % (oid_field, \
-            cl_separator.join(map(str, classes[cl])))
-        cu.multi_msg("CURRENT WHERE CLAUSE:\n" + where_clause)
-        cu.multi_msg("OLD WHERE CLAUSE:\n" + old_where_clause)
         arcpy.MakeFeatureLayer_management(temp_features, temp_lyr, \
             where_clause)
 
@@ -157,7 +152,6 @@ def colorPolygons(feature_class, feature_field, out_gdb):
             str(num_classes), outLayerName))
 ##        arcpy.Select_analysis(temp_features, outLayerName, where_clause)
 
-        cu.multi_msg(arcpy.Exists(temp_lyr))
         count = arcpy.GetCount_management(temp_lyr).getOutput(0)
         cu.multi_msg("count of features: " + str(count))
         arcpy.CopyFeatures_management(temp_lyr, outLayerName)

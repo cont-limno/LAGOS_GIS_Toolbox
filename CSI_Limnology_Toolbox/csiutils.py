@@ -136,3 +136,6 @@ def resolution_comparison(feature_class, raster):
     percent_ok = 100*(1 - (small_count/float(fc_count)))
 
     return((percent_ok))
+
+def shortname(path):
+    return os.path.splitext(os.path.basename(path))[0]

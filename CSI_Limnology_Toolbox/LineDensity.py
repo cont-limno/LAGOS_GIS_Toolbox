@@ -61,8 +61,8 @@ def line_density(zones, zonefield, lines, out_table):
     exp = "!SUM_LengthM! / !ZONEAREAHA!"
     arcpy.CalculateField_management("length_in_zone", "Density_MperHA", exp, "PYTHON")
 
-    cu.one_in_one_out("length_in_zone", ['Sum_LengthM', 'Density_MperHA'], zones, zonefield, out_table)
-    cu.redefine_nulls(out_table, ['Sum_LengthM', 'Density_MperHA'], 0)
+    cu.one_in_one_out("length_in_zone", ['SUM_LengthM', 'Density_MperHA'], zones, zonefield, out_table)
+    cu.redefine_nulls(out_table, ['SUM_LengthM', 'Density_MperHA'], [0, 0])
 
 
 ##    # Join to the original table

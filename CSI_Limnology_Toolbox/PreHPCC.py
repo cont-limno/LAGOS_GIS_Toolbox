@@ -45,7 +45,7 @@ def burn(subregion_ned, nhd_gdb, burnt_out, projection = arcpy.SpatialReference(
 
 def clip(raster, nhd_gdb, projection, outfolder):
 
-    env.workspace = nhd
+    env.workspace = nhd_gdb
     env.outputCoordinateSystem = projection
     env.compression = "NONE" # only final tifs are generated
     env.pyramid = "NONE"
@@ -96,8 +96,7 @@ def main():
     subregion_ned = arcpy.GetParameterAsText(0)
     nhd_gdb = arcpy.GetParameterAsText(1)
     burnt_out = arcpy.GetParameterAsText(2)
-    projection = arcpy.GetParameter(3)
-    input_burnt = arcpy.GetParameter(4)
+    input_burnt = arcpy.GetParameter(3)
 
     arcpy.CheckOutExtension("Spatial")
 
@@ -120,9 +119,9 @@ def main():
         arcpy.CheckInExtension("Spatial")
 
 def test():
-    subregion_ned = 'C:/GISData/Scratch/NHD0109/NED13_0109.tif'
-    nhd_gdb = 'C:/GISData/Scratch/NHD0109/NHDH0109.gdb'
-    burnt_out = 'C:/GISData/Scratch/Burnt_0109.tif'
+    subregion_ned = 'C:/GISData/Scratch/NHD0411/NED13_0411.tif'
+    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHDH0411.gdb'
+    burnt_out = 'C:/GISData/Scratch/Burnt_0411.tif'
     input_burnt = ''
 
     arcpy.CheckOutExtension("Spatial")

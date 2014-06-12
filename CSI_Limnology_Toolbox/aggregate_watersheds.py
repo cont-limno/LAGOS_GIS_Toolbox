@@ -62,7 +62,7 @@ def aggregate_watersheds(nhd, watersheds, topoutfolder, filterlakes,
     fourha_lyr = os.path.join(outfolder, "fourha.lyr")
     arcpy.MakeFeatureLayer_management(fourha, fourha_lyr)
 
-    if aggregate_method = 'interlake':
+    if aggregate_method == 'interlake':
         arcpy.SelectLayerByAttribute_management(fourha_lyr, "NEW_SELECTION", '''"AreaSqKm">=0.1''')
 
         tenha = os.path.join(outfolder, "tenha.shp")
@@ -81,7 +81,7 @@ def aggregate_watersheds(nhd, watersheds, topoutfolder, filterlakes,
     fourhajunction = os.path.join(outfolder, "fourhajunction.shp")
     arcpy.CopyFeatures_management(junction_lyr, fourhajunction)
 
-    if aggregate_method = 'interlake':
+    if aggregate_method == 'interlake':
         arcpy.SelectLayerByLocation_management(junction_lyr, "INTERSECT", tenha, '', "NEW_SELECTION")
 
         tenhajunction = os.path.join(outfolder, "tenhajunction.shp")
@@ -116,7 +116,7 @@ def aggregate_watersheds(nhd, watersheds, topoutfolder, filterlakes,
     if not os.path.exists(agg_ws):
         os.mkdir(agg_ws)
 
-    if aggregate_method = 'interlake':
+    if aggregate_method == 'interlake':
         tenhajunction_lyr = os.path.join(outfolder, "tenhajunction.lyr")
         arcpy.MakeFeatureLayer_management(tenhajunction, tenhajunction_lyr)
 
@@ -140,7 +140,7 @@ def aggregate_watersheds(nhd, watersheds, topoutfolder, filterlakes,
         ownshed = os.path.join(lakes, "ownshed" + name)
         arcpy.CopyFeatures_management(watersheds_lyr, ownshed)
 
-if aggregate_method = 'interlake':
+        if aggregate_method == 'interlake':
             # Select 10 hectare lake junctions that don't intersect the target lake.
             arcpy.SelectLayerByLocation_management(tenhajunction_lyr, "INTERSECT", fc, '', "NEW_SELECTION")
             arcpy.SelectLayerByLocation_management(tenhajunction_lyr, "INTERSECT", fc, '', "SWITCH_SELECTION")
@@ -153,9 +153,9 @@ if aggregate_method = 'interlake':
 
         try:
             # Trace the network upstream from the junctions from above, stopping at ten hectare junctions.
-            if aggregate_method = 'interlake':
+            if aggregate_method == 'interlake':
                 arcpy.TraceGeometricNetwork_management(network, os.path.join(lakes, "im" + name + "tracelyr"), lakejunction, "TRACE_UPSTREAM", tenhajunction_lyr)
-            elif aggregate_method = 'cumulative':
+            elif aggregate_method == 'cumulative':
                 arcpy.TraceGeometricNetwork_management(network, os.path.join(lakes, "im" + name + "tracelyr"), lakejunction, "TRACE_UPSTREAM")
             trace = os.path.join(lakes, "im" + name + "tracelyr", "NHDFlowline")
 
@@ -173,7 +173,7 @@ if aggregate_method = 'interlake':
             # Select watersheds that intersect the trace
             arcpy.SelectLayerByLocation_management(watersheds_lyr, "INTERSECT", tracesel, '', "NEW_SELECTION")
 
-            if aggregate_method = 'interlake':
+            if aggregate_method == 'interlake':
                 # Remove watersheds that contain a 10 hectare lake's center from previous selection
                 arcpy.SelectLayerByLocation_management(watersheds_lyr, "INTERSECT", tenhacenter, '', "REMOVE_FROM_SELECTION")
 

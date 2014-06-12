@@ -30,24 +30,22 @@ env.snapRaster = snap
 env.extent = snap
 env.cellSize = 10
 env.pyramid = "NONE"
-env.overwriteOutput = "TRUE"
 env.outputCoordinateSystem = albers
 
 
 # Make a layer from NHDWaterbody feature class and select out lakes smaller than a hectare. Project to EPSG 102039.
+fcodes = (39000, 39004, 39009, 39010, 39011, 39012,
+ 43600, 43613, 43615, 43617, 43618, 43619, 43621)
 whereClause = '''
-"(AreaSqKm" >=0.04 AND "FCode" IN \
-(39000, 39004, 39009, 39010, 39011, 39012,\
- 43600, 43613, 43615, 43617, 43618, 43619, 43621)\
- ) OR ("AreaSqKm" >= 0.1 AND "FCode" = 43601)
-'''
+"(AreaSqKm" >=0.04 AND "FCode" IN %s\
+ OR ("AreaSqKm" >= 0.1 AND "FCode" = 43601)''' % (fcodes,)
 waterbody_albers = os.path.join(scratch, "Waterbody_Albers.shp")
 arcpy.MakeFeatureLayer_management("NHDWaterbody","Waterbody", whereClause, scratch, "")
 arcpy.CopyFeatures_management("Waterbody", waterbody_albers)
 
 # Make a shapefile from NHDFlowline and project to EPSG 102039
 arcpy.FeatureClassToShapefile_conversion("NHDFlowline", scratch)
-flowline_albers = os.path.join(scratch, "Flowline.shp")
+flowline_albers = os.path.join(scratch, "NHDFlowline.shp")
 
 # Add CSI field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
 arcpy.AddField_management(flowline_albers, "CSI", "TEXT")

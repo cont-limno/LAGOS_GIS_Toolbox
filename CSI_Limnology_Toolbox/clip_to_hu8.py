@@ -9,7 +9,6 @@ def clip_to_hu8(raster, nhd_gdb, out_dir,
     env.workspace = nhd_gdb
     env.outputCoordinateSystem = projection
     env.compression = "NONE" # only final tifs are generated
-    env.pyramid = "NONE"
 
     # HUC8 polygons each saved as separate fc inheriting albers from environ
     huc8_fc = "WBD_HU8"

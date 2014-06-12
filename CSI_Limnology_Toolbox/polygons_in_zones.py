@@ -49,9 +49,9 @@ def main():
     zone_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)
     polygons_of_interest = arcpy.GetParameterAsText(2)
-    interest_selection_expr = arcpy.GetParameterAsText(3) # default should be set to """"ATTRIBUTE" LIKE 'P%'AND "WETLAND_TY" <> 'Freshwater_Pond'"""
+    interest_selection_expr = arcpy.GetParameterAsText(3)
     output_table = arcpy.GetParameterAsText(4)
-    polygons_in_zones(zone_fc, zone_field, polygons_of_interest, interest_selection_expr, output_table)
+    polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
 
 def test():
     zone_fc = 'C:/GISData/Scratch/Scratch.gdb/HU12_test'
@@ -59,7 +59,7 @@ def test():
     polygons_of_interest = 'C:/GISData/Scratch/Scratch.gdb/wetlands_test'
     interest_selection_expr = ''
     output_table = 'C:/GISData/Scratch/Scratch.gdb/polyzone_test'
-    polygons_in_zones(zone_fc, zone_field, polygons_of_interest, interest_selection_expr, output_table)
+    polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
 
 if __name__ == '__main__':
     main()

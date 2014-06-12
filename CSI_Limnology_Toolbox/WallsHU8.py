@@ -60,6 +60,7 @@ def main():
     arcpy.CheckOutExtension("Spatial")
     wall(nhd, infolder, outfolder, mosaic, height)
     arcpy.CheckInExtension("Spatial")
+    arcpy.ResetEnvironments()
 
 def test():
     nhd = 'C:/GISData/Scratch_njs/NHD0109/NHDH0109.gdb'

@@ -48,6 +48,7 @@ def main():
     nhd_gdb = arcpy.GetParameterAsText(1)
     burnt_out = arcpy.GetParameterAsText(2)
     burn_streams(subregion_ned, nhd_gdb, burnt_out)
+    arcpy.ResetEnvironments()
 
 def test():
     subregion_ned = 'C:/GISData/Scratch/NHD0411/NED13_0411.tif'

@@ -242,6 +242,7 @@ def test():
                         out_dir, is_zipped)
     mosaic(mosaic_workspace, mosaic_workspace, available_ram)
     delete_neds(mosaic_workspace)
+    arcpy.ResetEnvironments()
 
 
 if __name__ == '__main__':

@@ -1,5 +1,7 @@
 import os
+import sys
 
+script, raster_dir, qsub_path, tool, walltime, taudem_dir = sys.argv
 def create_squb(raster_dir, qsub_path, tool = ('pitremove', 'd8flowdir'), walltime = '0:30:00', taudem_dir = ''):
     tif_list = []
     for root, dirs, files in os.walk(raster_dir):

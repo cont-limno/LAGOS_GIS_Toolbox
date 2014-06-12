@@ -63,7 +63,12 @@ def clip_to_hu8(raster, nhd_gdb, out_dir,
 
 
 def main():
-    pass
+    burnt_ned = arcpy.GetParameterAsText(0)
+    nhd_gdb = arcpy.GetParameterAsText(1)
+    out_dir = arcpy.GetParameterAsText(2)
+    clip_to_hu8(burnt_ned, nhd_gdb, out_dir)
+    arcpy.ResetEnvironments()
+
 
 def test():
     burnt_ned = 'C:/GISData/Scratch/Burnt_0411.tif'

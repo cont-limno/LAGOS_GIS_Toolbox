@@ -37,8 +37,8 @@ def main():
     non_overlapping_zones_list = arcpy.GetParameterAsText(0).split(';') # list
     zone_field = arcpy.GetParameterAsText(1)
     in_value_raster = arcpy.GetParameterAsText(2)
-    out_table = arcpy.GetParameterAsText(3)
-    is_thematic = arcpy.GetParameter(4) #boolean
+    out_table = arcpy.GetParameterAsText(4)
+    is_thematic = arcpy.GetParameter(3) #boolean
 
     stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic)
 

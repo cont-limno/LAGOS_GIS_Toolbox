@@ -11,7 +11,7 @@ def refine_zonal_output(t, is_thematic):
     drop_fields = ['COUNT', 'AREA', 'RANGE', 'SUM', 'ZONE_CODE']
     if is_thematic:
         fields = arcpy.ListFields(t, "VALUE*")
-        for f in fields:
+        for f  in fields:
             # convert area to hectares in a new field
             ha_field = f.name.replace("VALUE", "Ha")
             arcpy.AddField_management(t, ha_field, f.type)
@@ -124,8 +124,8 @@ def main():
     zone_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)
     in_value_raster = arcpy.GetParameterAsText(2)
-    out_table = arcpy.GetParameterAsText(3)
-    is_thematic = arcpy.GetParameter(4) #boolean
+    out_table = arcpy.GetParameterAsText(4)
+    is_thematic = arcpy.GetParameter(3) #boolean
     stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
 
 

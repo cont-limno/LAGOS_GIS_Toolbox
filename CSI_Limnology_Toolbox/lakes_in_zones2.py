@@ -92,8 +92,9 @@ def main():
     zones_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)
     lakes_fc = arcpy.GetParameterAsText(2)
-    output_table = arcpy.GetParameterAsText(3)
-    area_ha_field = arcpy.GetParameterAsText(4)
+    area_ha_field = arcpy.GetParameterAsText(3)
+    output_table = arcpy.GetParameterAsText(4)
+
     lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field)
 
 def test():

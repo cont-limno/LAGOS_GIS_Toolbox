@@ -5,6 +5,7 @@ import arcpy
 import csiutils as cu
 
 def cumulative_watersheds(nhd, watersheds, topoutfolder, filterlakes):
+
     # Naming Convention
     subregion_number = os.path.basename(nhd)
     subregion = subregion_number[4:8]
@@ -26,17 +27,15 @@ def cumulative_watersheds(nhd, watersheds, topoutfolder, filterlakes):
     # Make shapefiles for one hectare and ten hectare lakes that intersect flowlines.
     arcpy.FeatureClassToShapefile_conversion(waterbody, outfolder)
     waterbodyshp = os.path.join(outfolder, "NHDWaterbody.shp")
-
     waterbody_lyr = os.path.join(outfolder, "waterbody.lyr")
     arcpy.MakeFeatureLayer_management(waterbodyshp, waterbody_lyr)
-
     arcpy.SelectLayerByAttribute_management(waterbody_lyr, "NEW_SELECTION", '''"AreaSqKm">=0.04''')
 
     fcodes = (39000, 39004, 39009, 39010, 39011, 39012, 43600, 43613, 43615, 43617, 43618, 43619, 43621)
     whereClause = '''("AreaSqKm" >=0.04 AND "FCode" IN %s) OR ("FCode" = 43601 AND "AreqSqKm" >= 0.1)''' % (fcodes,)
-    whereClause = '''"AreaSqKm" >=0.04 AND ("FCode" = 39000 OR "FCode" = 39004 OR\
-    "FCode" = 39009 OR "FCode" = 39010 OR "FCode" = 39011 OR "FCode" = 39012 OR "FCode" = 43600 OR "FCode" = 43613 OR\
-    "FCode" = 43615 OR "FCode" = 43617 OR "FCode" = 43618 OR "FCode" = 43619 OR "FCode" = 43621 OR ("FCode" = 43601 AND "AreaSqKm" >=0.1 ))'''
+##    whereClause = '''"AreaSqKm" >=0.04 AND ("FCode" = 39000 OR "FCode" = 39004 OR\
+##    "FCode" = 39009 OR "FCode" = 39010 OR "FCode" = 39011 OR "FCode" = 39012 OR "FCode" = 43600 OR "FCode" = 43613 OR\
+##    "FCode" = 43615 OR "FCode" = 43617 OR "FCode" = 43618 OR "FCode" = 43619 OR "FCode" = 43621 OR ("FCode" = 43601 AND "AreaSqKm" >=0.1 ))'''
     arcpy.SelectLayerByAttribute_management(waterbody_lyr, "SUBSET_SELECTION", whereClause)
 
     all4ha = os.path.join(outfolder, "all4ha.shp")
@@ -127,6 +126,7 @@ def cumulative_watersheds(nhd, watersheds, topoutfolder, filterlakes):
             # Trace the network upstream from the junctions from above.
             arcpy.TraceGeometricNetwork_management(network, os.path.join(lakes, "im" + name + "tracelyr"), lakejunction, "TRACE_UPSTREAM")
             trace = os.path.join(lakes, "im" + name + "tracelyr", "NHDFlowline")
+
             # Write the trace
             traceshp = os.path.join(lakes, "im" + name + "trace")
             arcpy.CopyFeatures_management(trace, traceshp)

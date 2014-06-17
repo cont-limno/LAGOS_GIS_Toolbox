@@ -105,59 +105,59 @@ prism_dirs = [os.path.join('E:/Attribution_Rasters_2013/prism', d) for d in
                 ['ppt', 'tmean', 'tmin', 'tmax']]
 for pdir in prism_dirs:
     env.workspace = pdir
-    prism_list.extend([os.path.join(pdir, r) for r in arcpy.ListRasters('us*14.tif')]) # annuals only
+    prism_list.extend([os.path.join(pdir, r) for r in arcpy.ListRasters('us*.tif')]) # annuals only
 
-#GROUNDWATER
-gw_dir = 'E:/Attribution_Rasters_2013/Groundwater'
-env.workspace = gw_dir
-groundwater_list = [os.path.join(gw_dir, r) for r in arcpy.ListRasters('*')]
-
-#LULC
-lulc_list = ['E:/Attribution_Rasters_2013/MRLC/nlcd1992.tif',
-            'E:/Attribution_Rasters_2013/MRLC/nlcd2001.tif',
-            'E:/Attribution_Rasters_2013/MRLC/nlcd2006.tif',
-            'E:/Attribution_Rasters_2013/MRLC/nlcd2011.tif']
-
-#canopy and impervious
-other_mrlc_list = ['E:/Attribution_Rasters_2013/MRLC/impervious2001.tif',
-                    'E:/Attribution_Rasters_2013/MRLC/impervious2006.tif',
-                    'E:/Attribution_Rasters_2013/MRLC/impervious2011.tif',
-                    'E:/Attribution_Rasters_2013/MRLC/canopy2001.tif']
-
-# cropland
-crop_dir = r'E:\Attribution_Rasters_2013\Cropland'
-env.workspace = crop_dir
-cropland_list = [os.path.join(crop_dir, r) for r in  arcpy.ListRasters('crops*tif')]
-
-# nadp
-nadp_dirs = [ r'E:\Attribution_Rasters_2013\NewNADP\NO3',
-            r'E:\Attribution_Rasters_2013\NewNADP\SO4',
-            r'E:\Attribution_Rasters_2013\NewNADP\TotalN']
-nadp_list = []
-for ndir in nadp_dirs:
-    env.workspace = ndir
-    nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*0.tif')]) # 90, 2000, 2010
-    nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*5.tif')]) # 85, 95, 2005
-
-others = []
-
-# make however you want, ideally order from coarse to fine resolution
-ALL_RASTERS = (nadp_list + groundwater_list + prism_list + cropland_list +
-                lulc_list + other_mrlc_list + others)
+###GROUNDWATER
+##gw_dir = 'E:/Attribution_Rasters_2013/Groundwater'
+##env.workspace = gw_dir
+##groundwater_list = [os.path.join(gw_dir, r) for r in arcpy.ListRasters('*')]
+##
+###LULC
+##lulc_list = ['E:/Attribution_Rasters_2013/MRLC/nlcd1992.tif',
+##            'E:/Attribution_Rasters_2013/MRLC/nlcd2001.tif',
+##            'E:/Attribution_Rasters_2013/MRLC/nlcd2006.tif',
+##            'E:/Attribution_Rasters_2013/MRLC/nlcd2011.tif']
+##
+###canopy and impervious
+##other_mrlc_list = ['E:/Attribution_Rasters_2013/MRLC/impervious2001.tif',
+##                    'E:/Attribution_Rasters_2013/MRLC/impervious2006.tif',
+##                    'E:/Attribution_Rasters_2013/MRLC/impervious2011.tif',
+##                    'E:/Attribution_Rasters_2013/MRLC/canopy2001.tif']
+##
+### cropland
+##crop_dir = r'E:\Attribution_Rasters_2013\Cropland'
+##env.workspace = crop_dir
+##cropland_list = [os.path.join(crop_dir, r) for r in  arcpy.ListRasters('crops*tif')]
+##
+### nadp
+##nadp_dirs = [ r'E:\Attribution_Rasters_2013\NewNADP\NO3',
+##            r'E:\Attribution_Rasters_2013\NewNADP\SO4',
+##            r'E:\Attribution_Rasters_2013\NewNADP\TotalN']
+##nadp_list = []
+##for ndir in nadp_dirs:
+##    env.workspace = ndir
+##    nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*0.tif')]) # 90, 2000, 2010
+##    nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*5.tif')]) # 85, 95, 2005
+##
+##others = []
+##
+### make however you want, ideally order from coarse to fine resolution
+##ALL_RASTERS = (nadp_list + groundwater_list + prism_list + cropland_list +
+##                lulc_list + other_mrlc_list + others)
 
 # make list of is_thematic True/False values however you want,
 # I know my only thematic rasters are LULC or cropland rasters so using a test
-THEMATIC_FLAGS = map(lambda x: x in lulc_list or x in cropland_list, ALL_RASTERS)
+##THEMATIC_FLAGS = map(lambda x: x in lulc_list or x in cropland_list, ALL_RASTERS)
 
 
 MGDB = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver3.gdb/US_Extents'
 ALL_EXTENTS = [os.path.join(MGDB, e) for e in ['HU12', 'HU8', 'HU4', 'EDU', 'COUNTY', 'STATE']]
 
-OUT_GDB = 'C:/GISData/Attribution_June9_2014.gdb'
+OUT_GDB = 'C:/GISData/Attribution_June17_2014.gdb'
 SEARCH_GDBS = []
 
-LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_jun9.txt'
+LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_jun17.txt'
 
 # go ahead and do it! leave this alone too if you're reusing the script
-batch_raster_attribution(ALL_RASTERS, ALL_EXTENTS, 'ZoneID', OUT_GDB,
-                            THEMATIC_FLAGS, SEARCH_GDBS, LOG_FILE)
+batch_raster_attribution(prism_list, ALL_EXTENTS, 'ZoneID', OUT_GDB,
+                            [False] * len(prism_list), [], LOG_FILE)

@@ -99,7 +99,10 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
     #final table gets a record even for no-data zones
     keep_fields = [f.name for f in arcpy.ListFields(temp_entire_table)]
-    keep_fields.remove(zone_field.upper())
+    if zone_field.upper() in keep_fields:
+        keep_fields.remove(zone_field.upper())
+    if zone_field in keep_fields:
+        keep_fields.remove(zone_field)
     cu.one_in_one_out(temp_entire_table, keep_fields, zone_fc, zone_field, out_table)
 ##    cu.redefine_nulls(out_table, keep_fields, ["NA"]* len(keep_fields))
 

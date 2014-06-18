@@ -1,4 +1,4 @@
-import os, tempfile
+import os
 import arcpy
 from arcpy import env
 import csiutils as cu
@@ -50,15 +50,9 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # this has to be on disk for some reason to avoid background processing
     # errors thrown up at random
     # hence we get the following awkward horribleness
-    temp_dir = os.path.join(tempfile.gettempdir(), 'zonal')
-    index = 0
-    while os.path.exists(temp_dir):
-        temp_dir = os.path.join(tempfile.gettempdir(), 'zonal%d' % index)
-        index += 1
-    os.mkdir(temp_dir)
-    arcpy.CreateFileGDB_management(temp_dir, 'temp_zonal.gdb')
+    temp_workspace = cu.create_temp_gdb('temp_zonal')
 
-    convert_raster = os.path.join(temp_dir, 'temp_zonal.gdb',
+    convert_raster = os.path.join(temp_workspace,
                         cu.shortname(zone_fc) + '_converted')
 ##    convert_raster = 'in_memory/converted'
     cu.multi_msg('Creating raster {0}'.format(convert_raster))
@@ -120,7 +114,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # cleanup
     arcpy.Delete_management(temp_zonal_table)
     arcpy.Delete_management(temp_entire_table)
-    arcpy.Delete_management(temp_dir)
+    arcpy.Delete_management(os.path.dirname(temp_workspace))
     arcpy.CheckInExtension("Spatial")
 
 def main():

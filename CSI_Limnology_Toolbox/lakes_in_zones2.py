@@ -5,39 +5,50 @@ import arcpy
 import polygons_in_zones
 import csiutils as cu
 
-def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field):
+def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
 
     # make sure we're only using the right types of lakes, our feature
     # class excludes everything else but this is a guarantee this will
     # get checked at some point
     arcpy.env.workspace = 'in_memory'
-    need_selection = False
-    with arcpy.da.SearchCursor(lakes_fc, ["SHAPE@AREA"]) as cursor:
-            for row in cursor:
-                if row[0] < 40000:
-                    need_selection = True
 
-    if need_selection:
-        main_expr = """"{0}" >= 4""".format(area_ha_field)
-        arcpy.Select_analysis(lakes_fc, "lakes_4ha", main_expr)
-        lakes_fc = os.path.join(arcpy.env.workspace, "lakes_4ha")
+    # using in_memory workspace means no SHAPE@AREA attribute later so I
+    # need to calculate another field with the area using temp on disk
+    # then go ahead and copy to memory, delete temp
+    temp_workspace = cu.create_temp_GDB('lakezone')
+    temp_lakes = os.path.join(temp_workspace, 'temp_lakes')
+    arcpy.CopyFeatures_management(lakes_fc, temp_lakes)
+    arcpy.AddField_management(temp_lakes, 'Area_ha', 'DOUBLE')
+    arcpy.CalculateField_management(temp_lakes, 'Area_ha', '!shape.area@hectares!', 'PYTHON')
 
+##    need_selection = False
+##    with arcpy.da.SearchCursor(temp_lakes, ["Area_ha"]) as cursor:
+##            for row in cursor:
+##                if row[0] < 4:
+##                    need_selection = True
+##
+##    if need_selection:
+##        main_expr = """"{0}" >= 4""".format("Area_ha")
+##        arcpy.Select_analysis(temp_lakes, "lakes_4ha", main_expr)
+####        lakes_fc = os.path.join(arcpy.env.workspace, "lakes_4ha")
+##    else:
+##        arcpy.CopyFeatures_management(temp_lakes, "lakes_4ha")
 
-    selections = ['',
-                """"Connection" = 'Isolated'""",
-                """"Connection" = 'Headwater'""",
-                """"Connection" = 'DR_Stream'""",
-                """"Connection" = 'DR_LakeStream'""",
-                """"{0}" < 10""".format(area_ha_field),
-                """"{0}" < 10 AND "Connection" = 'Isolated'""".format(area_ha_field),
-                """"{0}" < 10 AND "Connection" = 'Headwater'""".format(area_ha_field),
-                """"{0}" < 10 AND "Connection" = 'DR_Stream'""".format(area_ha_field),
-                """"{0}" < 10 AND "Connection" = 'DR_LakeStream'""".format(area_ha_field),
-                """"{0}" >= 10""".format(area_ha_field),
-                """"{0}" >= 10 AND "Connection" = 'Isolated'""".format(area_ha_field),
-                """"{0}" >= 10 AND "Connection" = 'Headwater'""".format(area_ha_field),
-                """"{0}" >= 10 AND "Connection" = 'DR_Stream'""".format(area_ha_field),
-                """"{0}" >= 10 AND "Connection" = 'DR_LakeStream'""".format(area_ha_field)
+    selections = [""""Area_ha" >= 4""",
+                """"Area_ha" >= 4 AND "Connection" = 'Isolated'""",
+                """"Area_ha" >= 4 AND "Connection" = 'Headwater'""",
+                """"Area_ha" >= 4 AND "Connection" = 'DR_Stream'""",
+                """"Area_ha" >= 4 AND "Connection" = 'DR_LakeStream'""",
+                """"Area_ha" >= 4 AND "Area_ha" < 10""",
+                """"Area_ha" >= 4 AND "Area_ha" < 10 AND "Connection" = 'Isolated'""",
+                """"Area_ha" >= 4 AND "Area_ha" < 10 AND "Connection" = 'Headwater'""",
+                """"Area_ha" >= 4 AND "Area_ha" < 10 AND "Connection" = 'DR_Stream'""",
+                """"Area_ha" >= 4 AND "Area_ha" < 10 AND "Connection" = 'DR_LakeStream'""",
+                """"Area_ha" >= 10""",
+                """"Area_ha" >= 10 AND "Connection" = 'Isolated'""",
+                """"Area_ha" >= 10 AND "Connection" = 'Headwater'""",
+                """"Area_ha" >= 10 AND "Connection" = 'DR_Stream'""",
+                """"Area_ha" >= 10 AND "Connection" = 'DR_LakeStream'"""
                 ]
     temp_tables = ['Lakes4ha',
                 'Lakes4ha_Isolated',
@@ -58,7 +69,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field):
 
     for sel, temp_table in zip(selections, temp_tables):
         cu.multi_msg("Creating temporary table called {0} for lakes where {1}".format(temp_table, sel))
-        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, lakes_fc, temp_table, sel)
+        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
         new_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']
         for f in new_fields:
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
@@ -83,19 +94,16 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field):
     arcpy.CopyRows_management('Lakes4ha', output_table)
 
     # clean up
-    for item in ['Lakes4ha'] + temp_tables:
+    for item in ['Lakes4ha', temp_lakes, os.path.dirname(temp_workspace)] + temp_tables:
         arcpy.Delete_management(item)
-    if need_selection:
-        arcpy.Delete_management('lakes_4ha')
+
 
 def main():
     zones_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)
     lakes_fc = arcpy.GetParameterAsText(2)
-    area_ha_field = arcpy.GetParameterAsText(3)
-    output_table = arcpy.GetParameterAsText(4)
-
-    lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field)
+    output_table = arcpy.GetParameterAsText(3)
+    lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table)
 
 def test():
     ws = 'C:/Users/smithn78/CSI_Processing/CSI/TestData_0411.gdb'
@@ -103,8 +111,7 @@ def test():
     zone_field = 'ZoneID'
     lakes_fc =  os.path.join(ws, 'Lakes_1ha')
     output_table = 'C:/GISData/Scratch/Scratch.gdb/test_lakes_in_zones'
-    area_ha_field = 'Hectares'
-    lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table, area_ha_field)
+    lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table)
 
 if __name__ == '__main__':
     main()

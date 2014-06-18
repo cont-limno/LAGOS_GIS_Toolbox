@@ -7,7 +7,8 @@
 # Created:     19/12/2013
 
 #-------------------------------------------------------------------------------
-import arcpy, os
+import os, tempfile
+import arcpy
 
 def main():
     pass
@@ -139,3 +140,13 @@ def resolution_comparison(feature_class, raster):
 
 def shortname(path):
     return os.path.splitext(os.path.basename(path))[0]
+
+def create_temp_GDB(name):
+    temp_dir = os.path.join(tempfile.gettempdir(), name)
+    index = 0
+    while os.path.exists(temp_dir):
+        temp_dir = os.path.join(tempfile.gettempdir(), '{0}{1}'.format(name, index))
+        index += 1
+    os.mkdir(temp_dir)
+    arcpy.CreateFileGDB_management(temp_dir, '{0}.gdb'.format(name))
+    return(os.path.join(temp_dir,'{0}.gdb'.format(name)))

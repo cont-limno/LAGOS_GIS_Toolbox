@@ -31,8 +31,22 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
     arcpy.SpatialJoin_analysis(zone_fc, "selected_polys", spjoin_fc,
                                  "JOIN_ONE_TO_ONE", "KEEP_ALL",
                                   match_option =  "INTERSECT")
+
+    # get the newest join_count field
+    join_count_fields = [f.name for f in arcpy.ListFields(spjoin_fc, 'Join_Count*')]
+    end_integers = []
+    for f in join_count_fields:
+        if f[-1].isdigit():
+            end_integers.append(int(f[-1]))
+    if end_integers:
+        highest_join_count_field = 'Join_Count_{0}'.format(max(end_integers))
+    else:
+        highest_join_count_field = 'Join_Count'
+
+    # and rename it to Poly_Count
     arcpy.AddField_management(spjoin_fc, "Poly_Count", 'Short')
-    arcpy.CalculateField_management(spjoin_fc, "Poly_Count", '!Join_Count!', "PYTHON")
+    arcpy.CalculateField_management(spjoin_fc, "Poly_Count",
+                                '!{0}!'.format(highest_join_count_field), "PYTHON")
 
     arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, "Poly_Count")
     final_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']

@@ -50,7 +50,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # this has to be on disk for some reason to avoid background processing
     # errors thrown up at random
     # hence we get the following awkward horribleness
-    temp_workspace = cu.create_temp_gdb('temp_zonal')
+    temp_workspace = cu.create_temp_GDB('temp_zonal')
 
     convert_raster = os.path.join(temp_workspace,
                         cu.shortname(zone_fc) + '_converted')

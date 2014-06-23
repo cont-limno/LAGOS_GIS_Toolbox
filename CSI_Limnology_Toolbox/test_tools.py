@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import clip_to_hu8 as tool
+import aggregate_watersheds as tool
 
 def main():
     t = time.time()

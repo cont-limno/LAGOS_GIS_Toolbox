@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import aggregate_watersheds as tool
+import lakes_in_zones2 as tool
 
 def main():
     t = time.time()

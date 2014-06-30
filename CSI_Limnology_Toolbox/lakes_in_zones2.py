@@ -21,18 +21,23 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
     arcpy.AddField_management(temp_lakes, 'Area_ha', 'DOUBLE')
     arcpy.CalculateField_management(temp_lakes, 'Area_ha', '!shape.area@hectares!', 'PYTHON')
 
-##    need_selection = False
-##    with arcpy.da.SearchCursor(temp_lakes, ["Area_ha"]) as cursor:
-##            for row in cursor:
-##                if row[0] < 4:
-##                    need_selection = True
-##
-##    if need_selection:
-##        main_expr = """"{0}" >= 4""".format("Area_ha")
-##        arcpy.Select_analysis(temp_lakes, "lakes_4ha", main_expr)
-####        lakes_fc = os.path.join(arcpy.env.workspace, "lakes_4ha")
-##    else:
-##        arcpy.CopyFeatures_management(temp_lakes, "lakes_4ha")
+    # this bit enforces the correct lake type/size restriction just in case
+    # geodata doesn't have this filtered already
+    need_selection = False
+    fcodes = (39000, 39004, 39009, 39010, 39011, 39012,
+                43600, 43613, 43615, 43617, 43618, 43619, 43621)
+    with arcpy.da.SearchCursor(temp_lakes, ["FCode"]) as cursor:
+            for row in cursor:
+                if row[0] not in fcodes + (43061,):
+                    need_selection = True
+
+    if need_selection:
+        whereClause = '''
+                    "(AreaSqKm" >=0.04 AND "FCode" IN %s\
+                    OR ("AreaSqKm" >= 0.1 AND "FCode" = 43601)''' % (fcodes,)
+        arcpy.Select_analysis(temp_lakes, "lakes_4ha", main_expr)
+        temp_lakes = os.path.join(arcpy.env.workspace, "lakes_4ha")
+
 
     selections = [""""Area_ha" >= 4""",
                 """"Area_ha" >= 4 AND "Connection" = 'Isolated'""",
@@ -110,7 +115,7 @@ def test():
     zones_fc = os.path.join(ws, 'HU12')
     zone_field = 'ZoneID'
     lakes_fc =  os.path.join(ws, 'Lakes_1ha')
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/test_lakes_in_zones'
+    output_table = 'C:/GISData/Scratch/Scratch.gdb/test_lakes_in_zones_updates'
     lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table)
 
 if __name__ == '__main__':

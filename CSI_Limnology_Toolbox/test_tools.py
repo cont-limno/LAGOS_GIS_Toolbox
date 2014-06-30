@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import lakes_in_zones2 as tool
+import LineDensity as tool
 
 def main():
     t = time.time()

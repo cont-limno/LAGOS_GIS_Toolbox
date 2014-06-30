@@ -9,16 +9,21 @@ import arcpy
 import csiutils as cu
 
 
-def line_density(zones, zonefield, lines, out_table):
+def line_density(zones, zonefield, lines, out_table, interest_selection_expr):
     # Make output folder
 ##    name = "LineDensity_" + os.path.splitext(os.path.basename(zones))[0]
 ##    outfolder = os.path.join(topoutfolder, name)
 ##    if not os.path.exists(outfolder):
 ##        os.mkdir(outfolder)
 
-
     # Environmental Settings
     ws = "in_memory"
+
+    if interest_selection_expr:
+        arcpy.MakeFeatureLayer_management(lines, "selected_lines", interest_selection_expr)
+    else:
+        arcpy.MakeFeatureLayer_management(lines, "selected_lines")
+
     arcpy.env.workspace = ws
     albers = arcpy.SpatialReference(102039)
     arcpy.env.outputCoordinateSystem = albers
@@ -36,7 +41,7 @@ def line_density(zones, zonefield, lines, out_table):
 
     # Perform identity analysis to join fields and crack lines at polygon boundaries
     cu.multi_msg("Cracking lines at polygon boundaries...")
-    arcpy.Identity_analysis(lines, "zones_temp", "lines_identity")
+    arcpy.Identity_analysis("selected_lines", "zones_temp", "lines_identity")
     cu.multi_msg("Cracking lines complete.")
 
     # Recalculate lengths
@@ -99,16 +104,18 @@ def main():
     zones = arcpy.GetParameterAsText(0)
     zonefield = arcpy.GetParameterAsText(1)
     lines = arcpy.GetParameterAsText(2)
-    out_table =  arcpy.GetParameterAsText(3)
-    line_density(zones, zonefield, lines, out_table)
+    out_table =  arcpy.GetParameterAsText(4)
+    interest_selection_expr = arcpy.GetParameterAsText(3)
+    line_density(zones, zonefield, lines, out_table, interest_selection_expr)
 
 def test():
     # Parameters
-    zones = 'C:/GISData/Master_Geodata/MasterGeodatabase2014.gdb/EDU'
+    test_gdb = '../TestData_0411.gdb'
+    zones = os.path.join(test_gdb, 'HU12')
     zonefield = 'ZoneID'
-    lines = 'C:/GISData/Master_Geodata/MasterGeodatabase2014.gdb/Streams'
-    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_linedensity_FULL'
-    line_density(zones, zonefield, lines, out_table)
+    lines = os.path.join(test_gdb, 'Streams')
+    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_line_density'
+    line_density(zones, zonefield, lines, out_table, '')
 
 if __name__ == '__main__':
     main()

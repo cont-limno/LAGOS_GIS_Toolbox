@@ -35,7 +35,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
         whereClause = '''
                     "(AreaSqKm" >=0.04 AND "FCode" IN %s\
                     OR ("AreaSqKm" >= 0.1 AND "FCode" = 43601)''' % (fcodes,)
-        arcpy.Select_analysis(temp_lakes, "lakes_4ha", main_expr)
+        arcpy.Select_analysis(temp_lakes, "lakes_4ha", whereClause)
         temp_lakes = os.path.join(arcpy.env.workspace, "lakes_4ha")
 
 

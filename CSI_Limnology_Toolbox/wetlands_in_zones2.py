@@ -66,7 +66,10 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table):
     arcpy.CopyRows_management('WL', output_table)
 
     for item in ['WL', 'wetlands_fc_checked'] + temp_tables:
-        arcpy.Delete_management(item)
+        try:
+            arcpy.Delete_management(item)
+        except:
+            continue
 
 def main():
     zones_fc = arcpy.GetParameterAsText(0)

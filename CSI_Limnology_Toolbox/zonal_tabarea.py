@@ -50,16 +50,21 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # this has to be on disk for some reason to avoid background processing
     # errors thrown up at random
     # hence we get the following awkward horribleness
-    temp_workspace = cu.create_temp_GDB('temp_zonal')
-
-    convert_raster = os.path.join(temp_workspace,
+    try:
+        arcpy.sa.ZonalStatisticsAsTable(zone_fc, zone_field, in_value_raster,
+                                temp_zonal_table, 'DATA', 'ALL')
+    # with Permanent_Identifier as the zone_field, background processing errors
+    # and another error get thrown up at random
+    # it's faster to do zonal stats as above but if it fails (which it does
+    # pretty quickly, usually), do this way which always works but takes
+    # twice as long on large rasters
+    except:
+        temp_workspace = cu.create_temp_GDB('temp_zonal')
+        convert_raster = os.path.join(temp_workspace,
                         cu.shortname(zone_fc) + '_converted')
-##    convert_raster = 'in_memory/converted'
-    cu.multi_msg('Creating raster {0}'.format(convert_raster))
-    arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
-
-    # do it
-    arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
+        cu.multi_msg('Creating raster {0}'.format(convert_raster))
+        arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
+        arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
                                     temp_zonal_table, "DATA", "ALL")
 
     if is_thematic:

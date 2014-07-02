@@ -1,0 +1,2 @@
+June 2, 2014
+False negative: When I ran Zonal Attribution for Raster Data using County and TRI, it gave the warning that 2 zones had null data. None have null data. They all look totally fine. Also, that message should be revised for clarity.

@@ -3,71 +3,73 @@
 # from a 24k NHD file geodatabase. Seeds are generated from selected NHDFLowline
 # and NHDWaterbody features
 
-import os, shutil
+import os, re, shutil
 import arcpy
 from arcpy import env
 
-arcpy.CheckOutExtension("Spatial")
+def select_pour_points(nhd_gdb, subregion_dem, out_dir,
+                        projection = arcpy.SpatialReference(102039)):
+    # Preliminary environmental settings:
+    env.snapRaster = subregion_dem
+    env.extent = subregion_dem
+    env.cellSize = 10
+    env.pyramid = "PYRAMIDS -1 SKIP_FIRST"
+    env.outputCoordinateSystem = projection
+    arcpy.CheckOutExtension("Spatial")
 
-# User inputs parameters:
-nhd = arcpy.GetParameterAsText(0) # User selects a NHD 24k file geodatabase.
-snap = arcpy.GetParameterAsText(1) # User selects the corresponding subregion elevation raster.
-outfolder = arcpy.GetParameterAsText(2) # User selects the output folder.
+    waterbody = os.path.join(nhd_gdb, 'NHDWaterbody')
+    flowline = os.path.join(nhd_gdb, 'NHDFlowline')
 
-# Make a scratch folder
-if not os.path.exists(os.path.join(outfolder, "scratch")):
-    os.mkdir(os.path.join(outfolder, "scratch"))
+    # Make a folder for the pour points
+    huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
+    pour_dir = os.path.join(out_dir, 'pourpoints{0}'.format(huc4_code))
+    pour_gdb = os.path.join(pour_dir, 'pourpoints.gdb')
+    if not os.path.exists(pour_dir):
+        os.mkdir(pour_dir)
+    if not arcpy.Exists(pour_gdb):
+        arcpy.CreateFileGDB_management(pour_dir, 'pourpoints.gdb')
 
-scratch = os.path.join(outfolder, "scratch")
+    env.workspace = pour_gdb
 
-# Define Projections
-nad83 = arcpy.SpatialReference(4269)
-albers = arcpy.SpatialReference(102039)
+    # Make a layer from NHDWaterbody feature class and select out lakes smaller than a hectare. Project to EPSG 102039.
+    fcodes = (39000, 39004, 39009, 39010, 39011, 39012, 43600, 43613, 43615, 43617, 43618, 43619, 43621)
+    where_clause = '''("AreaSqKm" >=0.04 AND "FCode" IN %s) OR ("FCode" = 43601 AND "AreaSqKm" >= 0.1)''' % (fcodes,)
 
-# Preliminary environmental settings:
-env.workspace = nhd
-env.snapRaster = snap
-env.extent = snap
-env.cellSize = 10
-env.pyramid = "NONE"
-env.outputCoordinateSystem = albers
+    arcpy.Select_analysis(waterbody, 'eligible_lakes', where_clause)
 
+    # Make a shapefile from NHDFlowline and project to EPSG 102039
+    arcpy.CopyFeatures_management(flowline, 'eligible_flowlines')
 
-# Make a layer from NHDWaterbody feature class and select out lakes smaller than a hectare. Project to EPSG 102039.
-fcodes = (39000, 39004, 39009, 39010, 39011, 39012,
- 43600, 43613, 43615, 43617, 43618, 43619, 43621)
-whereClause = '''
-"(AreaSqKm" >=0.04 AND "FCode" IN %s\
- OR ("AreaSqKm" >= 0.1 AND "FCode" = 43601)''' % (fcodes,)
-waterbody_albers = os.path.join(scratch, "Waterbody_Albers.shp")
-arcpy.MakeFeatureLayer_management("NHDWaterbody","Waterbody", whereClause, scratch, "")
-arcpy.CopyFeatures_management("Waterbody", waterbody_albers)
+    # Add field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
+    # Flowlines get positive values, waterbodies get negative
+    # this will help us to know which is which later
+    arcpy.AddField_management('eligible_flowlines', "POUR_ID", "LONG")
+    arcpy.CalculateField_management('eligible_flowlines', "POUR_ID", '!OBJECTID!', "PYTHON")
+    arcpy.AddField_management('eligible_lakes', "POUR_ID", "TEXT")
+    arcpy.CalculateField_management('eligible_lakes', "POUR_ID", '!OBJECTID! * -1', "PYTHON")
 
-# Make a shapefile from NHDFlowline and project to EPSG 102039
-arcpy.FeatureClassToShapefile_conversion("NHDFlowline", scratch)
-flowline_albers = os.path.join(scratch, "NHDFlowline.shp")
+    flowline_raster = "flowline_raster"
+    lakes_raster = "lakes_raster"
+    arcpy.PolylineToRaster_conversion('eligible_flowlines', "POUR_ID", flowline_raster, "", "", 10)
+    arcpy.PolygonToRaster_conversion('eligible_lakes', "POUR_ID", lakes_raster, "", "", 10)
 
-# Add CSI field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
-arcpy.AddField_management(flowline_albers, "CSI", "TEXT")
-arcpy.CalculateField_management(flowline_albers, "CSI", '''"%s%s" % ("Flowline", !FID!)''', "PYTHON")
-arcpy.AddField_management(waterbody_albers, "CSI", "TEXT")
-arcpy.CalculateField_management(waterbody_albers, "CSI", '''"%s%s" % ("Waterbody", !FID!)''', "PYTHON")
+    # Mosaic the rasters together favoring waterbodies over flowlines.
+    arcpy.MosaicToNewRaster_management([flowline_raster, lakes_raster],
+                pour_dir, "pour_points.tif", projection, "32_BIT_SIGNED",
+                "10", "1", "LAST", "LAST")
 
-# Switch to scratch workspace
-env.workspace = scratch
+def main():
+    # User inputs parameters:
+    nhd_gdb = arcpy.GetParameterAsText(0) # User selects a NHD 24k file geodatabase.
+    subregion_dem = arcpy.GetParameterAsText(1) # User selects the corresponding subregion elevation raster.
+    out_dir = arcpy.GetParameterAsText(2) # User selects the output folder.
+    select_pour_points(nhd_gdb, subregion_dem, out_dir)
 
-# Rasterize flowline_albers and waterbody_albers using "CSI" field for the raster's cell value
-flowline_raster = "flowline_raster.tif"
-waterbody_raster = "waterbody_raster.tif"
-arcpy.PolylineToRaster_conversion(flowline_albers, "CSI", flowline_raster, "", "", 10)
-arcpy.PolygonToRaster_conversion(waterbody_albers, "CSI", waterbody_raster, "", "", 10)
-
-# Mosaic the rasters together favoring waterbodies over flowlines.
-arcpy.MosaicToNewRaster_management("flowline_raster.tif;waterbody_raster.tif",
-            scratch, "seeds_mosaic.tif", albers, "32_BIT_FLOAT",
-            "10", "1", "LAST", "LAST")
-
-
+def test():
+    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHDH0411.gdb'
+    subregion_dem = 'C:/GISData/Scratch/NHD0411/NED13_0411.tif'
+    out_dir = 'C:/GISData/Scratch/NHD0411'
+    select_pour_points(nhd_gdb, subregion_dem, out_dir)
 
 
 

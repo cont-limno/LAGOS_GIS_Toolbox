@@ -1,77 +1,71 @@
 # Filename: WallsHU8.py
 # Purpose: Creates "walls" of higher elevation on the NED to force conformance to HU8 boundaries.
 
-import os, shutil
+import os, re, shutil
 import arcpy
 from arcpy import env
 from arcpy.sa import *
 
 
-def wall(nhd_gdb, infolder, outfolder, mosaic, height = '100'):
-
-    env.overwriteOutput = True
-    env.snapRaster = mosaic
-    env.cellSize = mosaic
-
-
-    albers = arcpy.SpatialReference(102039)
-    NAD83 = arcpy.SpatialReference(4269)
-    env.outputCoordinateSystem = albers
-
-    env.workspace = nhd_gdb
-    nhdsubregion = nhd_gdb[-8:-4]
-
-    # Select only the walls we need
-    whereClause = ''' "HUC_8 = '%s' ''' % nhdsubregion
-    arcpy.MakeFeatureLayer_management("WBD_HU8", "huc8_layer", whereClause)
-    arcpy.CopyFeatures_management("huc8_layer", "HUC8s_in_Subregion")
-    wall_lines = arcpy.CreateUniqueName("WallLines")
-    arcpy.PolygonToLine_management("HUC8s_in_Subregion", wall_lines)
-
-    arcpy.AddField_management(wall_lines, "WallHeight", "DOUBLE", "", "", "7")
-    arcpy.CalculateField_management(wall_lines, "WallHeight", height, "PYTHON")
-
-    # Convert wall lines to raster
-    walls = os.path.join(outfolder, "Walls.tif")
-    arcpy.FeatureToRaster_conversion(wall_lines, "WallHeight", walls)
-
-    # Add rasters together
-    env.workspace = infolder
+def wall(nhd_gdb, rasters_list, outfolder, height = '500',
+                projection = arcpy.SpatialReference(102039)):
+    """For one or more HU8s within the same subregion (nhd_gdb variable),
+    adds walls at the boundaries to force flow direction that do not cross
+    the boundary."""
+    env.workspace = 'in_memory'
+    env.outputCoordinateSystem = projection
     env.compression = "NONE"
-    rasters = arcpy.ListRasters("NED*fel*") # filled tifs only
-    for raster in rasters:
+    env.snapRaster = rasters_list[0] # they all have the same snap
+    env.cellSize = '10'
+    env.pyramids = "PYRAMIDS -1 SKIP_FIRST"
+    arcpy.CheckOutExtension("Spatial")
+
+    # HUC8 polygons each saved as separate fc inheriting albers from environ
+    huc8_fc = os.path.join(nhd_gdb, "WBD_HU8")
+    arcpy.MakeFeatureLayer_management(huc8_fc, "huc8_layer")
+
+    # send them all to a folder
+    huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
+    walled_dir = os.path.join(outfolder, 'walled' + huc4_code)
+    if not os.path.exists(walled_dir):
+        os.mkdir(walled_dir)
+
+    # make the walls raster
+    arcpy.PolygonToLine_management(huc8_fc, 'wall_lines')
+    arcpy.AddField_management('wall_lines', "height", "DOUBLE")
+    arcpy.CalculateField_management('wall_lines', "height", '500', "PYTHON")
+    arcpy.FeatureToRaster_conversion('wall_lines', "height", 'wall_raster')
+    wallsObject = Raster('wall_raster')
+
+    for raster in rasters_list:
+        out_name = os.path.join(walled_dir,
+                    os.path.basename(raster).replace('fel.tif', '_wfel.tif'))
+        cu.multi_msg('Creating output {0}'.format(out_name))
         env.extent = raster
-        wallsObject = Raster(walls)
         elevObject = Raster(raster)
-        walled_ned = Con(IsNull(wallsObject),elevObject,(wallsObject + elevObject))
-        walled_ned.save(os.path.join(outfolder, os.path.basename(raster)))
+        walled_ned = Con(IsNull(wallsObject), elevObject,
+                        (wallsObject + elevObject))
 
-    arcpy.Delete_management(walls)
-    arcpy.ResetEnvironments() # to keep next run from inheriting extent
+        walled_ned.save(out_name)
 
+    for item in ['huc8_layer', 'wall_lines', 'wall_raster']:
+        arcpy.Delete_management(item)
+    arcpy.ResetEnvironments()
+    arcpy.CheckInExtension("Spatial")
 
 def main():
-    nhd = arcpy.GetParameterAsText(0) # NHD Subregion file geodatabase
-    infolder = arcpy.GetParameterAsText(1) # Folder with filled huc8 clips
-    mosaic = arcpy.GetParameterAsText(2)# NED Mosaic for the subregion
-    height = arcpy.GetParameterAsText(3) # Wall height in meters
-    outfolder = arcpy.GetParameterAsText(4) # Output Folder
+    nhd_gdb = arcpy.GetParameterAsText(0) # NHD Subregion file geodatabase
+    rasters_list = arcpy.GetParameterAsText(1).split(';')
+    outfolder = arcpy.GetParameterAsText(2) # Output Folder
+    wall(nhd_gdb, rasters_list, outfolder)
 
-    arcpy.CheckOutExtension("Spatial")
-    wall(nhd, infolder, outfolder, mosaic, height)
-    arcpy.CheckInExtension("Spatial")
-    arcpy.ResetEnvironments()
 
 def test():
-    nhd = 'C:/GISData/Scratch_njs/NHD0109/NHDH0109.gdb'
-    infolder = 'C:/GISData/Scratch_njs/PreHPCC/filled_huc8clips0109'
-    mosaic = 'C:/GISData/Scratch_njs/PreHPCC/mosaic0109/NED13_0109.tif'
-    height = '100'
-    outfolder = 'C:/GISData/Scratch_njs/PreHPCC/walled_huc8clips0109'
-
-    arcpy.CheckOutExtension("Spatial")
-    wall(nhd, infolder, outfolder, mosaic, height)
-    arcpy.CheckInExtension("Spatial")
+    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHDH0411.gdb'
+    env.workspace = 'C:/GISData/Scratch/NHD0411/huc8clips0411'
+    rasters_list = [os.path.join(env.workspace, r) for r in arcpy.ListRasters('*tif')]
+    outfolder = 'C:/GISData/Scratch/NHD0411'
+    wall(nhd_gdb, rasters_list, outfolder)
 
 if __name__ == '__main__':
     main()

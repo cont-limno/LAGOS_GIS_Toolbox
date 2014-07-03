@@ -119,7 +119,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # cleanup
     arcpy.Delete_management(temp_zonal_table)
     arcpy.Delete_management(temp_entire_table)
-    arcpy.Delete_management(os.path.dirname(temp_workspace))
+    if arcpy.Exists(temp_workspace):
+        arcpy.Delete_management(os.path.dirname(temp_workspace))
     arcpy.CheckInExtension("Spatial")
 
 def main():

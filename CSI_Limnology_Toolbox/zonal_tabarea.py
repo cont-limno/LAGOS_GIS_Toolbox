@@ -50,6 +50,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # this has to be on disk for some reason to avoid background processing
     # errors thrown up at random
     # hence we get the following awkward horribleness
+    use_convert_raster = False
     try:
         arcpy.sa.ZonalStatisticsAsTable(zone_fc, zone_field, in_value_raster,
                                 temp_zonal_table, 'DATA', 'ALL')
@@ -59,6 +60,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # pretty quickly, usually), do this way which always works but takes
     # twice as long on large rasters
     except:
+        use_convert_raster = True
         temp_workspace = cu.create_temp_GDB('temp_zonal')
         convert_raster = os.path.join(temp_workspace,
                         cu.shortname(zone_fc) + '_converted')
@@ -76,7 +78,11 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         temp_area_table = 'in_memory/tab_area_temp'
         cu.multi_msg("Tabulating areas...")
 
-        arcpy.sa.TabulateArea(convert_raster, zone_field, in_value_raster,
+        if use_convert_raster:
+            arcpy.sa.TabulateArea(convert_raster, zone_field, in_value_raster,
+                                'Value', temp_area_table, cell_size)
+        else:
+            arcpy.sa.TabulateArea(zone_fc, zone_field, in_value_raster,
                                 'Value', temp_area_table, cell_size)
 
         # making the output table

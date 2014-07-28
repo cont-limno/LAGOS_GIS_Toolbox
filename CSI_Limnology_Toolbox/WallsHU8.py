@@ -20,11 +20,11 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
     env.pyramids = "PYRAMIDS -1 SKIP_FIRST"
     arcpy.CheckOutExtension("Spatial")
 
-    # HUC8 polygons each saved as separate fc inheriting albers from environ
+    # HU8 layer
     huc8_fc = os.path.join(nhd_gdb, "WBD_HU8")
     arcpy.MakeFeatureLayer_management(huc8_fc, "huc8_layer")
 
-    # send them all to a folder
+    # create output folder with HUC4 in the name
     huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
     walled_dir = os.path.join(outfolder, 'walled' + huc4_code)
     if not os.path.exists(walled_dir):

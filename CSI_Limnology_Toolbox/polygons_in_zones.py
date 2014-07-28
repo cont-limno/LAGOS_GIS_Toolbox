@@ -32,6 +32,7 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
                                  "JOIN_ONE_TO_ONE", "KEEP_ALL",
                                   match_option =  "INTERSECT")
 
+
     # get the newest join_count field
     join_count_fields = [f.name for f in arcpy.ListFields(spjoin_fc, 'Join_Count*')]
     end_integers = []
@@ -42,7 +43,6 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
         highest_join_count_field = 'Join_Count_{0}'.format(max(end_integers))
     else:
         highest_join_count_field = 'Join_Count'
-    cu.multi_msg(highest_join_count_field)
 
     # and rename it to Poly_Count
     arcpy.AddField_management(spjoin_fc, "Poly_Count", 'Long')

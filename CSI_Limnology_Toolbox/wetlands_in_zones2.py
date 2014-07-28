@@ -54,13 +54,13 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table):
             arcpy.JoinField_management('WL', zone_field, t, zone_field)
         # sometimes there's no table if it was an empty selection
         except:
-            empty_fields = [f.replace('Poly', t) for r in new_fields]
+            empty_fields = [f.replace('Poly', t) for f in new_fields]
             for ef in empty_fields:
                 arcpy.AddField_management('WL', ef, 'Double')
                 arcpy.CalculateField_management('WL', ef, '0', 'PYTHON')
             continue
     # remove all the extra zoneID fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('WL', 'ZoneID_*')]
+    drop_fields = [f.name for f in arcpy.ListFields('WL', zone_field + "_*")]
     for f in drop_fields:
         arcpy.DeleteField_management('WL', f)
     arcpy.CopyRows_management('WL', output_table)

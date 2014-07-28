@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import GenerateSeeds as tool
+import ConnectedWetlands as tool
 
 def main():
     t = time.time()

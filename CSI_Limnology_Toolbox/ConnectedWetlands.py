@@ -5,7 +5,7 @@ from arcpy import env
 import csiutils as cu
 from polygons_in_zones import polygons_in_zones
 
-def connected_wetlands(lakes_fc, wetlands_fc, out_table):
+def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     env.workspace = 'in_memory'
     env.outputCoordinateSystem = arcpy.SpatialReference(102039)
 
@@ -25,7 +25,7 @@ def connected_wetlands(lakes_fc, wetlands_fc, out_table):
     for sel, temp_table in zip(selections, temp_tables):
         print("Creating temporary table for wetlands where {0}".format(sel))
         # this function adds the count and the area using the lake as the zone
-        polygons_in_zones(lakes_fc, 'Permanent_Identifier', wetlands_fc, temp_table, sel)
+        polygons_in_zones(lakes_fc, lake_id_field, wetlands_fc, temp_table, sel)
 
         # make good field names now rather than later
         new_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']
@@ -39,15 +39,15 @@ def connected_wetlands(lakes_fc, wetlands_fc, out_table):
         arcpy.Select_analysis(wetlands_fc, selected_wetlands, sel)
         intersect_output = os.path.join(shoreline_gdb, "intersect")
         arcpy.Intersect_analysis(['shorelines', selected_wetlands], intersect_output)
-        arcpy.Statistics_analysis(intersect_output, 'intersect_stats', [['Shape_Length', 'SUM']], 'Permanent_Identifier')
-        cu.one_in_one_out('intersect_stats', ['SUM_Shape_Length'], lakes_fc, 'Permanent_Identifier', 'temp_shoreline_table')
+        arcpy.Statistics_analysis(intersect_output, 'intersect_stats', [['Shape_Length', 'SUM']], lake_id_field)
+        cu.one_in_one_out('intersect_stats', ['SUM_Shape_Length'], lakes_fc, lake_id_field, 'temp_shoreline_table')
         cu.redefine_nulls('temp_shoreline_table', ['SUM_Shape_Length'], [0])
         shoreline_field = temp_table + "_Shoreline_Km"
         arcpy.AddField_management('temp_shoreline_table', shoreline_field, 'DOUBLE')
         arcpy.CalculateField_management('temp_shoreline_table', shoreline_field, '!SUM_Shape_Length!/1000', 'PYTHON')
 
         # join the shoreline value to the temp_table
-        arcpy.JoinField_management(temp_table, 'Permanent_Identifier', 'temp_shoreline_table', 'Permanent_Identifier', shoreline_field)
+        arcpy.JoinField_management(temp_table, lake_id_field, 'temp_shoreline_table', lake_id_field, shoreline_field)
 
         # clean up shoreline intermediates
         for item in [shoreline_gdb, 'intersect_stats', 'temp_shoreline_table']:
@@ -57,7 +57,7 @@ def connected_wetlands(lakes_fc, wetlands_fc, out_table):
     temp_tables.remove('Forested')
     for t in temp_tables:
         try:
-            arcpy.JoinField_management('Forested', 'Permanent_Identifier', t, 'Permanent_Identifier')
+            arcpy.JoinField_management('Forested', lake_id_field, t, lake_id_field)
         # sometimes there's no table if it was an empty selection
         except:
             empty_fields = [f.replace('Poly', t) for f in new_fields]

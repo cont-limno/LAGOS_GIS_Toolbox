@@ -79,15 +79,17 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
 
 def main():
     lakes_fc = arcpy.GetParameterAsText(0)
-    wetlands_fc = arcpy.GetParameterAsText(1)
-    out_table = arcpy.GetParameterAsText(2)
-    connected_wetlands(lakes_fc, wetlands_fc, out_table)
+    lake_id_field = arcpy.GetParameterAsText(1)
+    wetlands_fc = arcpy.GetParameterAsText(2)
+    out_table = arcpy.GetParameterAsText(3)
+    connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table)
 
 def test():
     lakes_fc = r'C:\Users\smithn78\CSI_Processing\CSI\TestData_0411.gdb\Lakes_1ha'
+    lake_id_field = 'Permanent_Identifier'
     wetlands_fc = r'C:\Users\smithn78\CSI_Processing\CSI\TestData_0411.gdb\Wetlands'
     out_table = 'C:/GISData/Scratch/Scratch.gdb/AAAtest_connectedwetlands'
-    connected_wetlands(lakes_fc, wetlands_fc, out_table)
+    connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table)
 
 if __name__ == '__main__':
     main()

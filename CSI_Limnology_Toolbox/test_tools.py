@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import ConnectedWetlands as tool
+import upstream_lakes as tool
 
 def main():
     t = time.time()

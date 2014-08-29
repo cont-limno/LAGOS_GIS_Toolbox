@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import upstream_lakes as tool
+import wetlands_in_zones2 as tool
 
 def main():
     t = time.time()

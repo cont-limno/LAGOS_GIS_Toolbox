@@ -51,21 +51,18 @@ def upstream_lakes(nhd_gdb, output_table):
 
     # for each lake, use its junctions as input flags to the upstream trace, then
     # evalute the traced network for how many lakes are in it
+    cu.multi_msg("Calculating upstream network for each lake. This may take a few minutes, or a few hours...")
     with arcpy.da.UpdateCursor('output_table', ['Permanent_Identifier'] + new_fields) as cursor:
         for row in cursor:
             id = row[0]
-            cu.multi_msg('Calculating values for lake ID {0}'.format(id))
+##            cu.multi_msg('Calculating values for lake ID {0}'.format(id))
             # get the junction points on top of this lake, can be 0 or several
-            cu.multi_msg("Tracing upstream network for lake ID {0}".format(id))
             where_clause = """"{0}" = '{1}'""".format('Permanent_Identifier', id)
-            print(where_clause)
             arcpy.MakeFeatureLayer_management('gte_4ha_lakes_DISK', "this_lake",
                                                 where_clause)
-            print(arcpy.GetCount_management('this_lake').getOutput(0))
             arcpy.SelectLayerByLocation_management('junctions', "INTERSECT",
                                             "this_lake", "1 Meters")
             count_jxns = int(arcpy.GetCount_management('junctions').getOutput(0))
-            print('count_jxns = {0}'.format(count_jxns))
 
             # if the lake has no upstream connectivity whatsoever, it will have
             # no junctions on top of it. assign 0s
@@ -85,7 +82,6 @@ def upstream_lakes(nhd_gdb, output_table):
                 arcpy.SelectLayerByAttribute_management('gte_4ha_lakes',
                                     'REMOVE_FROM_SELECTION', where_clause)
                 count_4ha_lakes = int(arcpy.GetCount_management('gte_4ha_lakes').getOutput(0))
-                print('count_4ha_lakes = {0}'.format(count_4ha_lakes))
 
                 # if there is upstream connectivity but no countable lakes
                 # assign 0s for all the counts/areas and do not try to copy rows
@@ -104,7 +100,6 @@ def upstream_lakes(nhd_gdb, output_table):
                     with arcpy.da.SearchCursor('these_4ha_lakes', ['AreaSqKm']) as area4_cursor:
                         for area4_row in area4_cursor:
                             total_area += area4_row[0] * 100
-                    print('total_area = {0}'.format(total_area))
                     row[3] = total_area
 
                     # same but for 10ha
@@ -128,7 +123,6 @@ def upstream_lakes(nhd_gdb, output_table):
                             for area10_row in area10_cursor:
                                 total_area += area10_row[0] * 100
                         row[4] = total_area
-            print(row)
             cursor.updateRow(row)
 
             for item in ['this_lake', 'this_lake_jxns', 'upstream', 'these_4ha_lakes', 'these_10ha_lakes']:

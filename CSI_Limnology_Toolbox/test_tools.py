@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import wetlands_in_zones2 as tool
+import ProprocessNWI as tool
 
 def main():
     t = time.time()

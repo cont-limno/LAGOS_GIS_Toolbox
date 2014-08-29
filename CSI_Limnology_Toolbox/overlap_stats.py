@@ -4,7 +4,6 @@ from arcpy import env
 import csiutils as cu
 import zonal_tabarea
 
-
 def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic):
     temp_out_tables = ['in_memory/' + os.path.basename(zfc) + "_temp_table" for zfc in non_overlapping_zones_list]
 
@@ -32,6 +31,8 @@ def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_t
                     " application.").format(in_count - out_count)
         arcpy.AddWarning(warn_msg)
         print(warn_msg)
+    for t in temp_out_tables + [target_table]:
+        arcpy.Delete_management(t)
 
 def main():
     non_overlapping_zones_list = arcpy.GetParameterAsText(0).split(';') # list

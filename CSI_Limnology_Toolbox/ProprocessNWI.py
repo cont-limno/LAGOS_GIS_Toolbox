@@ -1,17 +1,36 @@
 # preprocessNWI.py
+# Makes a feature class of wetlands that conform to the CSI definition of
+# of wetlands and can merge seamlessly without duplicates near state borders
 
 import arcpy, os
 import csiutils as cu
 
 def InsideState(state, nwi, lakes, outfc):
+    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
+
+    # Select only wetlands with their center inside this state
+    # This way all wetlands will only be represented once when we merge all states
+
     arcpy.env.workspace = 'in_memory'
-    print(arcpy.Exists(nwi))
-    print(arcpy.Exists(lakes))
     arcpy.MakeFeatureLayer_management(nwi, "nwi_lyr")
     cu.multi_msg('Selecting wetlands with their center in the state.')
     arcpy.SelectLayerByLocation_management("nwi_lyr", 'HAVE_THEIR_CENTER_IN', state,'','NEW_SELECTION')
+
+    # Two things to make wetlands conform to the CSI definition
+    # Select only palustrine systems that aren't freshwater ponds
+    # and make it impossible for wetlands to be inside lakes
+    filter = """"ATTRIBUTE" LIKE 'P%' AND "WETLAND_TYPE" <> 'Freshwater Pond'"""
+    cu.multi_msg("Selecting only palustrine wetlands...")
+    arcpy.SelectLayerByAttribute_management("nwi_lyr", "NEW_SELECTION", filter)
     cu.multi_msg('Erasing lakes from wetlands layer.')
     arcpy.Erase_analysis("nwi_lyr", lakes, outfc)
+
+    # Add two fields we will use, an ID field and the area in hectares
+    arcpy.AddField_management(outfc, "WET_ID", "LONG")
+    arcpy.CalculateField_management(outfc, "WET_ID", "!OBJECTID!", "PYTHON")
+
+    arcpy.AddField_management(outfc, "AreaHa", "DOUBLE")
+    arcpy.CalculateField_management(outfc, "AreaHa", "!shape.area@hectares!", "PYTHON")
 
 
 def main():

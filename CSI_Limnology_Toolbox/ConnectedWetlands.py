@@ -1,4 +1,7 @@
 # ConnectedWetlands.py
+# Characterizes each lake according to its wetland connections
+# Output table has one row PER LAKE
+
 import os
 import arcpy
 from arcpy import env
@@ -9,7 +12,9 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     env.workspace = 'in_memory'
     env.outputCoordinateSystem = arcpy.SpatialReference(102039)
 
-    arcpy.FeatureToLine_management(lakes_fc, 'shorelines')
+    arcpy.Buffer_analysis(lakes_fc, 'lakes_30m', '30 meters')
+
+    arcpy.FeatureToLine_management('lakes_30m', 'shorelines')
 
     # 3 selections for the wetlands types we want to look at
     forested_exp = """ "WETLAND_TY" = 'Freshwater Forested/Shrub Wetland' """
@@ -19,7 +24,7 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     selections = [forested_exp, emergent_exp, other_exp]
     temp_tables = ['Forested', 'Emergent', 'Other']
 
-    # for each wetland, get the count of intersection wetlands, the total area
+    # for each wetland type, get the count of intersection wetlands, the total area
     # of the lake that is overlapping with wetlands, and the length of the lake
     # shoreline that is within a wetland polygon
     for sel, temp_table in zip(selections, temp_tables):

@@ -104,10 +104,16 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
     # saved to the output and we will merge in the results from our working
     # set later
     arcpy.MakeFeatureLayer_management(in_fc, "fc_lyr")
+
     arcpy.AddJoin_management("fc_lyr", unique_id, "freqtable", unique_id)
-    arcpy.Select_analysis("fc_lyr", out_fc, '''"FREQUENCY" = 1''')
-    arcpy.Select_analysis("fc_lyr", "fc_temp", '''"FREQUENCY" > 1''')
+    arcpy.SelectLayerByAttribute_management('fc_lyr', 'NEW_SELECTION', '''"FREQUENCY" = 1''')
     arcpy.RemoveJoin_management("fc_lyr")
+    arcpy.CopyFeatures_management("fc_lyr", "unique")
+
+    arcpy.AddJoin_management("fc_lyr", unique_id, "freqtable", unique_id)
+    arcpy.SelectLayerByAttribute_management('fc_lyr', 'NEW_SELECTION', '''"FREQUENCY" > 1''')
+    arcpy.RemoveJoin_management("fc_lyr")
+    arcpy.CopyFeatures_management("fc_lyr", "fc_temp")
 
     arcpy.AddField_management("fc_temp", "NewestFDate", "SHORT")
     arcpy.CalculateField_management("fc_temp", "NewestFDate", 1, 'PYTHON')
@@ -125,11 +131,13 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
         # for each id select its group of duplicates
         for s_id in select_ids:
 
+            fdate_field = arcpy.ListFields('fc_temp', '*FDate', 'Date')[0].name
+            unique_id = arcpy.ListFields('fc_temp', '*Permanent_Identifier', 'Text')[0].name
             whereClause =  ''' "%s" = '%s' ''' % (unique_id, s_id)
 
             # update values to 0, we will change only one to 1 later
             # and get a list of all the dates
-            dates = [row[0] for row in arcpy.da.SearchCursor("fc_temp", ("FDate"), whereClause)]
+            dates = [row[0] for row in arcpy.da.SearchCursor("fc_temp", (fdate_field), whereClause)]
 
             print("ID group %s" % s_id)
             print("Date object values: %s" % dates)
@@ -139,7 +147,7 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
             # sometimes more than one record with max date but
             # the following allows us to use "NewestFDate" = 1 later to
             # select ONLY ONE to keep
-            with arcpy.da.UpdateCursor("fc_temp", ("FDate", "NewestFDate"), whereClause) as cursor:
+            with arcpy.da.UpdateCursor("fc_temp", (fdate_field, "NewestFDate"), whereClause) as cursor:
                 i = 1
                 for row in cursor:
                     if row[0] == max(dates):
@@ -152,10 +160,10 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
         # create a new, distinct output rather than updating table in place
         arcpy.Select_analysis("fc_temp", "newest_only", ''' "NewestFDate" = 1 ''')
         arcpy.DeleteField_management("newest_only", "NewestFDate")
-        arcpy.Merge_management("newest_only", out_fc)
+        arcpy.Merge_management(["newest_only", "unique"], out_fc)
 
-        for intermediate in ["freqtable", "dupetable", "fc_temp"]:
-            arcpy.Delete_management(intermediate)
+##        for intermediate in ["freqtable", "dupetable", "fc_temp", "newest_only"]:
+##            arcpy.Delete_management(intermediate)
 
     else:
         print("There were no duplicates.")
@@ -207,7 +215,7 @@ def remove_geographic_doubles(polygon_fc, out_fc, unique_id, percent_overlap_all
                 with arcpy.da.UpdateCursor('in_memory/fc', cursor_fields, where_clause) as c:
                     for r in c:
                         if r[4] == min(dates) and r[4] == max(dates):
-                            print("PROBLEM! Same date. Resolve pair %s, %s manually." % (ids[0], ids[1]))
+                            print("PROBLEM! Same date. Resolve pair %s, %s manually." % (src_value, nbr_value))
                         if r[4] == min(dates) and r[4] != max(dates):
                             if r[4] not in keep_ids:
                                 print("%s has the older date (%s) and will be removed." % (r[2], r[4]))

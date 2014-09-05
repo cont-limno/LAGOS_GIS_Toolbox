@@ -17,19 +17,26 @@ def split_strahler(stream_area_fc, streams, out_area_fc):
     #    Strahler value is attached to allocation polygon
     # 4) Use identity function to split up the StreamRiver polygons at the
     #    allocation polygon boundaries, and add the Strahler values
+    old_workspace = env.workspace
     env.workspace = 'in_memory'
-    cu.multi_msg('C
+    cu.multi_msg("Splitting stream area polygons between confluences and joining Strahler order to them...")
     euc = EucAllocation(streams, cell_size = '50', source_field = 'OBJECTID')
     arcpy.RasterToPolygon_conversion(euc, 'allocation_polys')
-    arcpy.JoinField_management('allocation_polys', 'grid_code', streams, 'OBJECTID', 'Strahler')
-    arcpy.CopyFeatures_management('allocation_polys'
+    arcpy.JoinField_management('allocation_polys', 'grid_code', streams, 'OBJECTID', ['Strahler', 'LengthKm'])
     arcpy.Identity_analysis(stream_area_fc, 'allocation_polys', out_area_fc)
+    env.workspace = old_workspace
 
-def wetland_order(rivex, nwi, out_fc):
+def wetland_order(rivex, stream_area_fc, nwi, out_fc):
     arcpy.env.extent = "MINOF"
     arcpy.env.workspace = 'in_memory'
+    split_strahler(stream_area_fc, rivex, 'stream_area_split')
 
-    # Buffer a donut around selected wetland polys 30m
+    # Buffer the stream centerlines and the stream areas and union them together
+    arcpy.Buffer_analysis(rixev, "centerline_buffer", "30 meters")
+    arcpy.Buffer_analysis('stream_area_split', 'stream_area_buffer', '30 meters')
+    arcpy.Union_analysis(['centerline_buffer', 'stream_area_buffer'], 'stream_features_buffered')
+
+
     arcpy.Buffer_analysis("allwetpre", "allwet", "30 meters", "OUTSIDE_ONLY")
 
     # Add wetland order field for connected wetlands
@@ -84,28 +91,23 @@ def wetland_order(rivex, nwi, out_fc):
 
     arcpy.SpatialJoin_analysis("allwet", rivex, "conwetorder", '', '', fms)
 
-    # Calculate fields
-    arcpy.AddField_management("conwetorder", "StreamCnt", "LONG")
-    arcpy.CalculateField_management("conwetorder","StreamCnt", "!Join_Count!", "PYTHON")
-    arcpy.DeleteField_management("conwetorder", "Join_Count")
+    # Get the stream count from the join count
+    cu.rename_field("conwetorder", 'Join_Count', "StreamCnt", True)
 
-    # Create output feature class in a file geodatabase
-    arcpy.CreateFileGDB_management(outfolder, "WetlandOrder")
-    outgdb = os.path.join(outfolder, "WetlandOrder.gdb")
-    arcpy.FeatureClassToFeatureClass_conversion("conwetorder", outgdb, "Buffer30m")
-    buffer30m = os.path.join(outgdb,"Buffer30m")
-
-
-
-    outfc = os.path.join(outgdb, "Buffer30m")
-    try:
-        arcpy.DeleteField_management(outfc, "BUFF_DIST")
-        arcpy.DeleteField_management(outfc, "ACRES")
-        arcpy.DeleteField_management(outfc, "Target_FID")
-        arcpy.DeleteField_management(outfc, "Shape_Length")
-    except:
-        pass
-
+##    # Create output feature class in a file geodatabase
+##    arcpy.CreateFileGDB_management(outfolder, "WetlandOrder")
+##    outgdb = os.path.join(outfolder, "WetlandOrder.gdb")
+##    arcpy.FeatureClassToFeatureClass_conversion("conwetorder", outgdb, "Buffer30m")
+##    buffer30m = os.path.join(outgdb,"Buffer30m")
+##
+##
+##
+##    outfc = os.path.join(outgdb, "Buffer30m")
+##    for field in ['BUFF_DIST', 'ACRES', 'Target_FID', 'Shape_Length']:
+##        try:
+##            arcpy.DeleteField_management(outfc, field)
+##        except:
+##            continue
 
     # Create Veg field
     arcpy.AddField_management(outfc, "Veg", "TEXT")
@@ -127,8 +129,6 @@ def wetland_order(rivex, nwi, out_fc):
             else:
                 row[1] = "Other"
             cursor.updateRow(row)
-
-    del cursor
 
     # Create and calc regime field
     # Because there are no place holders where a classification type is omitted in NWI Codes they are hard to separate...
@@ -159,8 +159,6 @@ def wetland_order(rivex, nwi, out_fc):
 
             cursor.updateRow(row)
 
-    del cursor
-
     # Then we run another cursor...     row[0]
     with arcpy.da.UpdateCursor(outfc, ["Regime"]) as cursor:
         for row in cursor:
@@ -169,14 +167,9 @@ def wetland_order(rivex, nwi, out_fc):
 
             cursor.updateRow(row)
 
-    del cursor
-
     arcpy.DeleteField_management(outfc, "att_")
     arcpy.DeleteField_management(outfc, "att3")
     arcpy.DeleteField_management(outfc, "att4")
-
-
-
 
     # Calculate WetOrder from StrOrdSum
     with arcpy.da.UpdateCursor(outfc, ["StrOrdSum", "WetOrder"]) as cursor:
@@ -199,33 +192,20 @@ def wetland_order(rivex, nwi, out_fc):
     except:
         pass
 
-
-
-    ### Write table to csv file.
-    ##def TableToCSV(fc,CSVFile):
-    ##
-    ##    fields = [f.name for f in arcpy.ListFields(fc) if f.type <> 'Geometry']
-    ##    with open(CSVFile, 'w') as f:
-    ##        f.write(','.join(fields)+'\n') # csv headers
-    ##        with arcpy.da.SearchCursor(fc, fields) as cursor:
-    ##            for row in cursor:
-    ##                f.write(','.join([str(r) for r in row])+'\n')
-
-
-    # User input parameters:
-    rivex = arcpy.GetParameterAsText(0) # A shapefile of rivers that has the "Strahler" field produced by RivEx extension.
-    nwi = arcpy.GetParameterAsText(1) # NWI feature class
-    outfolder = arcpy.GetParameterAsText(2) # Location where output gets stored.
-    if __name__ == '__main__':
-
-        fc = os.path.join(outgdb,"Buffer30m")
-        csv = os.path.join(outfolder,"WetlandOrder.csv")
-        TableToCSV(fc,csv)
-
-
     # Join fields from buffer rings back to original polygons.
     arcpy.JoinField_management("allwetpre", "CSI_ID", buffer30m, "CSI_ID", ["WetOrder","StrOrdSum","StrOrdMax","StreamCnt","StreamKm", "VegType", "Regime"])
     arcpy.FeatureClassToFeatureClass_conversion("allwetpre", outgdb, "WetlandOrder")
+
+def main():
+    # User input parameters:
+    rivex = arcpy.GetParameterAsText(0) # A shapefile of rivers that has the "Strahler" field produced by RivEx extension.
+    stream_area_fc = arcpy.GetParameterAsText(1) # shapefile of NHDAreas merged together with duplicates deleted
+    nwi = arcpy.GetParameterAsText(1) # NWI feature class
+    outfolder = arcpy.GetParameterAsText(2) # Location where output gets stored.
+
+if __name__ == '__main__':
+    main()
+
 
 
 

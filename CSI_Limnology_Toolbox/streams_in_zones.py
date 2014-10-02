@@ -70,7 +70,7 @@ def streams_in_zones(zones_fc, zone_field, streams_fc, output_table):
             continue
 
     # remove all the extra zoneID fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('Streams', 'ZoneID_*')]
+    drop_fields = [f.name for f in arcpy.ListFields('Streams', zone_field + '_*')]
     for f in drop_fields:
         arcpy.DeleteField_management('Streams', f)
     arcpy.CopyRows_management('Streams', output_table)

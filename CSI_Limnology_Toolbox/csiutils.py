@@ -62,7 +62,11 @@ def merge_many(merge_list, out_fc, group_size = 20):
 def rename_field(inTable, oldFieldName, newFieldName, deleteOld = False):
     import arcpy
     old_field = arcpy.ListFields(inTable, oldFieldName)
-
+    print(inTable)
+    print(oldFieldName)
+    print([f.name for f in old_field])
+    print(newFieldName)
+    print(old_field[0].type)
     arcpy.AddField_management(inTable, newFieldName, old_field[0].type, field_length = old_field[0].length)
     arcpy.CalculateField_management(inTable, newFieldName,'!%s!' % oldFieldName, "PYTHON")
     if deleteOld == True: arcpy.DeleteField_management(inTable, oldFieldName)
@@ -115,6 +119,7 @@ def redefine_nulls(in_table, in_fields, out_values):
         arcpy.SelectLayerByAttribute_management('table', 'NEW_SELECTION', null_expr)
         calc_expr = """'{0}'""".format(v)
         arcpy.CalculateField_management('table', f, calc_expr, 'PYTHON')
+    arcpy.Delete_management('table')
 
 def resolution_comparison(feature_class, raster):
     """Compare the feature resolution to the raster resolution.

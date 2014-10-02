@@ -21,7 +21,7 @@ def InsideState(state, nwi, lakes, outfc):
     # and make it impossible for wetlands to be inside lakes
     filter = """"ATTRIBUTE" LIKE 'P%' AND "WETLAND_TYPE" <> 'Freshwater Pond'"""
     cu.multi_msg("Selecting only palustrine wetlands...")
-    arcpy.SelectLayerByAttribute_management("nwi_lyr", "NEW_SELECTION", filter)
+    arcpy.SelectLayerByAttribute_management("nwi_lyr", "SUBSET_SELECTION", filter)
     cu.multi_msg('Erasing lakes from wetlands layer.')
     arcpy.Erase_analysis("nwi_lyr", lakes, outfc)
 

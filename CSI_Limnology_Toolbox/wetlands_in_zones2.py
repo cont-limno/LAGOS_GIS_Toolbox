@@ -12,7 +12,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
     # get checked at some point
     arcpy.env.workspace = 'in_memory'
     need_selection = False
-    with arcpy.da.SearchCursor(wetlands_fc, ["ATTRIBUTE", "WETLAND_TY"]) as cursor:
+    with arcpy.da.SearchCursor(wetlands_fc, ["ATTRIBUTE", "WETLAND_TYPE"]) as cursor:
         while need_selection is False:
             for row in cursor:
                 if row[0][0] <> 'P':
@@ -20,7 +20,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 if row[1] <> 'Freshwater Pond':
                     need_selection = True
     if need_selection:
-        main_expr = """"ATTRIBUTE" LIKE 'P%'AND "WETLAND_TY" <> 'Freshwater_Pond'"""
+        main_expr = """"ATTRIBUTE" LIKE 'P%'AND "WETLAND_TYPE" <> 'Freshwater_Pond'"""
         arcpy.Select_analysis(wetlands_fc, "wetlands_fc_checked", main_expr)
         wetlands_fc = os.path.join(arcpy.env.workspace, "wetlands_fc_checked")
 
@@ -32,47 +32,61 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 """"VegType" = 'PSS'""",
                 """"VegType" = 'PEMorPAB'""",
                 ]
-    temp_tables = ['WL_Undissolved',
-                'WL_Isolated',
-                'WL_Single',
-                'WL_Connected',
-                'WL_PFO',
-                'WL_PSS',
-                'WL_PEMorPAB']
+    temp_tables = ['AllWetlandsUndissolved',
+                'IsolatedWetlandsUndissolved',
+                'SingleWetlandsUndissolved',
+                'ConnectedWetlandsUndissolved',
+                'ForestedWetlandsUndissolved',
+                'ScrubShrubWetlandsUndissolved',
+                'OpenWaterWetlandsUndissolved']
 
     for sel, temp_table in zip(selections, temp_tables):
-        print("Creating temporary table for wetlands where {0}".format(sel))
-        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, wetlands_fc, temp_table, sel)
-        new_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']
+        if sel:
+            print("Creating temporary table for wetlands where {0}".format(sel))
+            selected_wetlands = 'selected_wetlands'
+            arcpy.Select_analysis(wetlands_fc, selected_wetlands, sel)
+        else:
+            print("Creating temporary table for all wetlands")
+            selected_wetlands = wetlands_fc
+        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, selected_wetlands, temp_table, '')
+        new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
+        avg_size_field = temp_table + '_AvgSize_ha'
+        arcpy.AddField_management(temp_table, avg_size_field , 'DOUBLE')
+        arcpy.CalculateField_management(temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
         for f in new_fields:
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
-    if dissolve_wetlands == True:
-        arcpy.Dissolve_management(wetlands_fc, 'dissolved_wetlands', multi_part = 'SINGLE_PART')
-        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, 'dissolved_wetlands', 'WL_Dissolved', '')
-        for f in new_fields:
-            cu.rename_field('WL_Dissolved', f, f.replace('Poly', 'WL_Dissolved'), True)
-        temp_tables.append('WL_Dissolved')
+        if dissolve_wetlands == True:
+            arcpy.Dissolve_management(selected_wetlands, 'dissolved_wetlands', multi_part = 'SINGLE_PART')
+            dissolved_temp_table = temp_table.replace('Undissolved', 'Dissolved')
+            temp_tables.append(dissolved_temp_table)
+            polygons_in_zones.polygons_in_zones(zones_fc, zone_field, 'dissolved_wetlands', dissolved_temp_table, '')
+            new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
+            avg_size_field = dissolved_temp_table + '_AvgSize_ha'
+            arcpy.AddField_management(dissolved_temp_table, avg_size_field , 'DOUBLE')
+            arcpy.CalculateField_management(dissolved_temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
+            for f in new_fields:
+                cu.rename_field(dissolved_temp_table, f, f.replace('Poly', dissolved_temp_table), True)
 
     # join em up and copy to final
-    temp_tables.remove('WL_Undissolved')
+    temp_tables.remove('AllWetlandsUndissolved')
     for t in temp_tables:
         try:
-            arcpy.JoinField_management('WL_Undissolved', zone_field, t, zone_field)
+            arcpy.JoinField_management('AllWetlandsUndissolved', zone_field, t, zone_field)
         # sometimes there's no table if it was an empty selection
         except:
             empty_fields = [f.replace('Poly', t) for f in new_fields]
             for ef in empty_fields:
-                arcpy.AddField_management('WL_Undissolved', ef, 'Double')
-                arcpy.CalculateField_management('WL_Undissolved', ef, '0', 'PYTHON')
+                arcpy.AddField_management('AllWetlandsUndissolved', ef, 'Double')
+                arcpy.CalculateField_management('AllWetlandsUndissolved', ef, '0', 'PYTHON')
             continue
     # remove all the extra zoneID fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('WL_Undissolved', zone_field + "_*")]
+    drop_fields = [f.name for f in arcpy.ListFields('AllWetlandsUndissolved', zone_field + "_*")]
     for f in drop_fields:
-        arcpy.DeleteField_management('WL_Undissolved', f)
-    arcpy.CopyRows_management('WL_Undissolved', output_table)
+        arcpy.DeleteField_management('AllWetlandsUndissolved', f)
+    arcpy.CopyRows_management('AllWetlandsUndissolved', output_table)
 
-    for item in ['WL_Undissolved', 'wetlands_fc_checked', 'dissolved_wetlands'] + temp_tables:
+    for item in ['AllWetlandsUndissolved', 'wetlands_fc_checked', 'dissolved_wetlands'] + temp_tables:
         try:
             arcpy.Delete_management(item)
         except:
@@ -92,7 +106,7 @@ def test():
     zones_fc = os.path.join(ws, 'HU12')
     zone_field = 'ZoneID'
     wetlands_fc =  os.path.join(ws, 'Wetlands')
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/test_wetlands_in_zones2_dissolve'
+    output_table = 'C:/GISData/Scratch/Scratch.gdb/WETZONE_SEPT'
     dissolve_wetlands = True
     wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_wetlands)
 

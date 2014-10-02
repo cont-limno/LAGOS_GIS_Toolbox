@@ -5,6 +5,7 @@ import arcpy
 from arcpy import env
 from arcpy.da import *
 from arcpy.sa import *
+import csiutils as cu
 
 def split_strahler(stream_area_fc, streams, out_area_fc):
     """This function splits up the NHDArea feature class, which does not
@@ -20,46 +21,63 @@ def split_strahler(stream_area_fc, streams, out_area_fc):
     old_workspace = env.workspace
     env.workspace = 'in_memory'
     cu.multi_msg("Splitting stream area polygons between confluences and joining Strahler order to them...")
+    cu.multi_msg('next messages for testing')
+    arcpy.CheckOutExtension('Spatial')
+    cu.multi_msg('euc')
     euc = EucAllocation(streams, cell_size = '50', source_field = 'OBJECTID')
+    arcpy.CheckInExtension('Spatial')
+    cu.multi_msg('conversion')
     arcpy.RasterToPolygon_conversion(euc, 'allocation_polys')
-    arcpy.JoinField_management('allocation_polys', 'grid_code', streams, 'OBJECTID', ['Strahler', 'LengthKm'])
+    stream_id_field = arcpy.ListFields(streams, 'Permanent_')[0].name
+    cu.multi_msg('join')
+    arcpy.JoinField_management('allocation_polys', 'grid_code', streams, 'OBJECTID', ['Strahler', 'LengthKm', stream_id_field])
+    cu.multi_msg('identity')
     arcpy.Identity_analysis(stream_area_fc, 'allocation_polys', out_area_fc)
     env.workspace = old_workspace
+    cu.multi_msg("Splitting strema area polygons finished.")
 
 def wetland_order(rivex, stream_area_fc, nwi, out_fc):
-    arcpy.env.extent = "MINOF"
     arcpy.env.workspace = 'in_memory'
-    split_strahler(stream_area_fc, rivex, 'stream_area_split')
+    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
+    arcpy.env.extent = nwi
 
-    # Buffer the stream centerlines and the stream areas and union them together
-    arcpy.Buffer_analysis(rixev, "centerline_buffer", "30 meters")
-    arcpy.Buffer_analysis('stream_area_split', 'stream_area_buffer', '30 meters')
-    arcpy.Union_analysis(['centerline_buffer', 'stream_area_buffer'], 'stream_features_buffered')
+    # Buffer the wetland perimeters by 30 meters
+    cu.multi_msg('Creating 30m wetland buffers...')
+    arcpy.Buffer_analysis(nwi, "wetland_buffers", "30 meters", "OUTSIDE_ONLY")
+    arcpy.env.extent = "wetland_buffers"
+
+    cu.multi_msg('Preparing for river line and area merge...')
+    arcpy.CopyFeatures_management(rivex, 'rivex_extent')
+    arcpy.CopyFeatures_management(stream_area_fc, 'stream_area_extent')
+    arcpy.MakeFeatureLayer_management('rivex_extent', 'rivex_lyr')
+    arcpy.SelectLayerByLocation_management('rivex_lyr', 'COMPLETELY_WITHIN', stream_area_fc)
+    arcpy.CopyFeatures_management('rivex_lyr', 'rivex_for_splitting')
+    arcpy.SelectLayerByAttribute_management('rivex_lyr', 'SWITCH_SELECTION')
+    arcpy.CopyFeatures_management('rivex_lyr', 'rivex_not_areas')
+    split_strahler('stream_area_extent', 'rivex_for_splitting', 'stream_area_split')
+
+    # areas TO lines
+    arcpy.PolygonToLine_management('stream_area_split', 'streamarea_to_line', False)
+
+    # Merge features together
+    arcpy.Merge_management(['streamarea_to_line', 'rivex_not_areas'], 'merged_rivers', 'NO_TEST')
 
 
-    arcpy.Buffer_analysis("allwetpre", "allwet", "30 meters", "OUTSIDE_ONLY")
 
-    # Add wetland order field for connected wetlands
-    arcpy.AddField_management("allwet","WetOrder", "TEXT")
 
+    # FOR THE LINE-BASED PORTION
     # Spatial join connected wetlands and streams
     ##################Field Maps########################
     fms = arcpy.FieldMappings()
     fm_strahlermax = arcpy.FieldMap()
     fm_strahlersum = arcpy.FieldMap()
-    fm_wetorder = arcpy.FieldMap()
-    fm_wetha = arcpy.FieldMap()
-    fm_attribute = arcpy.FieldMap()
     fm_lengthkm = arcpy.FieldMap()
-    fm_csi = arcpy.FieldMap()
+    fm_wetid = arcpy.FieldMap()
 
-    fm_strahlermax.addInputField(rivex, "Strahler")
-    fm_strahlersum.addInputField(rivex, "Strahler")
-    fm_wetorder.addInputField("allwet", "WetOrder")
-    fm_wetha.addInputField("allwet", "WetHa")
-    fm_attribute.addInputField("allwet", "ATTRIBUTE")
-    fm_lengthkm.addInputField(rivex, "LengthKm")
-    fm_csi.addInputField("allwet", "CSI_ID")
+    fm_strahlermax.addInputField('merged_rivers', "Strahler")
+    fm_strahlersum.addInputField('merged_rivers', "Strahler")
+    fm_lengthkm.addInputField('merged_rivers', "LengthKm")
+    fm_wetid.addInputField("wetland_buffers", "WET_ID")
 
     fm_lengthkm.mergeRule = 'Sum'
     fm_strahlermax.mergeRule = 'Max'
@@ -82,97 +100,160 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
 
     fms.addFieldMap(fm_strahlermax)
     fms.addFieldMap(fm_strahlersum)
-    fms.addFieldMap(fm_wetorder)
-    fms.addFieldMap(fm_wetha)
-    fms.addFieldMap(fm_attribute)
     fms.addFieldMap(fm_lengthkm)
-    fms.addFieldMap(fm_csi)
+    fms.addFieldMap(fm_wetid)
     #####################################################
 
-    arcpy.SpatialJoin_analysis("allwet", rivex, "conwetorder", '', '', fms)
+    arcpy.SpatialJoin_analysis("wetland_buffers", 'merged_rivers', "wetland_spjoin_streams", '', '', fms)
 
     # Get the stream count from the join count
-    cu.rename_field("conwetorder", 'Join_Count', "StreamCnt", True)
-
-##    # Create output feature class in a file geodatabase
-##    arcpy.CreateFileGDB_management(outfolder, "WetlandOrder")
-##    outgdb = os.path.join(outfolder, "WetlandOrder.gdb")
-##    arcpy.FeatureClassToFeatureClass_conversion("conwetorder", outgdb, "Buffer30m")
-##    buffer30m = os.path.join(outgdb,"Buffer30m")
+    cu.rename_field("wetland_spjoin_streams", 'Join_Count', "StreamCnt", True)
 ##
+##    # FOR THE AREA-BASED PORTION
+##    # Spatial join connected wetlands and streams
+##    ##################Field Maps########################
+##    fms = arcpy.FieldMappings()
+##    fm_strahlermax = arcpy.FieldMap()
+##    fm_strahlersum = arcpy.FieldMap()
+##    fm_lengthkm = arcpy.FieldMap()
+##    fm_wetid = arcpy.FieldMap()
 ##
+##    fm_strahlermax.addInputField('stream_area_split', "Strahler")
+##    fm_strahlersum.addInputField('stream_area_split', "Strahler")
+##    fm_lengthkm.addInputField('stream_area_split', "LengthKm")
+##    fm_wetid.addInputField("wetland_buffers", "WET_ID")
 ##
-##    outfc = os.path.join(outgdb, "Buffer30m")
-##    for field in ['BUFF_DIST', 'ACRES', 'Target_FID', 'Shape_Length']:
-##        try:
-##            arcpy.DeleteField_management(outfc, field)
-##        except:
-##            continue
+##    fm_lengthkm.mergeRule = 'Sum'
+##    fm_strahlermax.mergeRule = 'Max'
+##    fm_strahlersum.mergeRule = 'Sum'
+##
+##    lengthkm_name = fm_lengthkm.outputField
+##    lengthkm_name.name = 'StreamKm'
+##    lengthkm_name.aliasName = 'StreamKm'
+##    fm_lengthkm.outputField = lengthkm_name
+##
+##    strahlermax_name = fm_strahlermax.outputField
+##    strahlermax_name.name = 'StrOrdMax'
+##    strahlermax_name.aliasName = 'StrOrdMax'
+##    fm_strahlermax.outputField = strahlermax_name
+##
+##    strahlersum_name = fm_strahlersum.outputField
+##    strahlersum_name.name = 'StrOrdSum'
+##    strahlersum_name.aliasName = 'StrOrdSum'
+##    fm_strahlersum.outputField = strahlersum_name
+##
+##    fms.addFieldMap(fm_strahlermax)
+##    fms.addFieldMap(fm_strahlersum)
+##    fms.addFieldMap(fm_lengthkm)
+##    fms.addFieldMap(fm_wetid)
+##    #####################################################
+##
+##    arcpy.SpatialJoin_analysis("wetland_buffers", 'stream_area_split', "wetland_spjoin_area", '', '', fms)
+##
+##    # Get the stream count from the join count
+##    cu.rename_field("wetland_spjoin_area", 'Join_Count', "StreamCnt", True)
+##
+##    # I don't know about you but I can't think of a way to do this without
+##    # a search cursor, doesn't seem like the merge rules will do it
+##
+##    # Merge into one table
+##    arcpy.Merge_management(['wetland_spjoin_area', 'wetland_spjoin_line'], 'double_wetlands')
+##
+##    # Make an empty table for the merged 2 to 1 records
+##    arcpy.MakeTableView_management('double_wetlands', 'wetlands_template')
+##    arcpy.CreateTable_management(arcpy.env.workspace, 'wetlands_merged', 'wetlands_template')
+##
+##    # for each unique WET_ID, do the math
+##    wet_ids = list(set(([row[0] for row in arcpy.da.SearchCursor('double_wetlands', 'WET_ID')])))
+##    print ("length of wetids is {}".format(len(wet_ids)))
+##
+##    update_fields = ['WET_ID', 'StrOrdMax', 'StrOrdSum', 'StreamKm', 'StreamCnt']
+##    # going to write one new feature in the new fc with the merged attributes
+##
+##    new_rows = []
+##    for wid in wet_ids:
+##        where_clause = """"WET_ID" = {}""".format(wid)
+##        with arcpy.da.SearchCursor('double_wetlands', update_fields, where_clause) as cursor:
+##            StrOrdMax, StrOrdSum, StreamKm, StreamCnt = [], [], [], []
+##            for row in cursor:
+##                StrOrdMax.append(row[1])
+##                StrOrdSum.append(row[2])
+##                StreamKm.append(row[3])
+##                StreamCnt.append(row[4])
+##            if any(StrOrdMax):
+##                new0 = max(value for value in StrOrdMax if value is not None)
+##            else:
+##                new0 = 0
+##            if any(StrOrdSum):
+##                new1 = sum(value for value in StrOrdSum if value is not None)
+##            else:
+##                new1 = 0
+##            if any(StreamKm):
+##                new2 = sum(value for value in StreamKm if value is not None)
+##            else:
+##                new2 = 0
+##            if any (StreamCnt):
+##                new3 = sum(value for value in StreamCnt if value is not None)
+##            else:
+##                new3 = 0
+##            new_row = new_rows.append([wid, new0, new1, new2, new3])
+##    print('length of new_rows table is {}'.format(len(new_rows)))
+##    cursor = arcpy.da.InsertCursor('wetlands_merged', update_fields)
+##    for row in new_rows:
+##        cursor.insertRow(row)
+##    del cursor
+##
+    # Join the new fields back to the original feature class based on WET_ID
+    join_fields = ['StrOrdMax', 'StrOrdSum', 'StreamKm', 'StreamCnt']
+    arcpy.CopyFeatures_management(nwi, out_fc)
+    arcpy.JoinField_management(out_fc, 'WET_ID', 'wetland_spjoin_streams', 'WET_ID', join_fields)
 
-    # Create Veg field
-    arcpy.AddField_management(outfc, "Veg", "TEXT")
-    arcpy.CalculateField_management(outfc, "Veg", "!ATTRIBUTE![:3]", "PYTHON")
+    # Set these to 0 where there is no connection
+    cu.redefine_nulls(out_fc, join_fields, [0,0,0,0])
 
-    # Calculate Veg Field
-    arcpy.AddField_management(outfc, "VegType", "TEXT")
-
-    with arcpy.da.UpdateCursor(outfc, ["Veg", "VegType"]) as cursor:
+    # Classify VegType: 4 options based on class code in ATTRIBUTE field
+    arcpy.AddField_management(out_fc, "VegType", "TEXT")
+    with arcpy.da.UpdateCursor(out_fc, ["ATTRIBUTE", "VegType"]) as cursor:
         for row in cursor:
-            if row[0] == "PEM":
+            attr_abbv = row[0][:3]
+            if attr_abbv == "PEM" or attr_abbv == "PAB":
                 row[1] = "PEMorPAB"
-            elif row[0] == "PAB":
-                row[1] = "PEMorPAB"
-            elif row[0] == "PFO":
+            elif attr_abbv == "PFO":
                 row[1] = "PFO"
-            elif row[0] == "PSS":
+            elif attr_abbv == "PSS":
                 row[1] = "PSS"
             else:
                 row[1] = "Other"
             cursor.updateRow(row)
 
-    # Create and calc regime field
-    # Because there are no place holders where a classification type is omitted in NWI Codes they are hard to separate...
-    arcpy.AddField_management(outfc, "att_", "TEXT") # ex. "PFO1A_"
-    arcpy.AddField_management(outfc, "att3", "TEXT") # ex. "PFO*"
-    arcpy.AddField_management(outfc, "att4", "TEXT") # ex "PFO1*"
-    arcpy.AddField_management(outfc, "Regime", "TEXT") # This will hold final value. ex. "E"
-    att_ = '''!ATTRIBUTE! + "____"'''
-    att3 = "!att_![3]"
-    att4 = "!att_![4]"
-    arcpy.CalculateField_management(outfc, "att_", att_, "PYTHON")
-    arcpy.CalculateField_management(outfc, "att3", att3, "PYTHON")
-    arcpy.CalculateField_management(outfc, "att4", att4, "PYTHON")
-
-    # So we run a cursor...            row[0]  row[1]   row[2]
-    with arcpy.da.UpdateCursor(outfc, ["att3", "att4", "Regime"]) as cursor:
+    # Determine the regime from the letter code. Examples: PSS1E ---> E,
+    #  PEM1/SS1Fb --> F
+    class_codes = 'RB UB AB US ML EM SS FO'.split()
+    regime_codes = 'A B C E F G H J K'.split()
+    arcpy.AddField_management(out_fc, "Regime", "TEXT")
+    with arcpy.da.UpdateCursor(out_fc, ["ATTRIBUTE", "Regime"]) as cursor:
         for row in cursor:
-            if row[0].isdigit():  # if the 4th character is a number (subclass) the next number is the regime
-                row[2] = row[1]
-            elif row[0].isupper(): # if the 4th character is an upper case letter it is the regime
-                row[2] = row[0]
-            elif row[0].islower(): # if the 4th character is a lower case letter there's no water regime
-                row[2] = "unknown"
-            elif row[1] == "/":     # if there are multiple clasifications the regime is unknown
-                row[2] = "unknown"
-            else:                   # if there's some other odd character the regime is unknown.
-                row[2] = "unknown"
-
+            # All the wetlands are already palustrine, so if we remove the class
+            # codes, any capital letters left besides the P in front
+            # are the regime code
+            # example codes: PEM1E, PSS1/EM1E, PEM1/5C, PUSA, PSSf
+            # If you ever can figure out the regex for this instead, go ahead.
+            code_value = row[0]
+            regime_value = 'unknown'
+            # this bit searches for the class codes and replaces them with nothing
+            # this is necessary because meaning of A, B, E, F is context dependent
+            for class_code in class_codes:
+                if class_code in code_value:
+                    code_value = code_value.replace(class_code, '')
+            for char in code_value:
+                if char in regime_codes:
+                    regime_value = char
+            row[1] = regime_value
             cursor.updateRow(row)
-
-    # Then we run another cursor...     row[0]
-    with arcpy.da.UpdateCursor(outfc, ["Regime"]) as cursor:
-        for row in cursor:
-            if row[0] == "/":
-                row[0] = "unknown"
-
-            cursor.updateRow(row)
-
-    arcpy.DeleteField_management(outfc, "att_")
-    arcpy.DeleteField_management(outfc, "att3")
-    arcpy.DeleteField_management(outfc, "att4")
 
     # Calculate WetOrder from StrOrdSum
-    with arcpy.da.UpdateCursor(outfc, ["StrOrdSum", "WetOrder"]) as cursor:
+    arcpy.AddField_management(out_fc,"WetOrder", "TEXT")
+    with arcpy.da.UpdateCursor(out_fc, ["StrOrdSum", "WetOrder"]) as cursor:
         for row in cursor:
             if row[0] == 0:
                 row[1] = "Isolated"
@@ -183,25 +264,23 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
             else:
                 row[1] = "Connected"
             cursor.updateRow(row)
+    arcpy.Delete_management('in_memory')
 
-    # Delete intermediate veg field
-    arcpy.DeleteField_management(outfc, "Veg")
-    try:
-        arcpy.DeleteField_management(outfc, "Shape_Length")
-        arcpy.DeleteField_management(outfc, "Shape_Area")
-    except:
-        pass
-
-    # Join fields from buffer rings back to original polygons.
-    arcpy.JoinField_management("allwetpre", "CSI_ID", buffer30m, "CSI_ID", ["WetOrder","StrOrdSum","StrOrdMax","StreamCnt","StreamKm", "VegType", "Regime"])
-    arcpy.FeatureClassToFeatureClass_conversion("allwetpre", outgdb, "WetlandOrder")
+def test():
+    # User input parameters:
+    rivex = 'C:/GISData/Rivex.gdb/Rivex'
+    stream_area_fc = r'C:\GISData\Scratch\Scratch.gdb\All_StreamRiver_Area_Final'
+    nwi =  r'C:\GISData\Wetlands_Update_Aug2014.gdb\Rhode_Island_NWI'
+    out_fc ='C:/GISData/Wetlands_Update_Sept2014_ORDER.gdb/Rhode_Island_Wetlands'
+    wetland_order(rivex, stream_area_fc, nwi, out_fc)
 
 def main():
     # User input parameters:
     rivex = arcpy.GetParameterAsText(0) # A shapefile of rivers that has the "Strahler" field produced by RivEx extension.
     stream_area_fc = arcpy.GetParameterAsText(1) # shapefile of NHDAreas merged together with duplicates deleted
-    nwi = arcpy.GetParameterAsText(1) # NWI feature class
-    outfolder = arcpy.GetParameterAsText(2) # Location where output gets stored.
+    nwi = arcpy.GetParameterAsText(2) # NWI feature class
+    out_fc = arcpy.GetParameterAsText(3) # OPTIONAL: save as fc
+    wetland_order(rivex, stream_area_fc, nwi, out_fc)
 
 if __name__ == '__main__':
     main()

@@ -17,12 +17,15 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     arcpy.FeatureToLine_management('lakes_30m', 'shorelines')
 
     # 3 selections for the wetlands types we want to look at
-    forested_exp = """ "WETLAND_TY" = 'Freshwater Forested/Shrub Wetland' """
-    emergent_exp = """ "WETLAND_TY" = 'Freshwater Emergent Wetland' """
-    other_exp = """ "WETLAND_TY" = 'Other' """
+    openwater_exp = """"VegType" = 'PEMorPAB'"""
+    forested_exp = """"VegType" = 'PFO'"""
+    scrubshrub_exp = """"VegType" = 'PSS'"""
+    other_exp = """"VegType" = 'Other'"""
+    all_exp = ''
 
-    selections = [forested_exp, emergent_exp, other_exp]
-    temp_tables = ['Forested', 'Emergent', 'Other']
+
+    selections = [all_exp, forested_exp, scrubshrub_exp, openwater_exp, other_exp]
+    temp_tables = ['AllWetlands', 'ForestedWetlands', 'ScrubShrubWetlands', 'OpenWaterWetlands', 'OtherWetlands']
 
     # for each wetland type, get the count of intersection wetlands, the total area
     # of the lake that is overlapping with wetlands, and the length of the lake
@@ -30,11 +33,18 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     for sel, temp_table in zip(selections, temp_tables):
         print("Creating temporary table for wetlands where {0}".format(sel))
         # this function adds the count and the area using the lake as the zone
-        polygons_in_zones(lakes_fc, lake_id_field, wetlands_fc, temp_table, sel)
+        polygons_in_zones('lakes_30m', lake_id_field, wetlands_fc, temp_table, sel, contrib_area = True)
 
         # make good field names now rather than later
-        new_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']
+
+        # TESTING ONLY print field names
+        print('FIELD NAMES')
+        print([f.name for f in arcpy.ListFields(temp_table)])
+        new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count', 'Poly_Contributing_AREA_ha']
         for f in new_fields:
+            print f
+            print(f.replace('Poly', temp_table))
+            print(arcpy.Exists(temp_table))
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
         # shoreline calculation
@@ -59,28 +69,34 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
             arcpy.Delete_management(item)
 
     # join em up and copy to final
-    temp_tables.remove('Forested')
+    temp_tables.remove('AllWetlands')
     for t in temp_tables:
         try:
-            arcpy.JoinField_management('Forested', lake_id_field, t, lake_id_field)
+            arcpy.JoinField_management('AllWetlands', lake_id_field, t, lake_id_field)
         # sometimes there's no table if it was an empty selection
         except:
             empty_fields = [f.replace('Poly', t) for f in new_fields]
             for ef in empty_fields:
-                arcpy.AddField_management('Forested', ef, 'Double')
-                arcpy.CalculateField_management('Forested', ef, '0', 'PYTHON')
+                arcpy.AddField_management('AllWetlands', ef, 'Double')
+                arcpy.CalculateField_management('AllWetlands', ef, '0', 'PYTHON')
             continue
     # remove all the extra zone fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('Forested', 'Permanent_Identifier_*')]
+    drop_fields = [f.name for f in arcpy.ListFields('AllWetlands', 'Permanent_Identifier_*')]
     for f in drop_fields:
-        arcpy.DeleteField_management('Forested', f)
-    arcpy.CopyRows_management('Forested', out_table)
+        arcpy.DeleteField_management('AllWetlands', f)
 
-##    for item in ['Forested'] + temp_tables:
-##        try:
-##            arcpy.Delete_management(item)
-##        except:
-##            continue
+    # remove all the overlapping metrics, which do not apply by definition
+    fields = [f.name for f in arcpy.ListFields('AlLWetlands')]
+    for f in fields:
+        if 'Overlapping' in f:
+            arcpy.DeleteField_management('AllWetlands', f)
+    arcpy.CopyRows_management('AllWetlands', out_table)
+
+    for item in ['AllWetlands'] + temp_tables:
+        try:
+            arcpy.Delete_management(item)
+        except:
+            continue
 
 def main():
     lakes_fc = arcpy.GetParameterAsText(0)
@@ -90,11 +106,17 @@ def main():
     connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table)
 
 def test():
-    lakes_fc = r'C:\Users\smithn78\CSI_Processing\CSI\TestData_0411.gdb\Lakes_1ha'
+    lakes_fc = r'C:\GISData\Master_Geodata\MasterGeodatabase2014_ver4.gdb\Lacustrine\LAGOS_All_Lakes_4ha'
     lake_id_field = 'Permanent_Identifier'
-    wetlands_fc = r'C:\Users\smithn78\CSI_Processing\CSI\TestData_0411.gdb\Wetlands'
-    out_table = 'C:/GISData/Scratch/Scratch.gdb/AAAtest_connectedwetlands'
+    wetlands_fc = r'C:\GISData\Master_Geodata\MasterGeodatabase2014_ver4.gdb\Palustrine\Wetlands'
+    out_table = r'C:\GISData\Attribution_Sept2014.gdb/LakeWetlandConnections_FIXED'
     connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table)
+
+##    lakes_fc = r'C:\GISData\Scratch\Scratch.gdb\Lakes_OCT1'
+##    lake_id_field = 'Permanent_Identifier'
+##    wetlands_fc = r'C:\GISData\Scratch\Scratch.gdb\Wetlands_OCT1'
+##    out_table = r'C:\GISData\Scratch\Scratch.gdb\ConnectedWetlands_OCT1TEST'
+##    connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table)
 
 if __name__ == '__main__':
     main()

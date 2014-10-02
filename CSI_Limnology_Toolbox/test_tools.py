@@ -17,7 +17,7 @@ import ProprocessNWI as tool
 def main():
     t = time.time()
     env.overwriteOutput = True
-    print("Starting test.")
+    print("Starting test at {}.".format(time.asctime()))
     tool.test()
     time_took = time.time() - t
     print("Tool took %.1f seconds to complete" % time_took)

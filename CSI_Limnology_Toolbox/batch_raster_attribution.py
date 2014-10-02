@@ -98,15 +98,15 @@ def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
 # make the list of all_rasters any way that you like
 
 # PRISM
-normal_dir = 'E:/Attribution_Rasters_2013/prism/normals'
-env.workspace = normal_dir
-prism_list = [os.path.join(normal_dir, r) for r in arcpy.ListRasters('PRISM*annual.tif')] # annuals only
-prism_dirs = [os.path.join('E:/Attribution_Rasters_2013/prism', d) for d in
-                ['ppt', 'tmean', 'tmin', 'tmax']]
-for pdir in prism_dirs:
-    env.workspace = pdir
-    prism_list.extend([os.path.join(pdir, r) for r in arcpy.ListRasters('us*.tif')]) # annuals only
-
+##normal_dir = 'E:/Attribution_Rasters_2013/prism/normals'
+##env.workspace = normal_dir
+##prism_list = [os.path.join(normal_dir, r) for r in arcpy.ListRasters('PRISM*annual.tif')] # annuals only
+##prism_dirs = [os.path.join('E:/Attribution_Rasters_2013/prism', d) for d in
+##                ['ppt', 'tmean', 'tmin', 'tmax']]
+##for pdir in prism_dirs:
+##    env.workspace = pdir
+##    prism_list.extend([os.path.join(pdir, r) for r in arcpy.ListRasters('us*.tif')]) # annuals only
+##
 ###GROUNDWATER
 ##gw_dir = 'E:/Attribution_Rasters_2013/Groundwater'
 ##env.workspace = gw_dir
@@ -117,13 +117,15 @@ for pdir in prism_dirs:
 ##            'E:/Attribution_Rasters_2013/MRLC/nlcd2001.tif',
 ##            'E:/Attribution_Rasters_2013/MRLC/nlcd2006.tif',
 ##            'E:/Attribution_Rasters_2013/MRLC/nlcd2011.tif']
-##
-###canopy and impervious
-##other_mrlc_list = ['E:/Attribution_Rasters_2013/MRLC/impervious2001.tif',
-##                    'E:/Attribution_Rasters_2013/MRLC/impervious2006.tif',
-##                    'E:/Attribution_Rasters_2013/MRLC/impervious2011.tif',
-##                    'E:/Attribution_Rasters_2013/MRLC/canopy2001.tif']
-##
+
+#canopy and impervious
+other_mrlc_list = ['E:/Attribution_Rasters_2013/MRLC/impervious2001.tif',
+                    'E:/Attribution_Rasters_2013/MRLC/impervious2006.tif',
+                    'E:/Attribution_Rasters_2013/MRLC/impervious2011.tif',
+                    'E:/Attribution_Rasters_2013/MRLC/canopy2001.tif',
+                    'E:/Attribution_Rasters_2013/MRLC/canopy2011.tif'
+                    ]
+
 ### cropland
 ##crop_dir = r'E:\Attribution_Rasters_2013\Cropland'
 ##env.workspace = crop_dir
@@ -140,24 +142,27 @@ for pdir in prism_dirs:
 ##    nadp_list.extend([os.path.join(ndir, r) for r in arcpy.ListRasters('dep*5.tif')]) # 85, 95, 2005
 ##
 ##others = []
-##
-### make however you want, ideally order from coarse to fine resolution
+
+# make however you want, ideally order from coarse to fine resolution
 ##ALL_RASTERS = (nadp_list + groundwater_list + prism_list + cropland_list +
 ##                lulc_list + other_mrlc_list + others)
+
+ALL_RASTERS = (other_mrlc_list)
 
 # make list of is_thematic True/False values however you want,
 # I know my only thematic rasters are LULC or cropland rasters so using a test
 ##THEMATIC_FLAGS = map(lambda x: x in lulc_list or x in cropland_list, ALL_RASTERS)
+THEMATIC_FLAGS = [False] * len(ALL_RASTERS)
 
 
 MGDB = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver3.gdb/US_Extents'
 ALL_EXTENTS = [os.path.join(MGDB, e) for e in ['HU12', 'HU8', 'HU4', 'EDU', 'COUNTY', 'STATE']]
 
-OUT_GDB = 'C:/GISData/Attribution_June17_2014.gdb'
+OUT_GDB = r'C:\GISData\Attribution_Sept2014_FIXES.gdb'
 SEARCH_GDBS = []
 
-LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_jun17.txt'
+LOG_FILE = 'C:/Users/smithn78/CSI_Processing/batch_rasters_sept21.txt'
 
 # go ahead and do it! leave this alone too if you're reusing the script
-batch_raster_attribution(prism_list, ALL_EXTENTS, 'ZoneID', OUT_GDB,
-                            [False] * len(prism_list), [], LOG_FILE)
+batch_raster_attribution(ALL_RASTERS, ALL_EXTENTS, 'ZoneID', OUT_GDB,
+                            THEMATIC_FLAGS, [], LOG_FILE)

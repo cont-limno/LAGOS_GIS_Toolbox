@@ -28,12 +28,12 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 43600, 43613, 43615, 43617, 43618, 43619, 43621)
     with arcpy.da.SearchCursor(temp_lakes, ["FCode"]) as cursor:
             for row in cursor:
-                if row[0] not in fcodes + (43061,):
+                if row[0] not in fcodes + (43601,):
                     need_selection = True
 
     if need_selection:
         whereClause = '''
-                    "(AreaSqKm" >=0.04 AND "FCode" IN %s\
+                    ("AreaSqKm" >=0.04 AND "FCode" IN %s)\
                     OR ("AreaSqKm" >= 0.1 AND "FCode" = 43601)''' % (fcodes,)
         arcpy.Select_analysis(temp_lakes, "lakes_4ha", whereClause)
         temp_lakes = os.path.join(arcpy.env.workspace, "lakes_4ha")
@@ -75,7 +75,10 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
     for sel, temp_table in zip(selections, temp_tables):
         cu.multi_msg("Creating temporary table called {0} for lakes where {1}".format(temp_table, sel))
         polygons_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
-        new_fields = ['Poly_AREA_ha', 'Poly_AREA_pct', 'Poly_Count']
+        new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
+        avg_size_field = temp_table + '_AvgSize_ha'
+        arcpy.AddField_management(temp_table, avg_size_field , 'DOUBLE')
+        arcpy.CalculateField_management(temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
         for f in new_fields:
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
@@ -115,7 +118,7 @@ def test():
     zones_fc = os.path.join(ws, 'HU12')
     zone_field = 'ZoneID'
     lakes_fc =  os.path.join(ws, 'Lakes_1ha')
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/test_lakes_in_zones_updates'
+    output_table = 'C:/GISData/Scratch/Scratch.gdb/LAKEZONE_SEPT'
     lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table)
 
 if __name__ == '__main__':

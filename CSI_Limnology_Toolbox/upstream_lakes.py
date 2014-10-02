@@ -1,17 +1,14 @@
 #-------------------------------------------------------------------------------
-# Name:        module1
+# Name:        upstream_lakes
 # Purpose:
 #
 # Author:      smithn78
 #
 # Created:     16/07/2014
-# Copyright:   (c) smithn78 2014
-# Licence:     <your licence>
 #-------------------------------------------------------------------------------
 import os
 import arcpy
 import csiutils as cu
-
 
 def upstream_lakes(nhd_gdb, output_table):
     #define paths in nhd geodatabase
@@ -27,8 +24,8 @@ def upstream_lakes(nhd_gdb, output_table):
 
     cu.multi_msg('Preparing layers and fields for calculations....')
 
-    # select only lakes as defined in our project, greater than 4ha, and greater
-    # than 10ha
+    # select only lakes as defined in our project: waterbodies with one of these
+    # types and greater than 4ha, and certain reservoirs greater than 10ha
     fcodes = (39000, 39004, 39009, 39010, 39011, 39012, 43600, 43613, 43615, 43617, 43618, 43619, 43621)
     gte_4ha_lakes_query = '''("AreaSqKm" >=0.04 AND "FCode" IN %s) OR ("FCode" = 43601 AND "AreaSqKm" >= 0.1)''' % (fcodes,)
     gte_10ha_lakes_query = '''("AreaSqKm" >=0.1 AND "FCode" IN %s) OR ("FCode" = 43601 AND "AreaSqKm" >= 0.1)''' % (fcodes,)
@@ -37,10 +34,10 @@ def upstream_lakes(nhd_gdb, output_table):
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_10ha_lakes', gte_10ha_lakes_query)
     arcpy.CopyRows_management('gte_4ha_lakes', 'output_table')
 
-    # need this for line 61 make feature layer to work right!
+    # (need this for line 61 make feature layer to work right!)
     arcpy.CopyFeatures_management('gte_4ha_lakes', 'gte_4ha_lakes_DISK')
 
-    # add the new fields we'll calculate
+    # add the new fields we'll calculate: count and area
     count_fields = ['Upstream_Lakes_4ha_Count', 'Upstream_Lakes_10ha_Count']
     area_fields = ['Upstream_Lakes_4ha_Area_ha', 'Upstream_Lakes_10ha_Area_ha']
     for cf in count_fields:
@@ -55,7 +52,7 @@ def upstream_lakes(nhd_gdb, output_table):
     with arcpy.da.UpdateCursor('output_table', ['Permanent_Identifier'] + new_fields) as cursor:
         for row in cursor:
             id = row[0]
-##            cu.multi_msg('Calculating values for lake ID {0}'.format(id))
+
             # get the junction points on top of this lake, can be 0 or several
             where_clause = """"{0}" = '{1}'""".format('Permanent_Identifier', id)
             arcpy.MakeFeatureLayer_management('gte_4ha_lakes_DISK', "this_lake",
@@ -125,12 +122,14 @@ def upstream_lakes(nhd_gdb, output_table):
                         row[4] = total_area
             cursor.updateRow(row)
 
+            # delete intermediates before next iteration
             for item in ['this_lake', 'this_lake_jxns', 'upstream', 'these_4ha_lakes', 'these_10ha_lakes']:
                     try:
                         arcpy.Delete_management(item)
                     except:
                         continue
 
+    # clean up the output table
     all_fields = [f.name for f in arcpy.ListFields('output_table')]
     for f in all_fields:
         if f not in ['Permanent_Identifier'] + new_fields:
@@ -139,6 +138,7 @@ def upstream_lakes(nhd_gdb, output_table):
             except:
                 continue
 
+    # write out the final file and clean up intermediates
     arcpy.CopyRows_management('output_table', output_table)
     for item in ['junctions', 'gte_4ha_lakes', 'gte_10ha_lakes', 'output_table']:
         arcpy.Delete_management(item)

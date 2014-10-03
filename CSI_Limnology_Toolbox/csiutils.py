@@ -62,11 +62,6 @@ def merge_many(merge_list, out_fc, group_size = 20):
 def rename_field(inTable, oldFieldName, newFieldName, deleteOld = False):
     import arcpy
     old_field = arcpy.ListFields(inTable, oldFieldName)
-    print(inTable)
-    print(oldFieldName)
-    print([f.name for f in old_field])
-    print(newFieldName)
-    print(old_field[0].type)
     arcpy.AddField_management(inTable, newFieldName, old_field[0].type, field_length = old_field[0].length)
     arcpy.CalculateField_management(inTable, newFieldName,'!%s!' % oldFieldName, "PYTHON")
     if deleteOld == True: arcpy.DeleteField_management(inTable, oldFieldName)

@@ -48,6 +48,18 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
         else:
             print("Creating temporary table for all wetlands")
             selected_wetlands = wetlands_fc
+            if dissolve_wetlands == True:
+                arcpy.Dissolve_management(selected_wetlands, 'dissolved_wetlands', multi_part = 'SINGLE_PART')
+                dissolved_temp_table = temp_table.replace('Undissolved', 'Dissolved')
+                temp_tables.append(dissolved_temp_table)
+                polygons_in_zones.polygons_in_zones(zones_fc, zone_field, 'dissolved_wetlands', dissolved_temp_table, '')
+                new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
+                avg_size_field = dissolved_temp_table + '_AvgSize_ha'
+                arcpy.AddField_management(dissolved_temp_table, avg_size_field , 'DOUBLE')
+                arcpy.CalculateField_management(dissolved_temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
+                for f in new_fields:
+                    cu.rename_field(dissolved_temp_table, f, f.replace('Poly', dissolved_temp_table), True)
+
         polygons_in_zones.polygons_in_zones(zones_fc, zone_field, selected_wetlands, temp_table, '')
         new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
         avg_size_field = temp_table + '_AvgSize_ha'
@@ -56,17 +68,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
         for f in new_fields:
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
-        if dissolve_wetlands == True:
-            arcpy.Dissolve_management(selected_wetlands, 'dissolved_wetlands', multi_part = 'SINGLE_PART')
-            dissolved_temp_table = temp_table.replace('Undissolved', 'Dissolved')
-            temp_tables.append(dissolved_temp_table)
-            polygons_in_zones.polygons_in_zones(zones_fc, zone_field, 'dissolved_wetlands', dissolved_temp_table, '')
-            new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
-            avg_size_field = dissolved_temp_table + '_AvgSize_ha'
-            arcpy.AddField_management(dissolved_temp_table, avg_size_field , 'DOUBLE')
-            arcpy.CalculateField_management(dissolved_temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
-            for f in new_fields:
-                cu.rename_field(dissolved_temp_table, f, f.replace('Poly', dissolved_temp_table), True)
+
 
     # join em up and copy to final
     temp_tables.remove('AllWetlandsUndissolved')
@@ -106,7 +108,7 @@ def test():
     zones_fc = os.path.join(ws, 'HU12')
     zone_field = 'ZoneID'
     wetlands_fc =  os.path.join(ws, 'Wetlands')
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/WETZONE_SEPT'
+    output_table = 'C:/GISData/Scratch/Scratch.gdb/WETZONE_OCT3'
     dissolve_wetlands = True
     wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_wetlands)
 

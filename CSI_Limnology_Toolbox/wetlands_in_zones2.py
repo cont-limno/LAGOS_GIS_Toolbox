@@ -31,6 +31,11 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 """"VegType" = 'PFO'""",
                 """"VegType" = 'PSS'""",
                 """"VegType" = 'PEMorPAB'""",
+                """"Regime" = 'A'""",
+                """"Regime" = 'C'""",
+                """"Regime" = 'F'""",
+                """"Regime" = 'G'""",
+                """"Regime" = 'H'"""
                 ]
     temp_tables = ['AllWetlandsUndissolved',
                 'IsolatedWetlandsUndissolved',
@@ -38,7 +43,13 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 'ConnectedWetlandsUndissolved',
                 'ForestedWetlandsUndissolved',
                 'ScrubShrubWetlandsUndissolved',
-                'OpenWaterWetlandsUndissolved']
+                'OpenWaterWetlandsUndissolved',
+                'RegimeAWetlandsUndissolved',
+                'RegimeCWetlandsUndissolved',
+                'RegimeFWetlandsUndissolved',
+                'RegimeGWetlandsUndissolved',
+                'RegimeHWetlandsUndissolved'
+                ]
 
     for sel, temp_table in zip(selections, temp_tables):
         if sel:
@@ -108,7 +119,7 @@ def test():
     zones_fc = os.path.join(ws, 'HU12')
     zone_field = 'ZoneID'
     wetlands_fc =  os.path.join(ws, 'Wetlands')
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/WETZONE_OCT3'
+    output_table = 'C:/GISData/Scratch/Scratch.gdb/WETZONE_OCT10_REGIME'
     dissolve_wetlands = True
     wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_wetlands)
 

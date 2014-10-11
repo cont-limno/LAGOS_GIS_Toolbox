@@ -20,7 +20,7 @@ def split_strahler(stream_area_fc, streams, out_area_fc):
     #    allocation polygon boundaries, and add the Strahler values
     old_workspace = env.workspace
     env.workspace = 'in_memory'
-    cu.multi_msg("Splitting stream area polygons between confluences and joining Strahler order to them...")
+    cu.multi_msg("Splitting stream area polygons between confluences and joining 1) Strahler order to them...")
     cu.multi_msg('next messages for testing')
     arcpy.CheckOutExtension('Spatial')
     cu.multi_msg('euc')
@@ -61,9 +61,6 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
 
     # Merge features together
     arcpy.Merge_management(['streamarea_to_line', 'rivex_not_areas'], 'merged_rivers', 'NO_TEST')
-
-
-
 
     # FOR THE LINE-BASED PORTION
     # Spatial join connected wetlands and streams
@@ -108,101 +105,7 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
 
     # Get the stream count from the join count
     cu.rename_field("wetland_spjoin_streams", 'Join_Count', "StreamCnt", True)
-##
-##    # FOR THE AREA-BASED PORTION
-##    # Spatial join connected wetlands and streams
-##    ##################Field Maps########################
-##    fms = arcpy.FieldMappings()
-##    fm_strahlermax = arcpy.FieldMap()
-##    fm_strahlersum = arcpy.FieldMap()
-##    fm_lengthkm = arcpy.FieldMap()
-##    fm_wetid = arcpy.FieldMap()
-##
-##    fm_strahlermax.addInputField('stream_area_split', "Strahler")
-##    fm_strahlersum.addInputField('stream_area_split', "Strahler")
-##    fm_lengthkm.addInputField('stream_area_split', "LengthKm")
-##    fm_wetid.addInputField("wetland_buffers", "WET_ID")
-##
-##    fm_lengthkm.mergeRule = 'Sum'
-##    fm_strahlermax.mergeRule = 'Max'
-##    fm_strahlersum.mergeRule = 'Sum'
-##
-##    lengthkm_name = fm_lengthkm.outputField
-##    lengthkm_name.name = 'StreamKm'
-##    lengthkm_name.aliasName = 'StreamKm'
-##    fm_lengthkm.outputField = lengthkm_name
-##
-##    strahlermax_name = fm_strahlermax.outputField
-##    strahlermax_name.name = 'StrOrdMax'
-##    strahlermax_name.aliasName = 'StrOrdMax'
-##    fm_strahlermax.outputField = strahlermax_name
-##
-##    strahlersum_name = fm_strahlersum.outputField
-##    strahlersum_name.name = 'StrOrdSum'
-##    strahlersum_name.aliasName = 'StrOrdSum'
-##    fm_strahlersum.outputField = strahlersum_name
-##
-##    fms.addFieldMap(fm_strahlermax)
-##    fms.addFieldMap(fm_strahlersum)
-##    fms.addFieldMap(fm_lengthkm)
-##    fms.addFieldMap(fm_wetid)
-##    #####################################################
-##
-##    arcpy.SpatialJoin_analysis("wetland_buffers", 'stream_area_split', "wetland_spjoin_area", '', '', fms)
-##
-##    # Get the stream count from the join count
-##    cu.rename_field("wetland_spjoin_area", 'Join_Count', "StreamCnt", True)
-##
-##    # I don't know about you but I can't think of a way to do this without
-##    # a search cursor, doesn't seem like the merge rules will do it
-##
-##    # Merge into one table
-##    arcpy.Merge_management(['wetland_spjoin_area', 'wetland_spjoin_line'], 'double_wetlands')
-##
-##    # Make an empty table for the merged 2 to 1 records
-##    arcpy.MakeTableView_management('double_wetlands', 'wetlands_template')
-##    arcpy.CreateTable_management(arcpy.env.workspace, 'wetlands_merged', 'wetlands_template')
-##
-##    # for each unique WET_ID, do the math
-##    wet_ids = list(set(([row[0] for row in arcpy.da.SearchCursor('double_wetlands', 'WET_ID')])))
-##    print ("length of wetids is {}".format(len(wet_ids)))
-##
-##    update_fields = ['WET_ID', 'StrOrdMax', 'StrOrdSum', 'StreamKm', 'StreamCnt']
-##    # going to write one new feature in the new fc with the merged attributes
-##
-##    new_rows = []
-##    for wid in wet_ids:
-##        where_clause = """"WET_ID" = {}""".format(wid)
-##        with arcpy.da.SearchCursor('double_wetlands', update_fields, where_clause) as cursor:
-##            StrOrdMax, StrOrdSum, StreamKm, StreamCnt = [], [], [], []
-##            for row in cursor:
-##                StrOrdMax.append(row[1])
-##                StrOrdSum.append(row[2])
-##                StreamKm.append(row[3])
-##                StreamCnt.append(row[4])
-##            if any(StrOrdMax):
-##                new0 = max(value for value in StrOrdMax if value is not None)
-##            else:
-##                new0 = 0
-##            if any(StrOrdSum):
-##                new1 = sum(value for value in StrOrdSum if value is not None)
-##            else:
-##                new1 = 0
-##            if any(StreamKm):
-##                new2 = sum(value for value in StreamKm if value is not None)
-##            else:
-##                new2 = 0
-##            if any (StreamCnt):
-##                new3 = sum(value for value in StreamCnt if value is not None)
-##            else:
-##                new3 = 0
-##            new_row = new_rows.append([wid, new0, new1, new2, new3])
-##    print('length of new_rows table is {}'.format(len(new_rows)))
-##    cursor = arcpy.da.InsertCursor('wetlands_merged', update_fields)
-##    for row in new_rows:
-##        cursor.insertRow(row)
-##    del cursor
-##
+
     # Join the new fields back to the original feature class based on WET_ID
     join_fields = ['StrOrdMax', 'StrOrdSum', 'StreamKm', 'StreamCnt']
     arcpy.CopyFeatures_management(nwi, out_fc)

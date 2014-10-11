@@ -36,7 +36,7 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     burnt.save(burnt_out)
 
     # Delete intermediate rasters and shapefiles
-    for item in [flowline, 'flowline_proj', 'flowline_raster']:
+    for item in ['flowline_proj', 'flowline_raster']:
         arcpy.Delete_management(item)
     arcpy.CheckInExtension("Spatial")
     cu.multi_msg("Burn process completed")

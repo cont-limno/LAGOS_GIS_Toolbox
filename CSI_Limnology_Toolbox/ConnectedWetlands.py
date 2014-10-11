@@ -27,8 +27,7 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     selections = [all_exp, forested_exp, scrubshrub_exp, openwater_exp, other_exp]
     temp_tables = ['AllWetlands', 'ForestedWetlands', 'ScrubShrubWetlands', 'OpenWaterWetlands', 'OtherWetlands']
 
-    # for each wetland type, get the count of intersection wetlands, the total area
-    # of the lake that is overlapping with wetlands, and the length of the lake
+    # for each wetland type, get the count of intersection wetlands, and the length of the lake
     # shoreline that is within a wetland polygon
     for sel, temp_table in zip(selections, temp_tables):
         print("Creating temporary table for wetlands where {0}".format(sel))
@@ -36,15 +35,7 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
         polygons_in_zones('lakes_30m', lake_id_field, wetlands_fc, temp_table, sel, contrib_area = True)
 
         # make good field names now rather than later
-
-        # TESTING ONLY print field names
-        print('FIELD NAMES')
-        print([f.name for f in arcpy.ListFields(temp_table)])
-        new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count', 'Poly_Contributing_AREA_ha']
         for f in new_fields:
-            print f
-            print(f.replace('Poly', temp_table))
-            print(arcpy.Exists(temp_table))
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
         # shoreline calculation

@@ -94,7 +94,7 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
     be the 'Permanent_Identifier' column
 
     out_fc: the desired path for the output feature class"""
-    ws = 'C:/GISData/Scratch/fake_memory.gdb'
+    ws = 'in_memory'
     env.workspace = ws
 
     print("Creating frequency table...")
@@ -167,6 +167,7 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
 
     else:
         print("There were no duplicates.")
+        arcpy.CopyFeatures_management(in_fc, out_fc)
 
 # to remove geographic duplicates: for each pair, if the overlapping area exceeds
 # 90% of the area of the source lake (i.e. they are almost certainly two copies

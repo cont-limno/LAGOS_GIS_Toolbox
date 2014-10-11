@@ -19,6 +19,7 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
 
     temp_polyzones = cu.create_temp_GDB('temp_polyzones')
     selected_polys = os.path.join(temp_polyzones, 'selected_polys')
+    cu.multi_msg('Copying/selecting polygon features...')
     if interest_selection_expr:
         arcpy.Select_analysis(polygons_of_interest, selected_polys, interest_selection_expr)
     else:
@@ -29,6 +30,7 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
 
     # use tabulate intersection for the areas overlapping
     tab_table = 'tabulate_intersection_table'
+    cu.multi_msg('Tabulating intersection between zones and polygons...')
     arcpy.TabulateIntersection_analysis(zone_fc, zone_field, selected_polys,
                                         tab_table)
 
@@ -67,10 +69,12 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
     fms.addFieldMap(fm_count)
     fms.addFieldMap(fm_contrib_area)
 
+    cu.multi_msg('Spatial join between zones and wetlands...')
     arcpy.SpatialJoin_analysis(zone_fc, selected_polys, spjoin_fc,
                                  "JOIN_ONE_TO_ONE", "KEEP_ALL", fms,
                                  "INTERSECT")
 
+    cu.multi_msg('Refining output...')
     arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_Count", "Poly_Contributing_AREA_ha"])
     final_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count', 'Poly_Contributing_AREA_ha']
 
@@ -83,6 +87,8 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
         arcpy.Delete_management(item)
     arcpy.Delete_management(temp_polyzones)
     arcpy.env.workspace = old_workspace
+
+    cu.multi_msg('Polygons in zones tool complete.')
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

@@ -1,2 +1,5 @@
+October 8, 2014
+The shoreline lengths calculated in ConnectedWetlands.py are from the 30m lake buffers, not the lakes themselves. They could slightly exceed the perimeter of the lake if 100% of the shoreline intersects wetlands, and they are slightly greater than they should be in all cases. The shoreline features must be from the buffers for the intersection to work correctly but the calculated shoreline length values could be scaled by a factor [shoreline shape length]/[original lake shape length] to fix this.
+
 June 2, 2014
 False negative: When I ran Zonal Attribution for Raster Data using County and TRI, it gave the warning that 2 zones had null data. None have null data. They all look totally fine. Also, that message should be revised for clarity.

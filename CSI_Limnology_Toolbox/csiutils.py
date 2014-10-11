@@ -150,3 +150,13 @@ def create_temp_GDB(name):
     os.mkdir(temp_dir)
     arcpy.CreateFileGDB_management(temp_dir, '{0}.gdb'.format(name))
     return(os.path.join(temp_dir,'{0}.gdb'.format(name)))
+
+def lengthen_field(table_or_fc, field, new_length):
+    old_field = arcpy.ListFields(table_or_fc, field)
+    temp_field = 't_' + field
+    arcpy.AddField_management(table_or_fc, temp_field, old_field[0].type, field_length = new_length)
+    arcpy.CalculateField_management(table_or_fc, temp_field, '!{}!'.format(field), 'PYTHON')
+    arcpy.DeleteField_management(table_or_fc, field)
+    arcpy.AddField_management(table_or_fc, field, old_field[0].type, field_length = new_length)
+    arcpy.CalculateField_management(table_or_fc, field, '!{}!'.format(temp_field), 'PYTHON')
+    arcpy.DeleteField_management(table_or_fc, temp_field)

@@ -7,6 +7,7 @@ import os, re, shutil
 import arcpy
 from arcpy import env
 
+
 def select_pour_points(nhd_gdb, subregion_dem, out_dir,
                         projection = arcpy.SpatialReference(102039)):
     # Preliminary environmental settings:
@@ -41,22 +42,28 @@ def select_pour_points(nhd_gdb, subregion_dem, out_dir,
     arcpy.CopyFeatures_management(flowline, 'eligible_flowlines')
 
     # Add field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
-    # Flowlines get positive values, waterbodies get negative
-    # this will help us to know which is which later
+##    # Flowlines get positive values, waterbodies get negative
+##    # this will help us to know which is which later
+    # Calculate lakes pour_id first, then add maximum to streams pour_ids to get unique ids for all
+    arcpy.AddField_management('eligible_lakes', "POUR_ID", "LONG")
+    arcpy.CalculateField_management('eligible_lakes', "POUR_ID", '!OBJECTID!', "PYTHON")
+    pour_ids = []
+    with arcpy.da.SearchCursor('eligible_lakes', ['POUR_ID']) as cursor:
+        for row in cursor:
+            pour_ids.append(row[0])
+    pour_id_offset = max(pour_ids)
     arcpy.AddField_management('eligible_flowlines', "POUR_ID", "LONG")
-    arcpy.CalculateField_management('eligible_flowlines', "POUR_ID", '!OBJECTID!', "PYTHON")
-    arcpy.AddField_management('eligible_lakes', "POUR_ID", "TEXT")
-    arcpy.CalculateField_management('eligible_lakes', "POUR_ID", '!OBJECTID! * -1', "PYTHON")
+    arcpy.CalculateField_management('eligible_flowlines', "POUR_ID", '!OBJECTID! + {}'.format(pour_id_offset), "PYTHON")
 
-    flowline_raster = "flowline_raster"
-    lakes_raster = "lakes_raster"
+
+    # these must be saved as tifs for the mosiac nodata values to work with the watersheds tool
+    flowline_raster = os.path.join(pour_dir, "flowline_raster.tif")
+    lakes_raster = os.path.join(pour_dir, "lakes_raster.tif")
     arcpy.PolylineToRaster_conversion('eligible_flowlines', "POUR_ID", flowline_raster, "", "", 10)
     arcpy.PolygonToRaster_conversion('eligible_lakes', "POUR_ID", lakes_raster, "", "", 10)
 
     # Mosaic the rasters together favoring waterbodies over flowlines.
-    arcpy.MosaicToNewRaster_management([flowline_raster, lakes_raster],
-                pour_dir, "pour_points.tif", projection, "32_BIT_SIGNED",
-                "10", "1", "LAST", "LAST")
+    arcpy.MosaicToNewRaster_management([flowline_raster, lakes_raster], pour_dir, "pour_points.tif", projection, "32_BIT_UNSIGNED", "10", "1", "LAST", "LAST")
 
 def main():
     # User inputs parameters:
@@ -66,11 +73,13 @@ def main():
     select_pour_points(nhd_gdb, subregion_dem, out_dir)
 
 def test():
-    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHDH0411.gdb'
-    subregion_dem = 'C:/GISData/Scratch/NHD0411/NED13_0411.tif'
-    out_dir = 'C:/GISData/Scratch/NHD0411'
+    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHD0411/NHDH0411.gdb'
+    subregion_dem = r'E:\ESRI_FlowDirs\NHD_0411\D8FDR04110001p.tif'
+    out_dir = 'C:/GISData/Scratch/NHD0411/NHD0411'
     select_pour_points(nhd_gdb, subregion_dem, out_dir)
 
+if __name__ == '__main__':
+    main()
 
 
 

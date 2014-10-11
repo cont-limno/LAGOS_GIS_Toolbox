@@ -87,7 +87,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
         # making the output table
         arcpy.CopyRows_management(temp_area_table, temp_entire_table)
-        zonal_stats_fields = ['VARIETY', 'MAJORITY', 'MINORITY', 'AREA', 'MEDIAN']
+        zonal_stats_fields = ['AREA']
         arcpy.JoinField_management(temp_entire_table, zone_field, temp_zonal_table, zone_field, zonal_stats_fields)
 
         # cleanup
@@ -139,10 +139,11 @@ def main():
 
 
 def test():
-    zone_fc = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver3.gdb/HU12'
+    test_gdb = 'C:/Users/smithn78/CSI_Processing/CSI/TestData_0411.gdb'
+    zone_fc = os.path.join(test_gdb, 'HU12')
     zone_field = 'ZoneID'
-    in_value_raster = r'E:\Attribution_Rasters_2013\NewNADP\NO3\dep_no3_2012.tif'
-    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_zonal_warning'
+    in_value_raster = os.path.join(test_gdb, 'NLCD_LandCover_2006')
+    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_zonal_warning_OCT10'
     is_thematic = True
     stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
 

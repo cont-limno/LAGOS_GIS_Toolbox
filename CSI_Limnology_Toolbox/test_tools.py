@@ -12,7 +12,7 @@
 import time
 from arcpy import env
 
-import create_csi_watersheds as tool
+import interlake2 as tool
 
 def main():
     t = time.time()

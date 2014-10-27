@@ -13,19 +13,16 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     env.extent = flowdir
     env.snapRaster = flowdir
     env.cellSize = 10
+    env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     arcpy.CheckOutExtension('Spatial')
 
     # Create a scratch folder and set as current workspace.
     huc8_code = re.search('\d{8}', os.path.basename(flowdir)).group()
     huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
-    print(huc8_code)
-    print(huc4_code)
 
     # create temp directory because we need shape geometry
-##    temp_gdb = cu.create_temp_GDB('watersheds' + huc4_code)
-##    env.workspace = temp_gdb
-
-    env.workspace = 'C:/GISData/Scratch/fake_memory.gdb'
+    temp_gdb = cu.create_temp_GDB('watersheds' + huc4_code)
+    env.workspace = temp_gdb
 
     # Extract the subregion polygon
     wbd_hu4 = os.path.join(nhd_gdb, "WBD_HU4")
@@ -40,6 +37,9 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     cu.multi_msg("Calculating preliminary watersheds...")
     outWatershed = Watershed(flowdir, pour_points)
     outWatershed.save(raw_watersheds)
+
+
+    cu.multi_msg("Clipping watersheds to subregion boundaries and filtering spurious watersheds...")
 
     # Watershed raster to polygons
     arcpy.RasterToPolygon_conversion(raw_watersheds, "wspoly1", 'NO_SIMPLIFY', "Value")
@@ -60,6 +60,8 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     arcpy.SelectLayerByLocation_management("wsclip1_lyr", "INTERSECT", seedpoly, '', "ADD_TO_SELECTION")
     arcpy.SelectLayerByAttribute_management("wsclip1_lyr", "SUBSET_SELECTION",'''"Shape_Area" >= 10000''')
 
+
+    cu.multi_msg("Reshaping watersheds...")
     # Polygon back to raster
     arcpy.PolygonToRaster_conversion("wsclip1_lyr", "grid_code", "ws_legit_ras")
 
@@ -106,19 +108,57 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     # Join Permanent ID from Waterbody seed shapefile
     final_watersheds_out = os.path.join(out_gdb, 'huc{}_final_watersheds'.format(huc8_code))
     arcpy.JoinField_management("final_watersheds", 'grid_code', seedpoly, 'POUR_ID', ['Permanent_Identifier'])
-    arcpy.CopyFeatures_management("final_watersheds", final_watersheds_out)
+
+    # this block bumps out sheds so that they fully contain their own lakes
+    # sometimes a little bit of another shed is overlapping the lake simply
+    # due to the raster/polygon differences
+    # 1) delete fields so watersheds and seedpoly share schema
+    # 2) update features, keeping borders
+    # 3) instead of lots of nulls make unique dissolve_id for all so that nulls aren't dissolved into one
+    # 4) dissolve features on dissolve_id keeping the Permanent_Identifier field
+    arcpy.CopyFeatures_management(seedpoly, 'lakes_nofields')
+    for fc in ['lakes_nofields', 'final_watersheds']:
+        fields = arcpy.ListFields(fc)
+        for f in fields:
+            if f != 'Permanent_Identifier':
+                try:
+                    arcpy.DeleteField_management(fc, f)
+                except:
+                    continue
+    arcpy.Update_analysis("final_watersheds", 'lakes_nofields', 'update_fc')
+    arcpy.AddField_management('update_fc', 'dissolve_id', 'TEXT', 255)
+    arcpy.MakeFeatureLayer_management('update_fc', 'update_lyr')
+    arcpy.SelectLayerByAttribute_management('update_lyr', 'NEW_SELECTION', """"Permanent_Identifier" is not null""")
+    arcpy.CalculateField_management('update_lyr', 'dissolve_id', '!Permanent_Identifier!', 'PYTHON')
+    arcpy.SelectLayerByAttribute_management('update_lyr', 'SWITCH_SELECTION')
+    arcpy.CalculateField_management('update_lyr', 'dissolve_id', '!OBJECTID!', 'PYTHON')
+    arcpy.SelectLayerByAttribute_management('update_lyr', 'CLEAR_SELECTION')
+    arcpy.Dissolve_management('update_lyr', "final_watersheds_bumped", 'dissolve_id', 'Permanent_Identifier FIRST')
+    arcpy.DeleteField_management('final_watersheds_bumped', 'dissolve_id')
+
+    # Select only the watersheds associated with this HU8
+    wbd_hu8 = os.path.join(nhd_gdb, "WBD_HU8")
+    field_name = (arcpy.ListFields(wbd_hu8, "HU*8"))[0].name
+    whereClause8 =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc8_code)
+    arcpy.Select_analysis(wbd_hu8, "hu8", whereClause8)
+
+    arcpy.MakeFeatureLayer_management("final_watersheds_bumped", "final_watersheds_lyr")
+    arcpy.SelectLayerByLocation_management("final_watersheds_lyr", "HAVE_THEIR_CENTER_IN", "hu8")
+
+    arcpy.CopyFeatures_management("final_watersheds_lyr", final_watersheds_out)
 
     arcpy.ResetEnvironments()
     arcpy.CheckInExtension('Spatial')
 
+    cu.multi_msg("Complete.")
+
 
 def main():
-    wsraster = arcpy.GetParameterAsText(0) # Watershed raster
-    subregion = arcpy.GetParameterAsText(1) # Single polygon CSI subregion feature class for boundary.
-    seedline = arcpy.GetParameterAsText(2) # Stream lines used as seeds for watersheds
-    seedpoly = arcpy.GetParameterAsText(3) # Lake polys used as seeds for watersheds
-    outfolder = arcpy.GetParameterAsText(4) # Folder for output.
-    clean_watersheds(wsraster, subregion, seedline, seedpolyg, outfolder)
+    flowdir = arcpy.GetParameterAsText(0)
+    pour_dir = arcpy.GetParameterAsText(1)
+    nhd_gdb = arcpy.GetParameterAsText(2)
+    out_gdb = arcpy.GetParameterAsText(3)
+    create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb)
 
 def test():
     flowdir = r'E:\ESRI_FlowDirs\NHD_0411\D8FDR04110001p.tif'

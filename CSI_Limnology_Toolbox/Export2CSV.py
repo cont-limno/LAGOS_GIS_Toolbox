@@ -13,29 +13,38 @@ def TableToCSV(in_table, out_folder, new_table_name = ''):
         f.write(','.join(fields)+'\n') #csv headers
         with arcpy.da.SearchCursor(in_table, fields) as cursor:
             for row in cursor:
-                values = ['NA' if r is None else str(r) for r in row]
-                # outputs from tools have scientific notation in them
-                # I think it's Python's fault and not ArcGIS. In Python IDE
-                # try typing 8.19 ** -5 to see what I mean, there are not
-                # "too many" digits but Python outputs scientific notation
-                # anyway.
-                def replace_scientific(x):
-                    return_value = x
-                    # if the value matches "more than 1 digit, 0 or 1 dot
-                    # symbols, 'e-', more than 1 digit" then it has been stored
-                    # in the scientific notation format, needs fixing
-                    if re.match('\d+\.?\d+[eE][-\+]\d+',x) is not None:
-                        # get the numbers we need and do the math, rounding
-                        # to 15 digits so it has no more digits than the other
-                        # double values just as a precaution for later uses
-                        mantissa, exponent = re.split('[eE]', x)
-                        # this madness keeps Python from outputting scientific
-                        # notation this time
-                        replacement = '{0:f}'.format(round(float(mantissa) ** int(exponent), 15))
-                        return_value = replacement
-                    return str(return_value)
-                # this is the step that actually applies to function to all values
-                values = map(replace_scientific, values)
+                # next line PREVENTS scientific notation in exports and change null values
+                def format_value(x):
+                    if x is None:
+                        return 'NA'
+                    elif isinstance(x, float):
+                        return '{0:.15f}'.format(x).rstrip('.0')
+                    else:
+                        return str(x)
+                values = map(format_value, row)
+
+##                # outputs from tools have scientific notation in them
+##                # I think it's Python's fault and not ArcGIS. In Python IDE
+##                # try typing 8.19 ** -5 to see what I mean, there are not
+##                # "too many" digits but Python outputs scientific notation
+##                # anyway.
+##                def replace_scientific(x):
+##                    return_value = x
+##                    # if the value matches "more than 1 digit, 0 or 1 dot
+##                    # symbols, 'e-', more than 1 digit" then it has been stored
+##                    # in the scientific notation format, needs fixing
+##                    if re.match('\d+\.?\d+[eE][-\+]\d+',x) is not None:
+##                        # get the numbers we need and do the math, rounding
+##                        # to 15 digits so it has no more digits than the other
+##                        # double values just as a precaution for later uses
+##                        mantissa, exponent = re.split('[eE]', x)
+##                        # this madness keeps Python from outputting scientific
+##                        # notation this time
+##                        replacement = '{0:f}'.format(round(float(mantissa) ** int(exponent), 15))
+##                        return_value = replacement
+##                    return str(return_value)
+##                # this is the step that actually applies to function to all values
+##                values = map(replace_scientific, values)
                 f.write(','.join(values)+'\n')
 
 def main():

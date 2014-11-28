@@ -8,6 +8,8 @@ from arcpy.sa import *
 
 def clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder):
 
+    arcpy.CheckOutExtension("Spatial")
+
     # Starting environmental variables:
     env.extent = subregion
     env.snapRaster = wsraster
@@ -20,6 +22,7 @@ def clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder):
     env.workspace = scratch
 
     # Watershed raster to polygons
+    print('1')
     arcpy.RasterToPolygon_conversion(wsraster, "wspoly1.shp", '', "Value")
 
     # Clip watershed polygons to subregion polys.
@@ -39,6 +42,7 @@ def clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder):
     arcpy.CopyFeatures_management("wsclip1.lyr", "wslegit.shp")
 
     # Polygon back to raster
+    print('2')
     arcpy.PolygonToRaster_conversion("wslegit.shp","GRIDCODE", "ws_legit.tif")
 
     arcpy.Clip_management("ws_legit.tif", '', "ws_legit_clipped_ras.tif",
@@ -65,6 +69,7 @@ def clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder):
     prews = Con(IsNull("composite_clip.tif"), 1, "composite_clip.tif")
     prews.save("prews.tif")
 
+    print('3')
     # Nibble masked values (null values along boundary).
     nibble = Nibble("prews.tif", "mask.tif", "DATA_ONLY")
     nibble.save("nibble.tif")
@@ -73,6 +78,7 @@ def clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder):
     watersheds_ras = os.path.join(outfolder, "watersheds.tif")
     arcpy.Clip_management("nibble.tif", "", watersheds_ras, "subregion_buffer.shp", "NoData","ClippingGeometry")
 
+    print('5')
     # Convert watershed raster to polygon.
     arcpy.RasterToPolygon_conversion(watersheds_ras, "rawwatersheds.shp",'', "Value")
     watersheds = os.path.join(outfolder, "watersheds.shp")
@@ -85,6 +91,8 @@ def clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder):
     # Join Permanent ID from Waterbody seed shapefile
     arcpy.SpatialJoin_analysis(watersheds, seedpoly, os.path.join(outfolder, "CleanWatersheds.shp"), "", "","", "HAVE_THEIR_CENTER_IN")
 
+    arcpy.CheckInExtension("Spatial")
+
 def main():
     wsraster = arcpy.GetParameterAsText(0) # Watershed raster
     subregion = arcpy.GetParameterAsText(1) # Single polygon CSI subregion feature class for boundary.
@@ -95,7 +103,13 @@ def main():
     arcpy.ResetEnvironments()
 
 def test():
-    pass
+    wsraster = r'C:\GISData\Scratch\new_watersheds.gdb\huc08020203_watersheds_precursors'
+    subregion = r'C:\GISData\Scratch\Scratch.gdb\huc08020203'
+    seedline = r'C:\GISData\Scratch\new_pourpoints\pourpoints0802\pourpoints.gdb\eligible_flowlines'
+    seedpoly = r'C:\GISData\Scratch\new_pourpoints\pourpoints0802\pourpoints.gdb\eligible_lakes'
+    outfolder = r'C:\GISData\Scratch\scott 08020203'
+    clean_watersheds(wsraster, subregion, seedline, seedpoly, outfolder)
+    arcpy.ResetEnvironments()
 
 if __name__ == '__main__':
     main()

@@ -1,3 +1,7 @@
+Nov 27, 2014
+
+If you are trying to use the Create CSI Watersheds tool for a very large HU8, you may run into problems around the step where the nibble raster is converted back to polygons with "SIMPLIFY" polygons option turned on. I was having problems with this quitting with no error (and interrupting batch processing) on our 3rd-largest HU8 which is 08020203 before I went from using a 5000m buffer around the HU8 to a 100m buffer---the SIZE is the only way I could get this error to stop happening!! Otherwise, I was able to set the simplify keyword to "NO_SIMPLIFY" and then follow this with a polygon simplification portion that I have left in the tool, commented out. However, this caused the tool to run unbelievably slow on most subregions. If you run into the same problem, perhaps you will be more clever than me fixing it, or you can try the workaround on the LARGE HU8s ONLY.
+
 October 8, 2014
 The shoreline lengths calculated in ConnectedWetlands.py are from the 30m lake buffers, not the lakes themselves. They could slightly exceed the perimeter of the lake if 100% of the shoreline intersects wetlands, and they are slightly greater than they should be in all cases. The shoreline features must be from the buffers for the intersection to work correctly but the calculated shoreline length values could be scaled by a factor [shoreline shape length]/[original lake shape length] to fix this.
 

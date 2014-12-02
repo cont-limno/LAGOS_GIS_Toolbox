@@ -5,6 +5,25 @@
 # Author:      smithn78
 #
 # Created:     16/07/2014
+
+# Tool steps summary
+# 1)	Identify necessary items in the NHD geodatabase and set environments
+# 2)	Create layer of lakes greater than 4ha and layer of lakes greater than 10ha
+# 3)	Add the new count and area fields to the output table
+# 4)	Using a search cursor, for each lake:
+#     a.	Make a layer containing only this lake
+#     b.	Select junctions (points at each hydrological connection) within 1m of this lake
+#     c.	If the number of junctions is 0, there is no upstream network at all. Enter 0s in all the output fields.
+#     d.	If the number of junctions is at least 1:
+#         i.	Trace the geometric network upstream of the junction(s) for this lake
+#        ii.	Select lakes that intersect the flowlines in the trace (these are the upstream lakes
+#       iii.	If there are no lakes in the upstream network, enter 0s in the output fields.
+#       iv.	If there are lakes in the upstream network,
+#           1.	Create a layer of the 4ha lakes, count them, and using a search cursor, sum their area. Update the output fields with these values.
+#           2.	Create a layer of the 10ha lakes, count them, and using a search cursor, sum their area. Update the output fields with these values.
+# 5)	Remove unnecessary fields from the output table
+# 6)	Clean up intermediates
+
 #-------------------------------------------------------------------------------
 import os
 import arcpy

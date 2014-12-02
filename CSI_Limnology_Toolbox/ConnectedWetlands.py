@@ -1,7 +1,20 @@
 # ConnectedWetlands.py
 # Characterizes each lake according to its wetland connections
 # Output table has one row PER LAKE
-
+# Tool steps summary
+# 1)	Set environments
+# 2)	Create a layer called 'lakes_30m' that is the lake polygons buffered by 30m. Use this throughout the script instead of the lakes themselves.
+# 3)	Create a line-based lakes representation (from the buffered lakes) called 'shorelines'
+# 4)	For each VegType selection (All, forested, scrub-shrub, open water, other):
+#       a.	Apply the polygons_in_zones function from the CSI Limnology Toolbox using the lake as the zone, the wetlands as the polygon feature class of interest, and the current selection query
+#       b.	Rename the output fields to be specific to this selection: 'Poly_Count' becomes 'ForestedWetlands_Count', for instance.
+#       c.	Use the current selection query to make a 'selected_wetlands' layer
+#       d.	Intersect the 'shorelines' layer with the 'selected_wetlands' layer
+#       e.	Sum the length of all the shoreline-wetlands intersection for each lake: this is the shoreline connection length
+#       f.	Use the csiutils.one_in_one_out and csiutils.redefine_nulls functions to ensure each input lake receives an output record even if it has no wetland connections and the values are 0
+#       g.	Join the temporary output from step 4a to the shorelines output to make the final table
+# 5)	Once all selections have been calculated, join all the tables together and ensure that even if, for instance, there were no 'other' wetlands that the fields are populated with 0s.
+# 6)	Remove extra fields and clean up intermediates
 import os
 import arcpy
 from arcpy import env

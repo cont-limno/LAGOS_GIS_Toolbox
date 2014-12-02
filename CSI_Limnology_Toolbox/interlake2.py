@@ -10,16 +10,15 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
 
     # names
     huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
-    huc8_code = re.search('\d{8}', os.path.basename(watersheds_fc)).group()
     nhd_waterbody = os.path.join(nhd_gdb, 'NHDWaterbody')
     hydro_net_junctions = os.path.join(nhd_gdb, 'Hydrography', 'HYDRO_NET_Junctions')
     hydro_net = os.path.join(nhd_gdb, 'Hydrography', 'HYDRO_NET')
 
-    # get this hu8
-    wbd_hu8 = os.path.join(nhd_gdb, "WBD_HU8")
-    field_name = (arcpy.ListFields(wbd_hu8, "HU*8"))[0].name
-    whereClause8 =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc8_code)
-    arcpy.Select_analysis(wbd_hu8, "hu8", whereClause8)
+    # get this hu4
+    wbd_hu4 = os.path.join(nhd_gdb, "WBD_HU4")
+    field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
+    whereClause4 =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc4_code)
+    arcpy.Select_analysis(wbd_hu4, "hu4", whereClause4)
 
     # make layers for upcoming spatial selections
     # and fcs in memory
@@ -28,13 +27,14 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
 
     all_lakes = os.path.join(pour_dir, 'pourpoints.gdb', 'eligible_lakes')
     arcpy.MakeFeatureLayer_management(all_lakes, "all_lakes_lyr")
-    arcpy.SelectLayerByLocation_management("all_lakes_lyr", "INTERSECT", "hu8")
+##    arcpy.SelectLayerByLocation_management("all_lakes_lyr", "INTERSECT", "hu8")
     arcpy.CopyFeatures_management("all_lakes_lyr", 'eligible_lakes')
 
     # ten ha lakes and junctions
     if mode == 'interlake':
         tenha_where_clause = """"AreaSqKm" >= .1"""
         arcpy.Select_analysis("eligible_lakes", 'tenha_lakes', tenha_where_clause)
+        arcpy.MakeFeatureLayer_management('tenha_lakes', 'tenha_lakes_lyr')
         arcpy.SelectLayerByLocation_management('junctions', 'INTERSECT', 'tenha_lakes', search_distance = "1 Meters")
         arcpy.CopyFeatures_management('junctions', 'tenha_junctions')
         arcpy.MakeFeatureLayer_management('tenha_junctions', 'tenha_junctions_lyr')
@@ -51,13 +51,13 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
             count_jxns = int(arcpy.GetCount_management('junctions').getOutput(0))
             if count_jxns == 0:
                 arcpy.SelectLayerByLocation_management('watersheds', 'CONTAINS', 'this_lake')
-                arcpy.CopyFeatures_management('watersheds', 'this_watershed')
             else:
                 arcpy.CopyFeatures_management("junctions", 'this_lake_jxns')
                 if mode == 'interlake':
                     arcpy.SelectLayerByLocation_management('tenha_junctions_lyr', 'ARE_IDENTICAL_TO', 'this_lake_jxns')
                     arcpy.SelectLayerByAttribute_management('tenha_junctions_lyr', 'SWITCH_SELECTION')
                     arcpy.CopyFeatures_management('tenha_junctions_lyr', 'other_tenha_junctions')
+                    arcpy.SelectLayerByLocation_management('tenha_lakes_lyr', 'INTERSECT', 'other_tenha_junctions', search_distance = '1 Meters')
                     arcpy.TraceGeometricNetwork_management(hydro_net, "upstream",
                                     'this_lake_jxns', "TRACE_UPSTREAM", in_barriers = 'other_tenha_junctions')
                 elif mode == 'cumulative':
@@ -69,17 +69,18 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
                 watersheds_count = int(arcpy.GetCount_management("watersheds").getOutput(0))
                 if watersheds_count == 0:
                     arcpy.SelectLayerByLocation_management('watersheds', 'CONTAINS', 'this_lake')
-                    arcpy.CopyFeatures_management('watersheds', 'this_watershed')
-                else:
 
-                    # Sometimes when the trace stops at 10-ha lake, that shed(s)
-                    # gets selected. Remove it or them.
-                    if mode == 'interlake':
-                        arcpy.SelectLayerByLocation_management("watersheds", "CONTAINS", "other_tenha_junctions", selection_type = "REMOVE_FROM_SELECTION")
-                    arcpy.Dissolve_management("watersheds", "this_watershed")
-                    arcpy.AddField_management("this_watershed", 'Permanent_Identifier', 'TEXT', field_length = 255)
-                    arcpy.CalculateField_management("this_watershed", "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
-                    dissolve_fields = arcpy.ListFields('this_watershed')
+            # Sometimes when the trace stops at 10-ha lake, that shed(s)
+            # gets selected. Remove them with the tenha_lakes_lyr
+            # that already has only OTHER lakes selected
+            # using other_tenha_junctions causes some stuff to be picked up
+            # that shouldn't be when junctions are right on boundaries
+            if mode == 'interlake':
+                arcpy.SelectLayerByLocation_management("watersheds", "CONTAINS", "tenha_lakes_lyr", selection_type = "REMOVE_FROM_SELECTION")
+            arcpy.Dissolve_management("watersheds", "this_watershed")
+            arcpy.AddField_management("this_watershed", 'Permanent_Identifier', 'TEXT', field_length = 255)
+            arcpy.CalculateField_management("this_watershed", "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
+            dissolve_fields = arcpy.ListFields('this_watershed')
             arcpy.Erase_analysis('this_watershed', 'this_lake',
                                 'lakeless_watershed')
 
@@ -95,10 +96,12 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
                 except:
                     continue
 
-    arcpy.CopyFeatures_management("output_fc", output_fc)
+    arcpy.EliminatePolygonPart_management("output_fc", "output_hole_remove", "AREA", "3.9 Hectares", "0", "CONTAINED_ONLY")
+    arcpy.Clip_analysis("output_hole_remove", "hu4")
 
-    # Do we even need a line like the following?
-##    arcpy.EliminatePolygonPart_management("merge", outname, "AREA", "3.9 Hectares", "0", "CONTAINED_ONLY")
+    arcpy.Delete_management('output_fc')
+
+
     arcpy.ResetEnvironments()
 
 def test():

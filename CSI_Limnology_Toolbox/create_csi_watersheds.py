@@ -105,7 +105,6 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     # is not working reliably so need to do this in two steps, unfortunately
     cu.multi_msg("Converted reshaped watersheds raster to polygons. If you experience problems with this step, please read Known and Outstanding Bugs.txt")
     arcpy.RasterToPolygon_conversion("watersheds_ras", "nibble_sheds",'SIMPLIFY', "Value") #simplify okay
-    cu.multi_msg("test6d")
 
 ##    # I'm using 15 as the tolerance
 ##    # here because the diagonal of a 10x10 pixel is 14.14 m and
@@ -116,12 +115,10 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 ##        "nibble_sheds_simplify", "POINT_REMOVE", "15 Meters", "0 SquareMeters",
 ##        "RESOLVE_ERRORS", "NO_KEEP")
     arcpy.Clip_analysis("nibble_sheds", "hu8", "final_watersheds")
-    cu.multi_msg("test7")
 
     # Join Permanent ID from Waterbody seed shapefile
     final_watersheds_out = os.path.join(out_gdb, 'huc{}_final_watersheds'.format(huc8_code))
     arcpy.JoinField_management("final_watersheds", 'grid_code', seedpoly, 'POUR_ID', ['Permanent_Identifier'])
-    cu.multi_msg("test9")
 
     # this block bumps out sheds so that they fully contain their own lakes
     # sometimes a little bit of another shed is overlapping the lake simply
@@ -139,19 +136,16 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
                     arcpy.DeleteField_management(fc, f)
                 except:
                     continue
-    cu.multi_msg("test10")
     arcpy.Update_analysis("final_watersheds", 'lakes_nofields', 'update_fc')
     arcpy.AddField_management('update_fc', 'dissolve_id', 'TEXT', 255)
     arcpy.MakeFeatureLayer_management('update_fc', 'update_lyr')
     arcpy.SelectLayerByAttribute_management('update_lyr', 'NEW_SELECTION', """"Permanent_Identifier" is not null""")
-    cu.multi_msg("test11")
     arcpy.CalculateField_management('update_lyr', 'dissolve_id', '!Permanent_Identifier!', 'PYTHON')
     arcpy.SelectLayerByAttribute_management('update_lyr', 'SWITCH_SELECTION')
     arcpy.CalculateField_management('update_lyr', 'dissolve_id', '!OBJECTID!', 'PYTHON')
     arcpy.SelectLayerByAttribute_management('update_lyr', 'CLEAR_SELECTION')
     arcpy.Dissolve_management('update_lyr', "final_watersheds_bumped", 'dissolve_id', 'Permanent_Identifier FIRST')
     cu.rename_field("final_watersheds_bumped", "FIRST_Permanent_Identifier", "Permanent_Identifier", deleteOld = True)
-    cu.multi_msg("test12")
     arcpy.DeleteField_management('final_watersheds_bumped', 'dissolve_id')
 
     arcpy.CopyFeatures_management("final_watersheds_bumped", final_watersheds_out)
@@ -176,6 +170,7 @@ def main():
     create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb)
 
 def test():
+    """This one tests a large HU8 that is causing problems for this tool specificially."""
     flowdir = r'E:\ESRI_FlowDirs\NHD_0802\D8FDR08020203p.tif'
     pour_dir = r'C:\GISData\Scratch\new_pourpoints\pourpoints0802'
     nhd_gdb = r'E:\nhd\fgdb\NHDH0802.gdb'
@@ -184,6 +179,7 @@ def test():
 
 
 def test2():
+    """This one tests a small HU8 like a usual test."""
     flowdir = r'E:\ESRI_FlowDirs\NHD_0411\D8FDR04110004p.tif'
     pour_dir = r'C:\GISData\Scratch\new_pourpoints\pourpoints0411'
     nhd_gdb = r'E:\nhd\fgdb\NHDH0411.gdb'

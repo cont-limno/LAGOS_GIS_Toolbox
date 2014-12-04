@@ -1,4 +1,4 @@
-CSILimnologyToolbox
+LAGOS GIS Toolbox
 ===================
 
 ArcGIS toolbox for limnology.
@@ -13,7 +13,7 @@ easily enough, with ESRI's tools or with Taudem toolbox or command line. Taudem 
 You can get them at:
 http://hydrology.usu.edu/taudem/taudem5.0/downloads.html
 
-The CSI Limnology Toolbox comes without guarantees of any kind. We just put it on Git because we like to share. 
+The LAGOS GIS Toolbox comes without guarantees of any kind. We just put it on Git because we like to share. 
 The toolbox is unsupported but feel free to direct questions to me, Scott Stopyak: stopyaks@msu.edu
 
 Enjoy.

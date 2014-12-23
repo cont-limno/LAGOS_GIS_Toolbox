@@ -148,7 +148,9 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     cu.rename_field("final_watersheds_bumped", "FIRST_Permanent_Identifier", "Permanent_Identifier", deleteOld = True)
     arcpy.DeleteField_management('final_watersheds_bumped', 'dissolve_id')
 
-    arcpy.CopyFeatures_management("final_watersheds_bumped", final_watersheds_out)
+    arcpy.Clip_analysis('final_watersheds_bumped', 'hu8', 'final_watersheds_clipped')
+
+    arcpy.CopyFeatures_management("final_watersheds_clipped", final_watersheds_out)
 
     temp_items = arcpy.ListRasters() + arcpy.ListFeatureClasses() + [temp_gdb]
     for item in temp_items:

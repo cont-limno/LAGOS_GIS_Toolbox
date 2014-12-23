@@ -39,9 +39,14 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
         arcpy.CopyFeatures_management('junctions', 'tenha_junctions')
         arcpy.MakeFeatureLayer_management('tenha_junctions', 'tenha_junctions_lyr')
     # for each lake, calculate its interlake watershed in the upcoming block
+    prog_count = int(arcpy.GetCount_management('eligible_lakes').getOutput(0))
+    counter = 0
 
     with arcpy.da.SearchCursor('eligible_lakes', ["Permanent_Identifier"]) as cursor:
         for row in cursor:
+            counter += 1
+            if counter % 50 == 0:
+                print("{0} out of {1} lakes completed.".format(counter, prog_count))
             id = row[0]
             where_clause = """"{0}" = '{1}'""".format("Permanent_Identifier", id)
             arcpy.MakeFeatureLayer_management('eligible_lakes', "this_lake",
@@ -97,18 +102,15 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
                     continue
 
     arcpy.EliminatePolygonPart_management("output_fc", "output_hole_remove", "AREA", "3.9 Hectares", "0", "CONTAINED_ONLY")
-    arcpy.Clip_analysis("output_hole_remove", "hu4")
-
+    arcpy.Clip_analysis("output_hole_remove", "hu4", output_fc)
     arcpy.Delete_management('output_fc')
-
-
     arcpy.ResetEnvironments()
 
 def test():
-    watersheds_fc = 'C:/GISData/Scratch/new_watersheds_nov27.gdb/huc05030104_final_watersheds'
-    nhd_gdb = r'E:\nhd\fgdb\NHDH0503.gdb'
-    pour_dir =  r'C:\GISData\Scratch\new_pourpoints\pourpoints0503'
-    output_fc = 'C:/GISData/Scratch/Scratch.gdb/INTERLAKE_NOV27_05030104'
+    watersheds_fc = 'C:/GISData/Scratch/watersheds_by_HU4_3dec2014.gdb/huc0411_merged_watersheds'
+    nhd_gdb = r'E:\nhd\fgdb\NHDH0411.gdb'
+    pour_dir =  r'C:\GISData\Scratch\new_pourpoints\pourpoints0411'
+    output_fc = 'C:/GISData/Scratch/Scratch.gdb/INTERLAKE_DEC6'
     aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
                             output_fc, mode = 'interlake')
 def main():

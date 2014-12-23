@@ -1,3 +1,7 @@
+import os, re
+import arcpy
+import csiutils as cu
+
 def merge_watersheds(watershed_fcs_list, nhd_gdb, out_fc):
     """Merges watershed fcs that are at HU8 level to subregion level. Checks
     whether there are as many feature classes being merged as there are HU8s
@@ -11,24 +15,26 @@ def merge_watersheds(watershed_fcs_list, nhd_gdb, out_fc):
     arcpy.Select_analysis(wbd_hu4, "hu4", whereClause4)
 
     hu8 = os.path.join(nhd_gdb, 'WBD_HU8')
-
-    arcpy.MakeFeatureLayer_management("hu4", 'HU4_lyr')
+    field_name_8 = (arcpy.ListFields(hu8, "HU*8"))[0].name
     arcpy.MakeFeatureLayer_management(hu8, 'HU8_lyr')
-
-    whereClause = """"HUC4" = '{}'""".format(huc4_code)
-    arcpy.SelectLayerByAttribute_management('HU4_lyr', 'NEW_SELECTION', whereClause)
-    arcpy.SelectLayerByLocation_management('HU8_lyr', 'WITHIN', 'HU4_lyr')
+    whereClause = """"{0}" LIKE '{1}%'""".format(field_name_8, huc4_code)
+    arcpy.SelectLayerByAttribute_management('HU8_lyr', 'NEW_SELECTION', whereClause)
     arcpy.CopyFeatures_management('HU8_lyr', 'HU8_selected')
-    hu8s_selected = [row[0] for row in arcpy.da.SearchCursor('HU8_selected', 'HUC8')]
+    hu8s_selected = [row[0] for row in arcpy.da.SearchCursor('HU8_selected', field_name_8)]
 
     if len(hu8s_selected) < len(watershed_fcs_list):
         arcpy.AddError("Number of feature classes in input list exceeds number of HU8s in subregion. Check list and try again.")
     elif len(hu8s_selected) > len(watershed_fcs_list):
         arcpy.AddWarning("Number of features classes in input list is fewer than number of HU8s in subregion. Tool will proceed. Check that result matches your expectations.")
-    elif len(hu8s_selected) == len(watersheds_fc_list):
+    elif len(hu8s_selected) == len(watershed_fcs_list):
         arcpy.AddMessage("There are as many inputs as there are HU8s in the subregion.")
 
-    arcpy.Merge_management(watershed_fcs_list, out_fc, 'NO_TEST')
+    # This typically works out faster than merging when there are LOTS of features
+    first_fc = watershed_fcs_list.pop(0)
+    arcpy.CopyFeatures_management(first_fc, out_fc)
+    cu.lengthen_field(out_fc, 'Permanent_Identifier', 255)
+    for fc in watershed_fcs_list:
+        arcpy.Append_management(watershed_fcs_list, out_fc, 'NO_TEST')
 
 def main():
     watershed_fcs_list = arcpy.GetParameterAsText(0).split(';')
@@ -44,6 +50,6 @@ def test():
     out_fc = 'C:/GISData/Scratch/Scratch.gdb/test_watersheds_merge'
     merge_watersheds(fcs, nhd_gdb, out_fc)
 
-if name == '__main__':
+if __name__ == '__main__':
     main()
 

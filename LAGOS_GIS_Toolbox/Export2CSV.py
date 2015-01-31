@@ -18,7 +18,10 @@ def TableToCSV(in_table, out_folder, new_table_name = ''):
                     if x is None:
                         return 'NA'
                     elif isinstance(x, float):
-                        return '{0:.15f}'.format(x).rstrip('.0')
+                        out_value = '{0:.15f}'.format(x).rstrip('.0')
+                        if not out_value:
+                            out_value = '0'
+                        return out_value
                     else:
                         return str(x)
                 values = map(format_value, row)

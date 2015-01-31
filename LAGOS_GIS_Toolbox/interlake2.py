@@ -115,9 +115,9 @@ def test():
                             output_fc, mode = 'interlake')
 def main():
     watersheds_fc = arcpy.GetParameterAsText(0)
-    nhd_gdb = arcpy.GetParameterAsText(2)
-    pour_dir =  arcpy.GetParameterAsText(3)
-    output_fc = arcpy.GetParameterAsText(4)
+    nhd_gdb = arcpy.GetParameterAsText(1)
+    pour_dir =  arcpy.GetParameterAsText(2)
+    output_fc = arcpy.GetParameterAsText(3)
     aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
                             output_fc, mode = 'interlake')
 

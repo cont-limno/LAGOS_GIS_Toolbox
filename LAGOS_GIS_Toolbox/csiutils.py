@@ -50,12 +50,13 @@ def merge_many(merge_list, out_fc, group_size = 20):
         if there are more than x (usually 20) files to merge, merge them in
         groups of 20 at a time to speed it up some"""
     if len(merge_list) > group_size:
-        partitions = 1 + len(merge_list) // (group_size + 1)
+        partitions = 1 + len(merge_list) // (group_size)
         multi_msg("Merging partition 1 of %s" % partitions)
         arcpy.Merge_management(merge_list[:group_size], out_fc)
-        for n in range(partitions)[1:]:
-            multi_msg("Merging partition %s of %s" % (n + 1, partitions))
-            arcpy.Append_management(merge_list[group_size*n:group_size*(1+n)], out_fc)
+        for n in range(2, partitions+1):
+            multi_msg("Merging partition %s of %s" % (n, partitions))
+            multi_msg(merge_list[group_size*(n-1):group_size*(n)])
+            arcpy.Append_management(merge_list[group_size*(n-1):group_size*n], out_fc)
     else:
         arcpy.Merge_management(merge_list, out_fc)
 

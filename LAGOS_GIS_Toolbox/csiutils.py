@@ -55,7 +55,6 @@ def merge_many(merge_list, out_fc, group_size = 20):
         arcpy.Merge_management(merge_list[:group_size], out_fc)
         for n in range(2, partitions+1):
             multi_msg("Merging partition %s of %s" % (n, partitions))
-            multi_msg(merge_list[group_size*(n-1):group_size*(n)])
             arcpy.Append_management(merge_list[group_size*(n-1):group_size*n], out_fc)
     else:
         arcpy.Merge_management(merge_list, out_fc)

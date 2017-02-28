@@ -1,6 +1,7 @@
 import os
 import arcpy
 from arcpy import env
+import csiutils as cu
 
 
 def check_unique_id(polygon_fc, candidate_id, table_workspace = 'in_memory'):
@@ -97,51 +98,64 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
     ws = 'in_memory'
     env.workspace = ws
 
-    print("Creating frequency table...")
+    cu.multi_msg("Creating frequency table...")
     arcpy.Frequency_analysis(in_fc, "freqtable", unique_id)
+    arcpy.TableSelect_analysis("freqtable", "dupeslist", '''"FREQUENCY" > 1''')
+
+    # Make a list of truly unique ids for use in selecting groups of identical ids
+    select_ids = [row[0] for row in arcpy.da.SearchCursor("dupeslist", (unique_id))]
 
     # Pick out just the records we need to work with, the rest will be
     # saved to the output and we will merge in the results from our working
     # set later
-    arcpy.MakeFeatureLayer_management(in_fc, "fc_lyr")
 
-    arcpy.AddJoin_management("fc_lyr", unique_id, "freqtable", unique_id)
-    arcpy.SelectLayerByAttribute_management('fc_lyr', 'NEW_SELECTION', '''"FREQUENCY" = 1''')
-    arcpy.RemoveJoin_management("fc_lyr")
-    arcpy.CopyFeatures_management("fc_lyr", "unique")
-
-    arcpy.AddJoin_management("fc_lyr", unique_id, "freqtable", unique_id)
-    arcpy.SelectLayerByAttribute_management('fc_lyr', 'NEW_SELECTION', '''"FREQUENCY" > 1''')
-    arcpy.RemoveJoin_management("fc_lyr")
-    arcpy.CopyFeatures_management("fc_lyr", "fc_temp")
-
+    # cu.multi_msg("test1")
+    # arcpy.MakeFeatureLayer_management(in_fc, "fc_lyr")
+    #
+    # cu.multi_msg("test2")
+    # arcpy.AddJoin_management("fc_lyr", unique_id, "dupeslist", unique_id, "KEEP_COMMON")
+    # arcpy.SelectLayerByAttribute_management('fc_lyr', 'NEW_SELECTION', '''"FREQUENCY" = 1''')
+    # arcpy.RemoveJoin_management("fc_lyr")
+    # arcpy.CopyFeatures_management("fc_lyr", "unique")
+    #
+    # cu.multi_msg("test3")
+    # arcpy.AddJoin_management("fc_lyr", unique_id, "freqtable", unique_id)
+    # arcpy.SelectLayerByAttribute_management('fc_lyr', 'NEW_SELECTION', '''"FREQUENCY" > 1''')
+    # arcpy.RemoveJoin_management("fc_lyr")
+    # arcpy.CopyFeatures_management("fc_lyr", "fc_temp")
+    arcpy.CopyFeatures_management(in_fc, "fc_temp")
+    #
+    # cu.multi_msg("test4")
     arcpy.AddField_management("fc_temp", "NewestFDate", "SHORT")
     arcpy.CalculateField_management("fc_temp", "NewestFDate", 1, 'PYTHON')
+    fdate_field = arcpy.ListFields('fc_temp', '*FDate', 'Date')[0].name
+    unique_id = arcpy.ListFields('fc_temp', '*Permanent_Identifier', 'Text')[0].name
+    #
+    # cu.multi_msg("test5")
+    # arcpy.TableSelect_analysis("freqtable", "dupetable", '''"FREQUENCY" > 1''')
 
-    arcpy.TableSelect_analysis("freqtable", "dupetable", '''"FREQUENCY" > 1''')
-
-    count_dupes = int(arcpy.GetCount_management("dupetable").getOutput(0))
+    count_dupes = int(arcpy.GetCount_management("dupeslist").getOutput(0))
 
     if count_dupes > 0:
-        print("Number of records in duplicates table is %d" % count_dupes)
+        cu.multi_msg("Number of records in duplicates table is %d" % count_dupes)
 
-        # Make a list of truly unique ids for use in selecting groups of identical ids
-        select_ids = [row[0] for row in arcpy.da.SearchCursor("dupetable", (unique_id))]
+        # # Make a list of truly unique ids for use in selecting groups of identical ids
+        # select_ids = [row[0] for row in arcpy.da.SearchCursor("dupetable", (unique_id))]
 
         # for each id select its group of duplicates
         for s_id in select_ids:
 
-            fdate_field = arcpy.ListFields('fc_temp', '*FDate', 'Date')[0].name
-            unique_id = arcpy.ListFields('fc_temp', '*Permanent_Identifier', 'Text')[0].name
+            # fdate_field = arcpy.ListFields('fc_temp', '*FDate', 'Date')[0].name
+            # unique_id = arcpy.ListFields('fc_temp', '*Permanent_Identifier', 'Text')[0].name
             whereClause =  ''' "%s" = '%s' ''' % (unique_id, s_id)
 
             # update values to 0, we will change only one to 1 later
             # and get a list of all the dates
             dates = [row[0] for row in arcpy.da.SearchCursor("fc_temp", (fdate_field), whereClause)]
 
-            print("ID group %s" % s_id)
-            print("Date object values: %s" % dates)
-            print("Newest date: %s\n" % max(dates))
+            # print("ID group %s" % s_id)
+            # print("Date object values: %s" % dates)
+            # print("Newest date: %s\n" % max(dates))
 
             # just using "Fdate" = max(dates) logic DOES NOT WORK CORRECTLY
             # sometimes more than one record with max date but
@@ -158,15 +172,16 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
                     cursor.updateRow(row)
 
         # create a new, distinct output rather than updating table in place
-        arcpy.Select_analysis("fc_temp", "newest_only", ''' "NewestFDate" = 1 ''')
+        # arcpy.Select_analysis("fc_temp", "newest_only", ''' "NewestFDate" = 1 ''')
+        arcpy.Select_analysis("fc_temp", out_fc, ''' "NewestFDate" = 1 ''')
         arcpy.DeleteField_management("newest_only", "NewestFDate")
-        arcpy.Merge_management(["newest_only", "unique"], out_fc)
+        # arcpy.Merge_management(["newest_only", "unique"], out_fc)
 
 ##        for intermediate in ["freqtable", "dupetable", "fc_temp", "newest_only"]:
 ##            arcpy.Delete_management(intermediate)
 
     else:
-        print("There were no duplicates.")
+        cu.multi_msg("There were no remaining duplicates with differing FDates.")
         arcpy.CopyFeatures_management(in_fc, out_fc)
 
 # to remove geographic duplicates: for each pair, if the overlapping area exceeds
@@ -176,7 +191,7 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
 
 def remove_geographic_doubles(polygon_fc, out_fc, unique_id, percent_overlap_allowed = 10, keep_fc = '', keep_field = ''):
     neighbor_table = 'in_memory/neighbortable'
-    print('Calculating neighbor table...')
+    cu.multi_msg('Calculating neighbor table...')
     arcpy.PolygonNeighbors_analysis(polygon_fc, neighbor_table, unique_id,
         'AREA_OVERLAP', 'NO_BOTH_SIDES')
 
@@ -187,7 +202,7 @@ def remove_geographic_doubles(polygon_fc, out_fc, unique_id, percent_overlap_all
 
     arcpy.CopyFeatures_management(polygon_fc, 'in_memory/fc')
     fdate_field = arcpy.ListFields('in_memory/fc', '*FDate*')[0].name
-    print('Joining neighbor table to feature class...')
+    cu.multi_msg('Joining neighbor table to feature class...')
     arcpy.JoinField_management('in_memory/fc', unique_id, neighbor_table,
                             src_field)
 
@@ -206,23 +221,23 @@ def remove_geographic_doubles(polygon_fc, out_fc, unique_id, percent_overlap_all
             if row[0] >= row[1] * (100 - percent_overlap_allowed)/100:
                 src_value = row[2]
                 nbr_value = row[3]
-##                print("testing. pair: %s and %s" % (src_value, nbr_value))
+                cu.multi_msg("testing. pair: %s and %s" % (src_value, nbr_value))
 
                 # Then lookup both rows in the overlap and delete the one with
                 # the oldest FDate
                 where_clause = '''"%s" = '%s' OR "%s" = '%s' ''' % (unique_id, src_value, unique_id, nbr_value)
                 dates = [row[4] for row in arcpy.da.SearchCursor('in_memory/fc', cursor_fields, where_clause)]
-##                print("testing. dates %s and %s not in order" % (dates[0], dates[1]))
+                cu.multi_msg("testing. dates %s and %s not in order" % (dates[0], dates[1]))
                 with arcpy.da.UpdateCursor('in_memory/fc', cursor_fields, where_clause) as c:
                     for r in c:
                         if r[4] == min(dates) and r[4] == max(dates):
-                            print("PROBLEM! Same date. Resolve pair %s, %s manually." % (src_value, nbr_value))
+                            cu.multi_msg("PROBLEM! Same date. Resolve pair %s, %s manually." % (src_value, nbr_value))
                         if r[4] == min(dates) and r[4] != max(dates):
                             if r[4] not in keep_ids:
-                                print("%s has the older date (%s) and will be removed." % (r[2], r[4]))
-##                                c.deleteRow()
+                                cu.multi_msg("%s has the older date (%s) and will be removed." % (r[2], r[4]))
+                                c.deleteRow()
                             if r[4] in keep_ids:
-                                print("You're going to have to write this condition...")
+                                cu.multi_msg("You're going to have to write this condition...")
                         else:
                             continue
             else:
@@ -230,5 +245,64 @@ def remove_geographic_doubles(polygon_fc, out_fc, unique_id, percent_overlap_all
     for drop_field in [src_field, nbr_field, 'AREA']:
         arcpy.DeleteField_management('in_memory/fc', drop_field)
     arcpy.CopyFeatures_management('in_memory/fc', out_fc)
+    for item in [neighbor_table, 'in_memory/fc']:
+        arcpy.Delete_management(item)
+
+
+
+def percent_geographic_doubles(polygon_fc, unique_id, percent_overlap_allowed = 10, keep_fc = '', keep_field = ''):
+    neighbor_table = 'in_memory/neighbortable'
+    cu.multi_msg('Calculating neighbor table...')
+    arcpy.PolygonNeighbors_analysis(polygon_fc, neighbor_table, unique_id,
+        'AREA_OVERLAP', 'NO_BOTH_SIDES')
+
+    # need these to avoid some naming problems that arise from trying to
+    # do this directly
+    src_field = arcpy.ListFields(neighbor_table, 'src*')[0].name
+    nbr_field = arcpy.ListFields(neighbor_table, 'nbr*')[0].name
+
+    arcpy.CopyFeatures_management(polygon_fc, 'in_memory/fc')
+    fdate_field = arcpy.ListFields('in_memory/fc', '*FDate*')[0].name
+    cu.multi_msg('Joining neighbor table to feature class...')
+    arcpy.JoinField_management('in_memory/fc', unique_id, neighbor_table,
+                            src_field)
+
+    cursor_fields = ['AREA', 'SHAPE@AREA', unique_id, nbr_field, fdate_field]
+##    print([f.name for f in arcpy.ListFields('in_memory/fc')])
+
+    if keep_fc:
+        keep_ids = [row[0] for row in arcpy.da.SearchCursor(keep_fc, keep_field)]
+    else:
+        keep_ids = []
+
+    with arcpy.da.SearchCursor('in_memory/fc', cursor_fields) as cursor:
+        for row in cursor:
+
+            # If this row represents a duplicate-type overlap
+            if row[0] >= row[1] * (100 - percent_overlap_allowed)/100:
+                src_value = row[2]
+                nbr_value = row[3]
+                cu.multi_msg("testing. pair: %s and %s" % (src_value, nbr_value))
+
+                # Then lookup both rows in the overlap and delete the one with
+                # the oldest FDate
+                where_clause = '''"%s" = '%s' OR "%s" = '%s' ''' % (unique_id, src_value, unique_id, nbr_value)
+                dates = [row[4] for row in arcpy.da.SearchCursor('in_memory/fc', cursor_fields, where_clause)]
+                cu.multi_msg("testing. dates %s and %s not in order" % (dates[0], dates[1]))
+                with arcpy.da.UpdateCursor('in_memory/fc', cursor_fields, where_clause) as c:
+                    for r in c:
+                        if r[4] == min(dates) and r[4] == max(dates):
+                            cu.multi_msg("PROBLEM! Same date. Resolve pair %s, %s manually." % (src_value, nbr_value))
+                        if r[4] == min(dates) and r[4] != max(dates):
+                            if r[4] not in keep_ids:
+                                cu.multi_msg("%s has the older date (%s) and would be removed." % (r[2], r[4]))
+
+                            if r[4] in keep_ids:
+                                cu.multi_msg("You're going to have to write this condition...")
+                        else:
+                            continue
+            else:
+                continue
+
     for item in [neighbor_table, 'in_memory/fc']:
         arcpy.Delete_management(item)

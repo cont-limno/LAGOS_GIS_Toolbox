@@ -131,12 +131,14 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
 
     env.workspace = in_workspace
     huc4_code = re.search('\d{4}', os.path.basename(in_workspace)).group()
-    nhd_gdb = os.path.join(in_workspace, 'NHDH%s.gdb' % huc4_code)
+    nhd_gdb = arcpy.ListWorkspaces()[0]
 
     # Select the right HUC4 from WBD_HU4 and make it it's own layer.
-    wbd_hu4 = os.path.join(nhd_gdb_copy, "WBD_HU4")
+    wbd_hu4 = os.path.join(nhd_gdb, "WBD_HU4")
     if not arcpy.Exists(wbd_hu4):
-        wbd_hu4 = os.path.join(nhd_gdb_copy, "WBDHU4")
+        wbd_hu4 = os.path.join(nhd_gdb, "WBDHU4")
+    arcpy.AddMessage(wbd_hu4)
+    arcpy.AddMessage(arcpy.Exists(wbd_hu4))
     field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
     whereClause =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc4_code)
     arcpy.MakeFeatureLayer_management(wbd_hu4, "Subregion", whereClause)
@@ -147,16 +149,17 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
     cu.multi_msg("Buffered subregion.")
 
     # Walk through the folder with NEDs to make a list of rasters
+    in_workspace = r'D:\Continental_Limnology\Data_Working\Test_Watersheds\NHD0503'
     mosaic_rasters = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(in_workspace, datatype="RasterDataset"):
         for filename in filenames:
             print(filename)
-            if filename.startswith('grd'):
+            if not '.jpg' in filename:
                 name = os.path.join(dirpath, filename)
                 mosaic_rasters.append(name)
 
 
-    cu.multi_msg("Found NED ArcGrids.")
+    cu.multi_msg("Found NED rasters.")
 
     # Update environments
     env.extent = subregion_buffer
@@ -164,8 +167,8 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
 
     if approx_size_dir_GB < .5 * int(available_ram):
         env.workspace = 'in_memory'
-        memory_msg = ("Attempting to use in_memory workspace. If you " +
-                    " experience problems during the exectuion of this tool, " +
+        memory_msg = ("Attempting to use in_memory workspace. If you" +
+                    " experience problems during the execution of this tool, " +
                     "try running it again with a lower value " +
                     "entered for 'Available RAM'.")
         cu.multi_msg(memory_msg)
@@ -205,16 +208,19 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
         arcpy.Delete_management(item)
     cu.multi_msg("Mosaicked NED tiles and clipped to HUC4 extent.")
 
+    for raster in mosaic_rasters:
+        arcpy.Delete_management(raster)
+
 
 # END OF DEF mosaic
 
-def delete_neds(workspace):
-    os.chdir(workspace)
-    for root, dirs, files in os.walk(workspace):
-        for d in dirs:
-            if re.match('n\d+w\d+', d):
-                print("Deleting NED folder %s" % d)
-                shutil.rmtree(d)
+# def delete_neds(workspace):
+#     os.chdir(workspace)
+#     for root, dirs, files in os.walk(workspace):
+#         for d in dirs:
+#             if re.match('n\d+w\d+', d):
+#                 print("Deleting NED folder %s" % d)
+#                 shutil.rmtree(d)
 
 
 def main():
@@ -227,7 +233,7 @@ def main():
 
     available_ram = arcpy.GetParameterAsText(5)
     mosaic(mosaic_workspace, mosaic_workspace, available_ram)
-    delete_neds(mosaic_workspace)
+    #delete_neds(mosaic_workspace)
 
 
 #######################################
@@ -245,7 +251,7 @@ def test():
     mosaic_workspace = stage_files(nhd_gdb, ned_dir, ned_footprints_fc,
                         out_dir, is_zipped)
     mosaic(mosaic_workspace, mosaic_workspace, available_ram)
-    delete_neds(mosaic_workspace)
+    #delete_neds(mosaic_workspace)
     arcpy.ResetEnvironments()
 
 

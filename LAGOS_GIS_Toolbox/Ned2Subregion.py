@@ -48,8 +48,9 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
 
     #select only this subregion from the wbd layer in the nhd_gdb (bordering
     # subregions are included in there too) and buffer it
-    env.workspace = nhd_gdb_copy
-    wbd_hu4 = arcpy.Describe(arcpy.ListFeatureClasses('*HU4*', feature_dataset = 'WBD')[0]).catalogPath
+    wbd_hu4 = os.path.join(nhd_gdb_copy, "WBD_HU4")
+    if not arcpy.Exists(wbd_hu4):
+        wbd_hu4 = os.path.join(nhd_gdb_copy, "WBDHU4")
     field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
     whereClause =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb_copy, field_name), huc4_code)
     arcpy.MakeFeatureLayer_management(wbd_hu4, "wbd_poly", whereClause)
@@ -133,7 +134,9 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
     nhd_gdb = os.path.join(in_workspace, 'NHDH%s.gdb' % huc4_code)
 
     # Select the right HUC4 from WBD_HU4 and make it it's own layer.
-    wbd_hu4 = os.path.join(nhd_gdb, "WBD_HU4")
+    wbd_hu4 = os.path.join(nhd_gdb_copy, "WBD_HU4")
+    if not arcpy.Exists(wbd_hu4):
+        wbd_hu4 = os.path.join(nhd_gdb_copy, "WBDHU4")
     field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
     whereClause =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc4_code)
     arcpy.MakeFeatureLayer_management(wbd_hu4, "Subregion", whereClause)

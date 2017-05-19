@@ -21,7 +21,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 
     # create temp directory because we need shape geometry
     temp_gdb = cu.create_temp_GDB('watersheds' + huc4_code)
-    print temp_gdb
+    cu.multi_msg("Temp geodatabase is located at {}".format(temp_gdb)
     env.workspace = temp_gdb
 
     wbd_hu8 = os.path.join(nhd_gdb, "WBD_HU8")

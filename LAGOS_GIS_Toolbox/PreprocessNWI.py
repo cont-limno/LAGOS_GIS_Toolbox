@@ -19,7 +19,8 @@ def InsideState(state, nwi, lakes, outfc):
     # Two things to make wetlands conform to the CSI definition
     # Select only palustrine systems that aren't freshwater ponds
     # and make it impossible for wetlands to be inside lakes
-    filter = """"ATTRIBUTE" LIKE 'P%' AND "WETLAND_TYPE" <> 'Freshwater Pond'"""
+    wetland_type_field = arcpy.ListFields("nwi_lyr", "WETLAND_TY*")[0].name
+    filter = """"ATTRIBUTE" LIKE 'P%' AND {} <> 'Freshwater Pond'""".format(wetland_type_field)
     cu.multi_msg("Selecting only palustrine wetlands...")
     arcpy.SelectLayerByAttribute_management("nwi_lyr", "SUBSET_SELECTION", filter)
     cu.multi_msg('Erasing lakes from wetlands layer.')

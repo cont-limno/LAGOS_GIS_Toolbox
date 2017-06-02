@@ -1,7 +1,118 @@
+import datetime
 import os
+import tempfile
+import xml.etree.ElementTree as ET
 import arcpy
 from arcpy import env
 import csiutils as cu
+
+
+# this method is ludicrous but works for today. 2017-06-02 njs
+def edit_metadata(out_table, zone_fc, in_value_raster,
+                  translator = 'C:\Program Files (x86)\ArcGIS\Desktop10.3\Metadata\Translator\ArcGIS2FGDC.xml'):
+    #translator path is not robust to changes in ArcGIS version or installation location right now
+    f = os.path.join(tempfile.gettempdir(), 'temp_metadata.xml')
+    arcpy.ExportMetadata_conversion(out_table, translator, f)
+
+    tree = ET.parse(f)
+    root = tree.getroot()
+
+    template_string = '''<dataqual>
+        <logic></logic>
+        <complete></complete>
+        <lineage>
+          <srcinfo>
+            <srccite>
+              <citeinfo>
+                <origin></origin>
+                <pubdate></pubdate>
+                <title></title>
+                <geoform></geoform>
+                <pubinfo>
+                  <pubplace></pubplace>
+                  <publish></publish>
+                </pubinfo>
+                <onlink></onlink>
+              </citeinfo>
+            </srccite>
+            <srcscale></srcscale>
+            <typesrc></typesrc>
+            <srctime>
+              <timeinfo>
+                <sngdate>
+                  <caldate></caldate>
+                </sngdate>
+              </timeinfo>
+              <srccurr></srccurr>
+            </srctime>
+            <srccitea></srccitea>
+            <srccontr></srccontr>
+          </srcinfo>
+          <procstep>
+            <procdesc>
+    </procdesc>
+            <procdate></procdate>
+          </procstep>
+        </lineage>
+      </dataqual>'''
+
+    new_src_template_string = '''
+    <srcinfo>
+            <srccite>
+              <citeinfo>
+                <origin></origin>
+                <pubdate></pubdate>
+                <title></title>
+                <geoform></geoform>
+                <pubinfo>
+                  <pubplace></pubplace>
+                  <publish></publish>
+                </pubinfo>
+                <onlink></onlink>
+              </citeinfo>
+            </srccite>
+            <srcscale></srcscale>
+            <typesrc></typesrc>
+            <srctime>
+              <timeinfo>
+                <sngdate>
+                  <caldate></caldate>
+                </sngdate>
+              </timeinfo>
+              <srccurr></srccurr>
+            </srctime>
+            <srccitea></srccitea>
+            <srccontr></srccontr>
+          </srcinfo>'''
+
+    dq_template = ET.fromstring(template_string)
+
+    dataqual = root.find('dataqual')
+    if dataqual is None:
+        root.insert(1, dq_template)
+    dataqual = root.find('dataqual')
+
+    github_tool_location = 'https://github.com/cont-limno/LAGOS_GIS_Toolbox/blob/master/LAGOS_GIS_Toolbox/zonal_tabarea.py'
+    dataqual.find('.//procdesc').text = github_tool_location
+    dataqual.find('.//procdate').text = str(datetime.date.today())
+    dataqual.find('.//proctime').text = str(datetime.datetime.now())
+
+    dataqual.find('.//srccontr').text = "Zones summarized"
+    dataqual.find('.//title').text = zone_fc
+
+    new_src_template = ET.fromstring(new_src_template_string)
+    lineage = root.find('.//lineage')
+    insert_pos = len([child for child in lineage if child.tag == 'srcinfo'])
+    lineage.insert(insert_pos, new_src_template)
+    new_src = lineage.findall('.//srcinfo')[insert_pos]
+
+    new_src.find('.//srccontr').text = "Raster values summarized to zones"
+    new_src.find('.//title').text = in_value_raster
+
+    tree.write(f)
+    arcpy.ImportMetadata_conversion(f, "FROM_FGDC", out_table)
+
+    os.remove(f)
 
 def refine_zonal_output(t, is_thematic):
     """Makes a nicer output for this tool. Rename some fields, drop unwanted
@@ -51,6 +162,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # errors thrown up at random
     # hence we get the following awkward horribleness
     use_convert_raster = False
+
     try:
         arcpy.sa.ZonalStatisticsAsTable(zone_fc, zone_field, in_value_raster,
                                 temp_zonal_table, 'DATA', 'ALL')
@@ -60,10 +172,11 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # pretty quickly, usually), do this way which always works but takes
     # twice as long on large rasters
     except:
-        use_convert_raster = True
         temp_workspace = cu.create_temp_GDB('temp_zonal')
         convert_raster = os.path.join(temp_workspace,
-                        cu.shortname(zone_fc) + '_converted')
+                       cu.shortname(zone_fc) + '_converted')
+        use_convert_raster = True
+
         cu.multi_msg('Creating raster {0}'.format(convert_raster))
         arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
         arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
@@ -122,6 +235,9 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         arcpy.AddWarning(warn_msg)
         print(warn_msg)
 
+    cu.multi_msg("Saving details to output metadata...")
+    edit_metadata(out_table, zone_fc, in_value_raster)
+
     # cleanup
     arcpy.Delete_management(temp_zonal_table)
     arcpy.Delete_management(temp_entire_table)
@@ -139,13 +255,16 @@ def main():
 
 
 def test():
-    test_gdb = 'C:/Users/smithn78/CSI_Processing/CSI/TestData_0411.gdb'
-    zone_fc = os.path.join(test_gdb, 'HU12')
+    test_gdb = r'C:\Users\smithn78\PycharmProjects\LAGOS_GIS_Toolbox\TestData_0411.gdb'
+    zone_fc = r'C:\Users\smithn78\PycharmProjects\LAGOS_GIS_Toolbox\TestData_0411.gdb\HU12'
     zone_field = 'ZoneID'
-    in_value_raster = os.path.join(test_gdb, 'NLCD_LandCover_2006')
-    out_table = 'C:/GISData/Scratch/Scratch.gdb/test_zonal_warning_OCT10'
-    is_thematic = True
+    in_value_raster = r'C:\Users\smithn78\PycharmProjects\LAGOS_GIS_Toolbox\TestData_0411.gdb\Total_Nitrogen_Deposition_2006'
+    out_table =  r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_zonal_stats_metadata'
+    is_thematic = False
     stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
+
+arcpy.env.overwriteOutput = True
+test()

@@ -1,13 +1,14 @@
 # Filename: Export2CSV.py
 import csv, os, re
 import arcpy
+import csiutils as cu
 
-def TableToCSV(in_table, out_folder, new_table_name = ''):
+def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = ''):
     if new_table_name:
         name = new_table_name
     else:
         name = os.path.splitext(os.path.basename(in_table))[0]
-    out_csv = os.path.join(out_folder, name + '.csv')
+    out_csv = os.path.join(out_folder, "{}.csv".format(name))
     fields = [f.name for f in arcpy.ListFields(in_table) if f.type <> 'Geometry' and f.name <> 'Shape_Area' and f.name <> 'Shape_Length' and f.name <> 'TARGET_FID']
     with open(out_csv, 'w') as f:
         f.write(','.join(fields)+'\n') #csv headers
@@ -49,11 +50,15 @@ def TableToCSV(in_table, out_folder, new_table_name = ''):
 ##                # this is the step that actually applies to function to all values
 ##                values = map(replace_scientific, values)
                 f.write(','.join(values)+'\n')
+    if output_schema:
+        out_schema = os.path.join(out_folder, "{}_schema.csv".format(name))
+        cu.describe_arcgis_table_csv(in_table, out_schema)
 
 def main():
     in_table = arcpy.GetParameterAsText(0)
     out_folder = arcpy.GetParameterAsText(1)
-    TableToCSV(in_table, out_folder)
+    output_schema = arcpy.GetParameter(2)
+    TableToCSV(in_table, out_folder, output_schema)
 
 if __name__ == '__main__':
     main()

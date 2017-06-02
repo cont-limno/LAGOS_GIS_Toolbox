@@ -7,8 +7,9 @@
 # Created:     19/12/2013
 
 #-------------------------------------------------------------------------------
-import os, tempfile
+import csv, os, tempfile
 import arcpy
+import numpy
 
 def main():
     pass
@@ -160,3 +161,37 @@ def lengthen_field(table_or_fc, field, new_length):
     arcpy.AddField_management(table_or_fc, field, old_field[0].type, field_length = new_length)
     arcpy.CalculateField_management(table_or_fc, field, '!{}!'.format(temp_field), 'PYTHON')
     arcpy.DeleteField_management(table_or_fc, temp_field)
+
+def describe_arcgis_table_csv(in_table, out_path):
+    """
+    :param in_table: A feature class or table used by ArcCatalog.
+    :param out_path: Where to save the output. Defaults to the input table named appended with "_cols.csv"
+    :return: None
+    """
+    fields = arcpy.ListFields(in_table)
+    string_fields = [f.name for f in fields if f.type == 'String']
+    print(string_fields)
+    try:
+        arr = arcpy.da.TableToNumpyArray(in_table, string_fields)
+    except:
+        arr = arcpy.da.FeatureClassToNumPyArray(in_table, string_fields)
+
+    #gets the maximum string length for each field and returns a dictionary named with the fields
+    string_lengths = dict(zip(string_fields, [len(max(arr[f], key=len)) for f in string_fields]))
+
+    with open(out_path, 'wb') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=[
+            'column_name', 'column_esri_type', 'column_esri_length', 'column_string_min'])
+        writer.writeheader()
+
+        for f in fields:
+            print(f.name)
+            if f.name in string_lengths:
+                shortest = string_lengths[f.name]
+            else:
+                shortest = ''
+            out_dict = {'column_name': f.name, 'column_esri_type': f.type, 'column_esri_length': f.length, \
+                        'column_string_min': shortest}
+            writer.writerow(out_dict)
+
+

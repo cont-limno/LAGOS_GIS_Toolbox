@@ -263,8 +263,5 @@ def test():
     is_thematic = False
     stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
 
-# if __name__ == '__main__':
-#     main()
-
-arcpy.env.overwriteOutput = True
-test()
+if __name__ == '__main__':
+    main()

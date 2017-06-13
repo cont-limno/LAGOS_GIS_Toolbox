@@ -66,7 +66,8 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 
     cu.multi_msg("Reshaping watersheds...")
     # Polygon back to raster
-    arcpy.PolygonToRaster_conversion("wsclip1_lyr", "grid_code", "ws_legit_ras")
+    grid_code = arcpy.ListFields("wsclip1_lyr", "grid*")[0].name
+    arcpy.PolygonToRaster_conversion("wsclip1_lyr", grid_code, "ws_legit_ras")
     arcpy.Clip_management("ws_legit_ras", '', "ws_legit_clipped_ras",
                           "hu8", "0", "ClippingGeometry")
 
@@ -118,7 +119,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 
     # Join Permanent ID from Waterbody seed shapefile
     final_watersheds_out = os.path.join(out_gdb, 'huc{}_final_watersheds'.format(huc8_code))
-    arcpy.JoinField_management("final_watersheds", 'grid_code', seedpoly, 'POUR_ID', ['Permanent_Identifier'])
+    arcpy.JoinField_management("final_watersheds", grid_code, seedpoly, 'POUR_ID', ['Permanent_Identifier'])
 
     # this block bumps out sheds so that they fully contain their own lakes
     # sometimes a little bit of another shed is overlapping the lake simply

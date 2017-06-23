@@ -153,7 +153,7 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
             # and get a list of all the dates
             dates = [row[0] for row in arcpy.da.SearchCursor("fc_temp", (fdate_field), whereClause)]
 
-            # print("ID group %s" % s_id)
+            print("ID group %s" % s_id)
             # print("Date object values: %s" % dates)
             # print("Newest date: %s\n" % max(dates))
 
@@ -161,6 +161,8 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
             # sometimes more than one record with max date but
             # the following allows us to use "NewestFDate" = 1 later to
             # select ONLY ONE to keep
+            # Update 2017-06-22: If you just run Delete Identical on full identicals, you actually could use that
+            # but I'm not going to change this now.
             with arcpy.da.UpdateCursor("fc_temp", (fdate_field, "NewestFDate"), whereClause) as cursor:
                 i = 1
                 for row in cursor:
@@ -174,7 +176,7 @@ def remove_nhd_duplicates(in_fc, unique_id, out_fc):
         # create a new, distinct output rather than updating table in place
         # arcpy.Select_analysis("fc_temp", "newest_only", ''' "NewestFDate" = 1 ''')
         arcpy.Select_analysis("fc_temp", out_fc, ''' "NewestFDate" = 1 ''')
-        arcpy.DeleteField_management("newest_only", "NewestFDate")
+        arcpy.DeleteField_management(out_fc, "NewestFDate")
         # arcpy.Merge_management(["newest_only", "unique"], out_fc)
 
 ##        for intermediate in ["freqtable", "dupetable", "fc_temp", "newest_only"]:

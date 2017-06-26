@@ -161,3 +161,8 @@ pip-log.txt
 
 # Mac crap
 .DS_Store
+.idea/LAGOS_GIS_Toolbox.iml
+.idea/modules.xml
+.idea/misc.xml
+.idea/vcs.xml
+.idea/workspace.xml

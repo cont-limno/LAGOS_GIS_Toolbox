@@ -35,6 +35,8 @@ def validate_control_file(control_file, filter=''):
                 print("ERROR: Add job number to line {}".format(linenum))
                 problem_count += 1
             else:
+                if jobnum > filter[1] or jobnum < filter[0]:
+                    continue
                 if jobnum in jobnum_set:
                     print("ERROR: Duplicate job number. First duplication is at line {}".format(linenum))
                 else:
@@ -93,6 +95,9 @@ def batch_run(control_file, output_geodatabase, filter='', validate=True):
         writer.writeheader()
 
         for line in reader:
+            jobnum = line['Jobnum']
+            if jobnum > filter[1] or jobnum < filter[0]:
+                continue
             zone_fc = line['Zone Path']
             zone_field = 'ZoneID'
             in_value_raster = line['Raster Path']

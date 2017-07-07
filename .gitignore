@@ -168,10 +168,7 @@ pip-log.txt
 .idea/workspace.xml
 <<<<<<< HEAD
 
-LAGOS_GIS_Toolbox/scratch.py
-Lakes_in_the_US/doit.py
-Lakes_in_the_US/lakes_us.py
-Lakes_in_the_US/__init__.py
+
 =======
 >>>>>>> refs/remotes/origin/develop
 LAGOS_GIS_Toolbox/scratch.py

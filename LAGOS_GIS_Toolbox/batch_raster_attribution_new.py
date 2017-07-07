@@ -4,7 +4,7 @@ from tempfile import NamedTemporaryFile
 import zonal_tabarea
 
 
-def validate_control_file(control_file, filter=''):
+def validate_control_file(control_file, filter= None):
     """ Validates many (not all) of the paths and settings in the raster job control file. The following problems can
     be identified: Duplicate zone/raster combination, duplicate job number, missing job number, zones path does not
     exist, raster path does not exist, zones do not have ZoneID, projection is not USGS Albers. The following
@@ -35,8 +35,9 @@ def validate_control_file(control_file, filter=''):
                 print("ERROR: Add job number to line {}".format(linenum))
                 problem_count += 1
             else:
-                if jobnum > filter[1] or jobnum < filter[0]:
-                    continue
+                if filter:
+                     if jobnum > filter[1] or jobnum < filter[0]:
+                         continue
                 if jobnum in jobnum_set:
                     print("ERROR: Duplicate job number. First duplication is at line {}".format(linenum))
                 else:
@@ -52,8 +53,13 @@ def validate_control_file(control_file, filter=''):
                 print("ERROR: Raster path not valid for line {}".format(linenum))
                 problem_count += 1
 
-            # TODO: Add projection check for each
-            print(arcpy.Describe(zone).spatialReference.factoryCode)
+            if arcpy.Describe(zone).spatialReference.factoryCode not in [102039, 5070]:
+                print("ERROR: Zone projection not Albers USGS for line {}".format(linenum))
+                problem_count += 1
+
+            if arcpy.Describe(raster).spatialReference.factoryCode not in [102039, 5070]:
+                print("ERROR: Raster projection not Albers USGS for line {}".format(linenum))
+                problem_count += 1
 
             if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line[
                 'Is Thematic'] <> 'Y':
@@ -64,6 +70,7 @@ def validate_control_file(control_file, filter=''):
         time.sleep(1)  # keep other messages from interrupting list
 
     if problem_count == 0:
+        print("SUCCESS! Your control file is valid and you can begin the batch run.")
         return True
     else:
         return False
@@ -167,5 +174,4 @@ def test():
 
 
 if __name__ == '__main__':
-    # TODO: Switch it back to main
-    test()
+    main()

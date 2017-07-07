@@ -245,6 +245,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         arcpy.Delete_management(os.path.dirname(temp_workspace))
     arcpy.CheckInExtension("Spatial")
 
+    return [out_table, in_count - out_count]
+
 def main():
     zone_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)

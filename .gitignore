@@ -166,3 +166,5 @@ pip-log.txt
 .idea/misc.xml
 .idea/vcs.xml
 .idea/workspace.xml
+
+LAGOS_GIS_Toolbox/scratch.py

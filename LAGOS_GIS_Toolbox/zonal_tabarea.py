@@ -150,7 +150,7 @@ def refine_zonal_output(t, is_thematic):
 
 def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic):
     arcpy.CheckOutExtension("Spatial")
-    cu.multi_msg("Calculating zonal statistics...")
+    arcpy.AddMessage("Calculating zonal statistics...")
     temp_zonal_table = 'in_memory/zonal_stats_temp'
     temp_entire_table = 'in_memory/temp_entire_table'
 
@@ -177,7 +177,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
                        cu.shortname(zone_fc) + '_converted')
         use_convert_raster = True
 
-        cu.multi_msg('Creating raster {0}'.format(convert_raster))
+        arcpy.AddMessage('Creating raster {0}'.format(convert_raster))
         arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
         arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
                                     temp_zonal_table, "DATA", "ALL")
@@ -189,7 +189,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
         # calculate/doit
         temp_area_table = 'in_memory/tab_area_temp'
-        cu.multi_msg("Tabulating areas...")
+        arcpy.AddMessage("Tabulating areas...")
 
         if use_convert_raster:
             arcpy.sa.TabulateArea(convert_raster, zone_field, in_value_raster,
@@ -210,7 +210,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         # making the output table
         arcpy.CopyRows_management(temp_zonal_table, temp_entire_table)
 
-    cu.multi_msg("Refining output table...")
+    arcpy.AddMessage("Refining output table...")
     refine_zonal_output(temp_entire_table, is_thematic)
 
 
@@ -227,15 +227,16 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # count whether all zones got an output record or not)
     out_count = int(arcpy.GetCount_management(temp_entire_table).getOutput(0))
     in_count = int(arcpy.GetCount_management(zone_fc).getOutput(0))
-    if out_count < in_count:
+    count_diff = in_count - out_count
+    if count_diff > 0:
         warn_msg = ("WARNING: {0} features are missing in the output table"
                     " because they are too small for this raster's"
                     " resolution. This may be okay depending on your"
-                    " application.").format(in_count - out_count)
+                    " application.").format(count_diff)
         arcpy.AddWarning(warn_msg)
         print(warn_msg)
 
-    cu.multi_msg("Saving details to output metadata...")
+    arcpy.AddMessage("Saving details to output metadata...")
     edit_metadata(out_table, zone_fc, in_value_raster)
 
     # cleanup
@@ -245,7 +246,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         arcpy.Delete_management(os.path.dirname(temp_workspace))
     arcpy.CheckInExtension("Spatial")
 
-    return [out_table, in_count - out_count]
+    return [out_table, count_diff]
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

@@ -7,112 +7,112 @@ from arcpy import env
 import csiutils as cu
 
 
-# this method is ludicrous but works for today. 2017-06-02 njs
-def edit_metadata(out_table, zone_fc, in_value_raster,
-                  translator = 'C:\Program Files (x86)\ArcGIS\Desktop10.3\Metadata\Translator\ArcGIS2FGDC.xml'):
-    #translator path is not robust to changes in ArcGIS version or installation location right now
-    f = os.path.join(tempfile.gettempdir(), 'temp_metadata.xml')
-    arcpy.ExportMetadata_conversion(out_table, translator, f)
-
-    tree = ET.parse(f)
-    root = tree.getroot()
-
-    template_string = '''<dataqual>
-        <logic></logic>
-        <complete></complete>
-        <lineage>
-          <srcinfo>
-            <srccite>
-              <citeinfo>
-                <origin></origin>
-                <pubdate></pubdate>
-                <title></title>
-                <geoform></geoform>
-                <pubinfo>
-                  <pubplace></pubplace>
-                  <publish></publish>
-                </pubinfo>
-                <onlink></onlink>
-              </citeinfo>
-            </srccite>
-            <srcscale></srcscale>
-            <typesrc></typesrc>
-            <srctime>
-              <timeinfo>
-                <sngdate>
-                  <caldate></caldate>
-                </sngdate>
-              </timeinfo>
-              <srccurr></srccurr>
-            </srctime>
-            <srccitea></srccitea>
-            <srccontr></srccontr>
-          </srcinfo>
-          <procstep>
-            <procdesc>
-    </procdesc>
-            <procdate></procdate>
-          </procstep>
-        </lineage>
-      </dataqual>'''
-
-    new_src_template_string = '''
-    <srcinfo>
-            <srccite>
-              <citeinfo>
-                <origin></origin>
-                <pubdate></pubdate>
-                <title></title>
-                <geoform></geoform>
-                <pubinfo>
-                  <pubplace></pubplace>
-                  <publish></publish>
-                </pubinfo>
-                <onlink></onlink>
-              </citeinfo>
-            </srccite>
-            <srcscale></srcscale>
-            <typesrc></typesrc>
-            <srctime>
-              <timeinfo>
-                <sngdate>
-                  <caldate></caldate>
-                </sngdate>
-              </timeinfo>
-              <srccurr></srccurr>
-            </srctime>
-            <srccitea></srccitea>
-            <srccontr></srccontr>
-          </srcinfo>'''
-
-    dq_template = ET.fromstring(template_string)
-
-    dataqual = root.find('dataqual')
-    if dataqual is None:
-        root.insert(1, dq_template)
-    dataqual = root.find('dataqual')
-
-    github_tool_location = 'https://github.com/cont-limno/LAGOS_GIS_Toolbox/blob/master/LAGOS_GIS_Toolbox/zonal_tabarea.py'
-    dataqual.find('.//procdesc').text = github_tool_location
-    dataqual.find('.//procdate').text = str(datetime.date.today())
-    dataqual.find('.//proctime').text = str(datetime.datetime.now())
-
-    dataqual.find('.//srccontr').text = "Zones summarized"
-    dataqual.find('.//title').text = zone_fc
-
-    new_src_template = ET.fromstring(new_src_template_string)
-    lineage = root.find('.//lineage')
-    insert_pos = len([child for child in lineage if child.tag == 'srcinfo'])
-    lineage.insert(insert_pos, new_src_template)
-    new_src = lineage.findall('.//srcinfo')[insert_pos]
-
-    new_src.find('.//srccontr').text = "Raster values summarized to zones"
-    new_src.find('.//title').text = in_value_raster
-
-    tree.write(f)
-    arcpy.ImportMetadata_conversion(f, "FROM_FGDC", out_table)
-
-    os.remove(f)
+# # this method is ludicrous but works for today. 2017-06-02 njs
+# def edit_metadata(out_table, zone_fc, in_value_raster,
+#                   translator = 'C:\Program Files (x86)\ArcGIS\Desktop10.3\Metadata\Translator\ArcGIS2FGDC.xml'):
+#     #translator path is not robust to changes in ArcGIS version or installation location right now
+#     f = os.path.join(tempfile.gettempdir(), 'temp_metadata.xml')
+#     arcpy.ExportMetadata_conversion(out_table, translator, f)
+#
+#     tree = ET.parse(f)
+#     root = tree.getroot()
+#
+#     template_string = '''<dataqual>
+#         <logic></logic>
+#         <complete></complete>
+#         <lineage>
+#           <srcinfo>
+#             <srccite>
+#               <citeinfo>
+#                 <origin></origin>
+#                 <pubdate></pubdate>
+#                 <title></title>
+#                 <geoform></geoform>
+#                 <pubinfo>
+#                   <pubplace></pubplace>
+#                   <publish></publish>
+#                 </pubinfo>
+#                 <onlink></onlink>
+#               </citeinfo>
+#             </srccite>
+#             <srcscale></srcscale>
+#             <typesrc></typesrc>
+#             <srctime>
+#               <timeinfo>
+#                 <sngdate>
+#                   <caldate></caldate>
+#                 </sngdate>
+#               </timeinfo>
+#               <srccurr></srccurr>
+#             </srctime>
+#             <srccitea></srccitea>
+#             <srccontr></srccontr>
+#           </srcinfo>
+#           <procstep>
+#             <procdesc>
+#     </procdesc>
+#             <procdate></procdate>
+#           </procstep>
+#         </lineage>
+#       </dataqual>'''
+#
+#     new_src_template_string = '''
+#     <srcinfo>
+#             <srccite>
+#               <citeinfo>
+#                 <origin></origin>
+#                 <pubdate></pubdate>
+#                 <title></title>
+#                 <geoform></geoform>
+#                 <pubinfo>
+#                   <pubplace></pubplace>
+#                   <publish></publish>
+#                 </pubinfo>
+#                 <onlink></onlink>
+#               </citeinfo>
+#             </srccite>
+#             <srcscale></srcscale>
+#             <typesrc></typesrc>
+#             <srctime>
+#               <timeinfo>
+#                 <sngdate>
+#                   <caldate></caldate>
+#                 </sngdate>
+#               </timeinfo>
+#               <srccurr></srccurr>
+#             </srctime>
+#             <srccitea></srccitea>
+#             <srccontr></srccontr>
+#           </srcinfo>'''
+#
+#     dq_template = ET.fromstring(template_string)
+#
+#     dataqual = root.find('dataqual')
+#     if dataqual is None:
+#         root.insert(1, dq_template)
+#     dataqual = root.find('dataqual')
+#
+#     github_tool_location = 'https://github.com/cont-limno/LAGOS_GIS_Toolbox/blob/master/LAGOS_GIS_Toolbox/zonal_tabarea.py'
+#     dataqual.find('.//procdesc').text = github_tool_location
+#     dataqual.find('.//procdate').text = str(datetime.date.today())
+#     dataqual.find('.//proctime').text = str(datetime.datetime.now())
+#
+#     dataqual.find('.//srccontr').text = "Zones summarized"
+#     dataqual.find('.//title').text = zone_fc
+#
+#     new_src_template = ET.fromstring(new_src_template_string)
+#     lineage = root.find('.//lineage')
+#     insert_pos = len([child for child in lineage if child.tag == 'srcinfo'])
+#     lineage.insert(insert_pos, new_src_template)
+#     new_src = lineage.findall('.//srcinfo')[insert_pos]
+#
+#     new_src.find('.//srccontr').text = "Raster values summarized to zones"
+#     new_src.find('.//title').text = in_value_raster
+#
+#     tree.write(f)
+#     arcpy.ImportMetadata_conversion(f, "FROM_FGDC", out_table)
+#
+#     os.remove(f)
 
 def refine_zonal_output(t, is_thematic):
     """Makes a nicer output for this tool. Rename some fields, drop unwanted
@@ -150,7 +150,7 @@ def refine_zonal_output(t, is_thematic):
 
 def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic):
     arcpy.CheckOutExtension("Spatial")
-    cu.multi_msg("Calculating zonal statistics...")
+    arcpy.AddMessage("Calculating zonal statistics...")
     temp_zonal_table = 'in_memory/zonal_stats_temp'
     temp_entire_table = 'in_memory/temp_entire_table'
 
@@ -177,7 +177,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
                        cu.shortname(zone_fc) + '_converted')
         use_convert_raster = True
 
-        cu.multi_msg('Creating raster {0}'.format(convert_raster))
+        arcpy.AddMessage('Creating raster {0}'.format(convert_raster))
         arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
         arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
                                     temp_zonal_table, "DATA", "ALL")
@@ -189,7 +189,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
         # calculate/doit
         temp_area_table = 'in_memory/tab_area_temp'
-        cu.multi_msg("Tabulating areas...")
+        arcpy.AddMessage("Tabulating areas...")
 
         if use_convert_raster:
             arcpy.sa.TabulateArea(convert_raster, zone_field, in_value_raster,
@@ -210,7 +210,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         # making the output table
         arcpy.CopyRows_management(temp_zonal_table, temp_entire_table)
 
-    cu.multi_msg("Refining output table...")
+    arcpy.AddMessage("Refining output table...")
     refine_zonal_output(temp_entire_table, is_thematic)
 
 
@@ -227,16 +227,17 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # count whether all zones got an output record or not)
     out_count = int(arcpy.GetCount_management(temp_entire_table).getOutput(0))
     in_count = int(arcpy.GetCount_management(zone_fc).getOutput(0))
-    if out_count < in_count:
+    count_diff = in_count - out_count
+    if count_diff > 0:
         warn_msg = ("WARNING: {0} features are missing in the output table"
                     " because they are too small for this raster's"
                     " resolution. This may be okay depending on your"
-                    " application.").format(in_count - out_count)
+                    " application.").format(count_diff)
         arcpy.AddWarning(warn_msg)
         print(warn_msg)
 
-    cu.multi_msg("Saving details to output metadata...")
-    edit_metadata(out_table, zone_fc, in_value_raster)
+    # arcpy.AddMessage("Saving details to output metadata...")
+    # edit_metadata(out_table, zone_fc, in_value_raster)
 
     # cleanup
     arcpy.Delete_management(temp_zonal_table)
@@ -244,6 +245,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     if use_convert_raster:
         arcpy.Delete_management(os.path.dirname(temp_workspace))
     arcpy.CheckInExtension("Spatial")
+
+    return [out_table, count_diff]
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

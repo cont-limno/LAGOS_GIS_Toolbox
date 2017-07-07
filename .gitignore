@@ -161,8 +161,23 @@ pip-log.txt
 
 # Mac crap
 .DS_Store
+<<<<<<< HEAD
 .idea/LAGOS_GIS_Toolbox.iml
 .idea/modules.xml
 .idea/misc.xml
 .idea/vcs.xml
 .idea/workspace.xml
+=======
+.idea/workspace.xml
+.idea/modules.xml
+.idea/misc.xml
+.idea/LAGOS_GIS_Toolbox.iml
+.idea/vcs.xml
+LAGOS_GIS_Toolbox/deprecated/__init__.py
+*.lock
+TestData_0411.gdb/timestamps
+Lakes_in_the_US/doit.py
+Lakes_in_the_US/lakes_us.py
+Lakes_in_the_US/__init__.py
+TestData_0411.gdb/timestamps
+>>>>>>> refs/remotes/origin/master

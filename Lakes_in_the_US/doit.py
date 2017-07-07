@@ -104,8 +104,7 @@ updateRows = arcpy.da.UpdateCursor()
 
 
 ###### PROBABLY CHANGE A LOT OF THIS BELOW ####
-#################
-#####
+
 
 
 # Get WQP sites ready for spatial join

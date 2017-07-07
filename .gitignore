@@ -168,3 +168,6 @@ pip-log.txt
 .idea/workspace.xml
 
 LAGOS_GIS_Toolbox/scratch.py
+Lakes_in_the_US/doit.py
+Lakes_in_the_US/lakes_us.py
+Lakes_in_the_US/__init__.py

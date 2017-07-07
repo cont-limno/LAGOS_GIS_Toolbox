@@ -6,6 +6,7 @@ import os
 import arcpy
 import csiutils as cu
 
+XY_TOLERANCE = '1 Meters'
 
 def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
     if debug_mode:
@@ -52,7 +53,9 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
 
     # Get junctions from lakes >= 10 hectares.
     layers_list.append(arcpy.MakeFeatureLayer_management(nhdjunction, "junction_lyr"))
-    arcpy.SelectLayerByLocation_management("junction_lyr", "INTERSECT", "csiwaterbody_10ha", "", "NEW_SELECTION")
+    arcpy.SelectLayerByLocation_management("junction_lyr", "INTERSECT", "csiwaterbody_10ha", XY_TOLERANCE,
+                                           "NEW_SELECTION")
+
     arcpy.CopyFeatures_management("junction_lyr", "flags_10ha_lake_junctions")
     arcpy.AddMessage("Found lakes >= 10 ha.")
 
@@ -88,7 +91,7 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
                          "and input midpoints ({2})".format(merge_n, jxn_n, mid_n))
 
     # For tracing barriers, select all_non_flag_points points that intersect a 10 ha lake.
-    arcpy.SelectLayerByLocation_management("all_non_flag_points_lyr", "INTERSECT", "csiwaterbody_10ha", "",
+    arcpy.SelectLayerByLocation_management("all_non_flag_points_lyr", "INTERSECT", "csiwaterbody_10ha", XY_TOLERANCE,
                                            "NEW_SELECTION")
     arcpy.CopyFeatures_management("all_non_flag_points_lyr", "barriers")
 
@@ -115,17 +118,17 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
     # Make shapefile for seepage lakes. (Ones that don't intersect flowlines)
     arcpy.AddField_management(out_feature_class, "LakeConnectivity", "TEXT", field_length=13)
     layers_list.append(arcpy.MakeFeatureLayer_management(out_feature_class, "out_fc_lyr"))
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, "", "NEW_SELECTION")
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, "", "SWITCH_SELECTION")
     arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'Isolated'""", "PYTHON")
 
     # Get headwater lakes.
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", "", "NEW_SELECTION")
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
     arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'Headwater'""", "PYTHON")
 
     # Select csiwaterbody that intersect trace2junctions
     arcpy.AddMessage("Beginning connectivity attribution...")
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "trace2junctions", "", "NEW_SELECTION")
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "trace2junctions", XY_TOLERANCE, "NEW_SELECTION")
     arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'DR_LakeStream'""", "PYTHON")
 
     # Get stream drainage lakes.

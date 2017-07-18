@@ -18,7 +18,6 @@ def batch_add_merge_ids(nhd_parent_directory):
     # Find all fcs containing a field called "Permanent_Identifier"
     print("Finding feature classes containing Permanent_Identifier...")
     fcs = []
-
     for dirpath, dirnames, filenames in arcpy.da.Walk(nhd_parent_directory, datatype="FeatureClass"):
         for filename in filenames:
             fc = os.path.join(dirpath, filename)
@@ -51,8 +50,6 @@ def deduplicate_nhd(in_feature_class, out_feature_class = '', unique_id = 'Perma
     :return:
     """
     # SETUP
-    arcpy.env.scratchWorkspace = os.getenv("TEMP")
-    temp_dupes = arcpy.CreateUniqueName("temp_dupes", arcpy.env.scratchGDB)
     if out_feature_class:
         arcpy.AddMessage("Copying initial features to output...")
         arcpy.CopyFeatures_management(in_feature_class, out_feature_class)
@@ -73,22 +70,25 @@ def deduplicate_nhd(in_feature_class, out_feature_class = '', unique_id = 'Perma
 
     # Delete duplicated IDs by taking the most recent FDate--these come from NHD editing process somehow
     arcpy.AddMessage("Deleting older features with duplicated identifiers...")
-    result = arcpy.FindIdentical_management(out_feature_class, temp_dupes, unique_id, output_record_option = "ONLY_DUPLICATES")
-    lyr = arcpy.MakeFeatureLayer_management(out_feature_class, "join_lyr")
-    arcpy.AddJoin_management(lyr, "OBJECTID", result.getOutput(0), "IN_FID", "KEEP_COMMON")
-    dupe_ids = list(set([row[0] for row in arcpy.da.SearchCursor(out_feature_class, [unique_id])]))
-    arcpy.RemoveJoin_management(out_feature_class)
-    dupe_filter = ''' unique_id == '{}' '''
-    for id in dupe_ids:
-        dates = [row[0] for row in arcpy.da.SearchCursor(out_feature_class, ["FDate"], dupe_filter.format(id))]
-        with arcpy.da.UpdateCursor(out_feature_class, [unique_id, "FDate"], dupe_filter.format(id)) as cursor:
-            for row in cursor:
-                if row[1] == max(dates):
-                    pass
-                else:
-                    cursor.deleteRow()
-    after_both_count = int(arcpy.GetCount_management(out_feature_class).getOutput(0))
-    arcpy.AddMessage("{0} features were removed because they were less recently edited than another feature with the same identifier.".format(after_full_count - after_both_count))
 
-    # CLEANUP
-    arcpy.Delete_management(temp_dupes)
+    # Get a list of distinct IDs that have duplicates
+    arcpy.Frequency_analysis(out_feature_class, "in_memory/freqtable", unique_id)
+    arcpy.TableSelect_analysis("in_memory/freqtable", "in_memory/dupeslist", '''"FREQUENCY" > 1''')
+    count_dupes = int(arcpy.GetCount_management("in_memory/dupeslist").getOutput(0))
+
+    #If there are any duplicates, remove them by keeping the one with the latest FDate
+    if count_dupes > 0:
+        dupe_ids = [row[0] for row in arcpy.da.SearchCursor("in_memory/dupeslist", (unique_id))]
+        dupe_filter = ''' "{}" = '{{}}' '''.format(unique_id)
+        for id in dupe_ids:
+            dates = [row[0] for row in arcpy.da.SearchCursor(out_feature_class, ["FDate"], dupe_filter.format(id))]
+            with arcpy.da.UpdateCursor(out_feature_class, [unique_id, "FDate"], dupe_filter.format(id)) as cursor:
+                for row in cursor:
+                    if row[1] == max(dates):
+                        pass
+                    else:
+                        cursor.deleteRow()
+        after_both_count = int(arcpy.GetCount_management(out_feature_class).getOutput(0))
+        arcpy.AddMessage("{0} features were removed because they were less recently edited than another feature with the same identifier.".format(after_full_count - after_both_count))
+    arcpy.Delete_management("in_memory/freqtable")
+    arcpy.Delete_management("in_memory/dupeslist")

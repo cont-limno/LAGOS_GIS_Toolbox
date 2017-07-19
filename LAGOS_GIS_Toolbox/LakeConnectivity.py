@@ -57,9 +57,13 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
 
     # Isolate start dangles from end dangles.
     arcpy.FeatureVerticesToPoints_management(nhdflowline, "start", "START")
+    arcpy.FeatureVerticesToPoints_management(nhdflowline, "end", "END")
 
     arcpy.SelectLayerByLocation_management("dangles_lyr", "ARE_IDENTICAL_TO", "start")
     arcpy.CopyFeatures_management("dangles_lyr", "startdangles")
+    arcpy.SelectLayerByLocation_management("dangles_lyr", "ARE_IDENTICAL_TO", "end")
+    arcpy.CopyFeatures_management("dangles_lyr", "enddangles")
+
     arcpy.AddMessage("Found source area nodes.")
 
     # Get junctions from lakes >= 10 hectares.
@@ -137,8 +141,14 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, "", "SWITCH_SELECTION")
     arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
+    # New type of "Isolated" classification, mostly for "permanent" but there were some oddballs in "maximum" too
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "enddangles", XY_TOLERANCE, "SUBSET_SELECTION")
+    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
+
     # Get headwater lakes.
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
+    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "REMOVE_FROM_SELECTION", '''"{}" = 'Isolated '''.format(class_field_name))
     arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
 
     # Select csiwaterbody that intersect trace2junctions

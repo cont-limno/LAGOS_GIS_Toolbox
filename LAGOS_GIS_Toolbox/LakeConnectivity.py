@@ -20,6 +20,7 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
         arcpy.env.workspace = 'in_memory'
 
     layers_list = []
+    temp_feature_class = "in_memory/temp_fc"
 
     # Local variables:
     nhdflowline = os.path.join(nhd, "Hydrography", "NHDFLowline")
@@ -35,7 +36,11 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     # Can't see why we shouldn't just attribute all lakes and reservoirs
     # arcpy.Select_analysis(nhdwaterbody, "csiwaterbody", lake_population_filter)
     arcpy.AddMessage("Initializing output.")
-    arcpy.Select_analysis(nhdwaterbody, out_feature_class, all_lakes_reservoirs_filter)
+    if exclude_intermit_flowlines:
+        arcpy.CopyFeatures_management(out_feature_class, temp_feature_class)
+    else:
+        arcpy.Select_analysis(nhdwaterbody, temp_feature_class, all_lakes_reservoirs_filter)
+
 
     # Get lakes, ponds and reservoirs over 10 hectares.
     lakes_10ha_filter = '''"AreaSqKm" >= 0.1 AND "FType" IN (390, 436)'''
@@ -43,8 +48,8 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
 
     # Exclude intermittent flowlines, if requested
     if exclude_intermit_flowlines:
-        flowline_where_clause = '''"FCode" NOT IN (46003,46006,46007)'''
-        nhdflowline = arcpy.Select_analysis(nhdflowline, flowline_where_clause)
+        flowline_where_clause = '''"FCode" NOT IN (46003,46007)'''
+        nhdflowline = arcpy.Select_analysis(nhdflowline, "nhdflowline_filtered", flowline_where_clause)
 
     # Make dangle points at end of nhdflowline
     arcpy.FeatureVerticesToPoints_management(nhdflowline, "dangles", "DANGLE")
@@ -122,13 +127,12 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     arcpy.AddMessage("Done tracing.")
 
     # Make shapefile for seepage lakes. (Ones that don't intersect flowlines)
-
     if exclude_intermit_flowlines:
         class_field_name = "Permanent_Lake_Connectivity"
     else:
         class_field_name = "Maximum_Lake_Connectivity"
-    arcpy.AddField_management(out_feature_class, class_field_name, "TEXT", field_length=13)
-    layers_list.append(arcpy.MakeFeatureLayer_management(out_feature_class, "out_fc_lyr"))
+    arcpy.AddField_management(temp_feature_class, class_field_name, "TEXT", field_length=13)
+    layers_list.append(arcpy.MakeFeatureLayer_management(temp_feature_class, "out_fc_lyr"))
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, "", "SWITCH_SELECTION")
     arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
@@ -143,19 +147,23 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_LakeStream'""", "PYTHON")
 
     # Get stream drainage lakes.
-    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"LakeConnectivity" IS NULL''')
+    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" IS NULL'''.format(class_field_name))
     arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
 
-    # Write output now. Switching CRS earlier causes trace problems.
-    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
+    # Project output once done with both. Switching CRS earlier causes trace problems.
+    if not exclude_intermit_flowlines:
+        arcpy.CopyFeatures_management(temp_feature_class, out_feature_class)
+    else:
+        arcpy.Project_management(temp_feature_class, out_feature_class, arcpy.SpatialReference(102039))
+
+
     # Clean up
     for layer in layers_list:
         arcpy.Delete_management(layer)
-    if debug_mode:
-        pass
     else:
         arcpy.Delete_management("in_memory")
-    arcpy.AddMessage("Lake Connectivity classification is complete.")
+    arcpy.AddMessage("{} classification is complete.".format(class_field_name))
+
 
 def main():
     nhd = arcpy.GetParameterAsText(0)
@@ -173,4 +181,5 @@ def test(out_feature_class):
 
 
 if __name__ == '__main__':
-    main()
+    #TODO: Change back
+    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_perm_conn')

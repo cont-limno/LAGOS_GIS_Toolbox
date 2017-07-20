@@ -165,5 +165,4 @@ def main():
     colorPolygons(in_feature_class, feature_field, out_feature_class)
 
 if __name__ == '__main__':
-    # TODO: Switch back
-    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_color_poly3')
+    main()

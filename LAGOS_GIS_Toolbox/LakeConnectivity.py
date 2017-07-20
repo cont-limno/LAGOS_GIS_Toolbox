@@ -66,9 +66,10 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
 
     # Special handling for lakes that have some intermittent flow in and some permanent
     if  exclude_intermit_flowlines:
-        arcpy.SelectLayerByAttribute_management(nhdflowline, "NEW_SELECTION", '''"WBArea_Permanent_Identifier" is null''')
-        arcpy.FeatureVerticesToPoints_management(nhdflowline, "non_artificial_end", "END")
-        arcpy.SelectLayerByAttribute_management(nhdflowline, "CLEAR_SELECTION")
+        layers_list.append(arcpy.MakeFeatureLayer_management(nhdflowline, "nhdflowline_lyr"))
+        arcpy.SelectLayerByAttribute_management("nhdflowline_lyr", "NEW_SELECTION", '''"WBArea_Permanent_Identifier" is null''')
+        arcpy.FeatureVerticesToPoints_management("nhdflowline_lyr", "non_artificial_end", "END")
+        arcpy.SelectLayerByAttribute_management("nhdflowline_lyr", "CLEAR_SELECTION")
 
     arcpy.AddMessage("Found source area nodes.")
 
@@ -165,9 +166,11 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     # Get stream drainage lakes. Either unassigned so far or convert "Headwater" if a permanent stream flows into it,
     # which is detected with "non_artificial_end"
     arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" IS NULL'''.format(class_field_name))
-    if exclude_intermit_flowlines:
-        arcpy.SelectLayerByLocation_management("out_fc_lyr", "ADD_TO_SELECTION", "non_artificial_end", XY_TOLERANCE, "NEW_SELECTION")
     arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+    if exclude_intermit_flowlines:
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" = 'Headwater' '''.format(class_field_name))
+        arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "non_artificial_end", XY_TOLERANCE, "SUBSET_SELECTION")
+        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
 
     # Project output once done with both. Switching CRS earlier causes trace problems.
     if not exclude_intermit_flowlines:
@@ -202,4 +205,4 @@ def test(out_feature_class):
 if __name__ == '__main__':
 
     #TODO: Change back
-    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_perm_conn2')
+    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_perm_conn5')

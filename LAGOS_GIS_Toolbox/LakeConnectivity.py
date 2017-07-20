@@ -208,6 +208,4 @@ def test(out_feature_class):
 
 
 if __name__ == '__main__':
-
-    #TODO: Change back
-    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_perm_conn7')
+    main()

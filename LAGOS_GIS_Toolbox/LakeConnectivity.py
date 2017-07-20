@@ -172,6 +172,11 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
         arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "non_artificial_end", XY_TOLERANCE, "SUBSET_SELECTION")
         arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
 
+        # Prevent 'upgrades' due to very odd flow situations, better to stick with calling both classes 'Headwater'
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+                                            '''"Maximum_Lake_Connectivity" = 'Headwater' AND "Permanent_Lake_Connectivity" = 'DR_Stream' ''')
+        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
+
     # Project output once done with both. Switching CRS earlier causes trace problems.
     if not exclude_intermit_flowlines:
         arcpy.CopyFeatures_management(temp_feature_class, out_feature_class)
@@ -205,4 +210,4 @@ def test(out_feature_class):
 if __name__ == '__main__':
 
     #TODO: Change back
-    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_perm_conn5')
+    test(r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_perm_conn7')

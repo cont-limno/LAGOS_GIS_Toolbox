@@ -6,120 +6,12 @@ import arcpy
 from arcpy import env
 import csiutils as cu
 
-
-# # this method is ludicrous but works for today. 2017-06-02 njs
-# def edit_metadata(out_table, zone_fc, in_value_raster,
-#                   translator = 'C:\Program Files (x86)\ArcGIS\Desktop10.3\Metadata\Translator\ArcGIS2FGDC.xml'):
-#     #translator path is not robust to changes in ArcGIS version or installation location right now
-#     f = os.path.join(tempfile.gettempdir(), 'temp_metadata.xml')
-#     arcpy.ExportMetadata_conversion(out_table, translator, f)
-#
-#     tree = ET.parse(f)
-#     root = tree.getroot()
-#
-#     template_string = '''<dataqual>
-#         <logic></logic>
-#         <complete></complete>
-#         <lineage>
-#           <srcinfo>
-#             <srccite>
-#               <citeinfo>
-#                 <origin></origin>
-#                 <pubdate></pubdate>
-#                 <title></title>
-#                 <geoform></geoform>
-#                 <pubinfo>
-#                   <pubplace></pubplace>
-#                   <publish></publish>
-#                 </pubinfo>
-#                 <onlink></onlink>
-#               </citeinfo>
-#             </srccite>
-#             <srcscale></srcscale>
-#             <typesrc></typesrc>
-#             <srctime>
-#               <timeinfo>
-#                 <sngdate>
-#                   <caldate></caldate>
-#                 </sngdate>
-#               </timeinfo>
-#               <srccurr></srccurr>
-#             </srctime>
-#             <srccitea></srccitea>
-#             <srccontr></srccontr>
-#           </srcinfo>
-#           <procstep>
-#             <procdesc>
-#     </procdesc>
-#             <procdate></procdate>
-#           </procstep>
-#         </lineage>
-#       </dataqual>'''
-#
-#     new_src_template_string = '''
-#     <srcinfo>
-#             <srccite>
-#               <citeinfo>
-#                 <origin></origin>
-#                 <pubdate></pubdate>
-#                 <title></title>
-#                 <geoform></geoform>
-#                 <pubinfo>
-#                   <pubplace></pubplace>
-#                   <publish></publish>
-#                 </pubinfo>
-#                 <onlink></onlink>
-#               </citeinfo>
-#             </srccite>
-#             <srcscale></srcscale>
-#             <typesrc></typesrc>
-#             <srctime>
-#               <timeinfo>
-#                 <sngdate>
-#                   <caldate></caldate>
-#                 </sngdate>
-#               </timeinfo>
-#               <srccurr></srccurr>
-#             </srctime>
-#             <srccitea></srccitea>
-#             <srccontr></srccontr>
-#           </srcinfo>'''
-#
-#     dq_template = ET.fromstring(template_string)
-#
-#     dataqual = root.find('dataqual')
-#     if dataqual is None:
-#         root.insert(1, dq_template)
-#     dataqual = root.find('dataqual')
-#
-#     github_tool_location = 'https://github.com/cont-limno/LAGOS_GIS_Toolbox/blob/master/LAGOS_GIS_Toolbox/zonal_tabarea.py'
-#     dataqual.find('.//procdesc').text = github_tool_location
-#     dataqual.find('.//procdate').text = str(datetime.date.today())
-#     dataqual.find('.//proctime').text = str(datetime.datetime.now())
-#
-#     dataqual.find('.//srccontr').text = "Zones summarized"
-#     dataqual.find('.//title').text = zone_fc
-#
-#     new_src_template = ET.fromstring(new_src_template_string)
-#     lineage = root.find('.//lineage')
-#     insert_pos = len([child for child in lineage if child.tag == 'srcinfo'])
-#     lineage.insert(insert_pos, new_src_template)
-#     new_src = lineage.findall('.//srcinfo')[insert_pos]
-#
-#     new_src.find('.//srccontr').text = "Raster values summarized to zones"
-#     new_src.find('.//title').text = in_value_raster
-#
-#     tree.write(f)
-#     arcpy.ImportMetadata_conversion(f, "FROM_FGDC", out_table)
-#
-#     os.remove(f)
-
-def refine_zonal_output(t, is_thematic):
+def refine_zonal_output(t, zone_field, is_thematic):
     """Makes a nicer output for this tool. Rename some fields, drop unwanted
         ones, calculate percentages using raster AREA before deleting that
         field."""
 
-    drop_fields = ['COUNT', 'AREA', 'RANGE', 'SUM', 'ZONE_CODE']
+    drop_fields = ['VALUE', 'COUNT', '{}_1'.format(zone_field), 'COUNT_1', 'AREA', 'RANGE', 'SUM', 'ZONE_CODE']
     if is_thematic:
         fields = arcpy.ListFields(t, "VALUE*")
         for f  in fields:
@@ -149,101 +41,80 @@ def refine_zonal_output(t, is_thematic):
             continue
 
 def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic):
+    orig_env = arcpy.env.workspace
+    arcpy.env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
     arcpy.AddMessage("Calculating zonal statistics...")
-    temp_zonal_table = 'in_memory/zonal_stats_temp'
-    temp_entire_table = 'in_memory/temp_entire_table'
 
-    # calculate/doit
+    # Set up environments for alignment between zone raster and theme raster
     env.snapRaster = in_value_raster
     env.cellSize = in_value_raster
+    env.extent = zone_fc
 
-    # this has to be on disk for some reason to avoid background processing
-    # errors thrown up at random
-    # hence we get the following awkward horribleness
-    use_convert_raster = False
 
-    try:
-        arcpy.sa.ZonalStatisticsAsTable(zone_fc, zone_field, in_value_raster,
-                                temp_zonal_table, 'DATA', 'ALL')
-    # with Permanent_Identifier as the zone_field, background processing errors
-    # and another error get thrown up at random
-    # it's faster to do zonal stats as above but if it fails (which it does
-    # pretty quickly, usually), do this way which always works but takes
-    # twice as long on large rasters
-    except:
-        temp_workspace = cu.create_temp_GDB('temp_zonal')
-        convert_raster = os.path.join(temp_workspace,
-                       cu.shortname(zone_fc) + '_converted')
-        use_convert_raster = True
+    # Convert polygons to raster in memory
 
-        arcpy.AddMessage('Creating raster {0}'.format(convert_raster))
-        arcpy.PolygonToRaster_conversion(zone_fc, zone_field, convert_raster)
-        arcpy.sa.ZonalStatisticsAsTable(convert_raster, zone_field, in_value_raster,
-                                    temp_zonal_table, "DATA", "ALL")
+    # TODO: If we experience errors again, add a try/except where the except writes the
+    # conversion raster to a scratch workspace instead, that eliminated the errors we
+    # we getting several years ago with 10.1, not sure if they will happen still.
+
+    arcpy.PolygonToRaster_conversion(zone_fc, zone_field, 'convert_raster', 'MAXIMUM_AREA')
+    env.extent = "MINOF"
+    arcpy.sa.ZonalStatisticsAsTable('convert_raster', zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
+
+    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
+    # The following inputs are layers or table views: "HU12_convert_lulc", "NLCD_LandCover_2006_Clip"
+
 
     if is_thematic:
-        #for some reason env.celLSize doesn't work
+        #for some reason env.cellSize doesn't work
         desc = arcpy.Describe(in_value_raster)
         cell_size = desc.meanCelLHeight
 
         # calculate/doit
-        temp_area_table = 'in_memory/tab_area_temp'
         arcpy.AddMessage("Tabulating areas...")
-
-        if use_convert_raster:
-            arcpy.sa.TabulateArea(convert_raster, zone_field, in_value_raster,
-                                'Value', temp_area_table, cell_size)
-        else:
-            arcpy.sa.TabulateArea(zone_fc, zone_field, in_value_raster,
-                                'Value', temp_area_table, cell_size)
+        arcpy.sa.TabulateArea('convert_raster', zone_field, in_value_raster,
+                                'Value', 'temp_area_table', cell_size)
 
         # making the output table
-        arcpy.CopyRows_management(temp_area_table, temp_entire_table)
-        zonal_stats_fields = ['AREA']
-        arcpy.JoinField_management(temp_entire_table, zone_field, temp_zonal_table, zone_field, zonal_stats_fields)
+        arcpy.CopyRows_management('temp_area_table', 'temp_entire_table')
+        zonal_stats_fields = ['COUNT', 'AREA']
+        arcpy.JoinField_management('temp_entire_table', zone_field, 'temp_zonal_table', zone_field, zonal_stats_fields)
 
         # cleanup
-        arcpy.Delete_management(temp_area_table)
+        arcpy.Delete_management('temp_area_table')
 
     if not is_thematic:
         # making the output table
-        arcpy.CopyRows_management(temp_zonal_table, temp_entire_table)
+        arcpy.CopyRows_management('temp_zonal_table', 'temp_entire_table')
 
     arcpy.AddMessage("Refining output table...")
-    refine_zonal_output(temp_entire_table, is_thematic)
 
-
-
-    #final table gets a record even for no-data zones
-    keep_fields = [f.name for f in arcpy.ListFields(temp_entire_table)]
-    if zone_field.upper() in keep_fields:
-        keep_fields.remove(zone_field.upper())
-    if zone_field in keep_fields:
-        keep_fields.remove(zone_field)
-    cu.one_in_one_out(temp_entire_table, keep_fields, zone_fc, zone_field, out_table)
-##    cu.redefine_nulls(out_table, keep_fields, ["NA"]* len(keep_fields))
+    # Join to the input zones raster
+    arcpy.AddField_management('convert_raster', 'Pct_NoData', 'DOUBLE')
+    arcpy.CopyRows_management('convert_raster', 'zones_VAT')
+    arcpy.JoinField_management('zones_VAT', zone_field, 'temp_entire_table', zone_field)
+    calculate_expr = '100*(1-(float(!COUNT_1!)/!Count!))'
+    arcpy.CalculateField_management('zones_VAT', 'Pct_NoData', calculate_expr, "PYTHON")
+    refine_zonal_output('zones_VAT', zone_field, is_thematic)
 
     # count whether all zones got an output record or not)
-    out_count = int(arcpy.GetCount_management(temp_entire_table).getOutput(0))
+    out_count = int(arcpy.GetCount_management('temp_entire_table').getOutput(0))
     in_count = int(arcpy.GetCount_management(zone_fc).getOutput(0))
     count_diff = in_count - out_count
     if count_diff > 0:
-        warn_msg = ("WARNING: {0} features are missing in the output table"
-                    " because they are too small for this raster's"
-                    " resolution. This may be okay depending on your"
-                    " application.").format(count_diff)
+        warn_msg = ("WARNING: {0} zones have null zonal statistics. This can be because the zones are too small"
+                    "relative to the raster resolution. It can also be due to overlapping input zones (use the Subset"
+                    "Overlapping Zones tool to fix).").format(count_diff)
+
         arcpy.AddWarning(warn_msg)
         print(warn_msg)
 
-    # arcpy.AddMessage("Saving details to output metadata...")
-    # edit_metadata(out_table, zone_fc, in_value_raster)
-
     # cleanup
-    arcpy.Delete_management(temp_zonal_table)
-    arcpy.Delete_management(temp_entire_table)
-    if use_convert_raster:
-        arcpy.Delete_management(os.path.dirname(temp_workspace))
+    arcpy.ResetEnvironments()
+    arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch
+    for item in ['temp_zonal_table', 'temp_entire_table', 'convert_raster', 'zones_VAT']:
+        arcpy.Delete_management(item)
     arcpy.CheckInExtension("Spatial")
 
     return [out_table, count_diff]

@@ -62,10 +62,6 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     env.extent = "MINOF"
     arcpy.sa.ZonalStatisticsAsTable('convert_raster', zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
 
-    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
-    # The following inputs are layers or table views: "HU12_convert_lulc", "NLCD_LandCover_2006_Clip"
-
-
     if is_thematic:
         #for some reason env.cellSize doesn't work
         desc = arcpy.Describe(in_value_raster)
@@ -118,6 +114,22 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     arcpy.CheckInExtension("Spatial")
 
     return [out_table, count_diff]
+
+def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic):
+    overlap_grp_field = arcpy.ListFields(zone_fc, 'OVERLAP_GROUP*')
+    if overlap_grp_field:
+        groups = list(set([row[0] for row in arcpy.da.SearchCursor(zone_fc, ['OVERLAP_GROUP'])]))
+        i_out_tables = []
+        for group in groups:
+            i_zone_fc = arcpy.Select_analysis(zone_fc, '"OVERLAP_GROUP" = {}'.format(group))
+            i_out_table = 'in_memory/stats{}'.format(group)
+            i_out_tables.append(i_out_table)
+            stats_area_table(i_zone_fc, zone_field, in_value_raster, i_out_table, is_thematic)
+        arcpy.Merge_management(i_out_tables, out_table)
+
+    else:
+        stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
+
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

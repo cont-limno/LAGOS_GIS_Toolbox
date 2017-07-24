@@ -7,8 +7,11 @@ import lakes_us # in this repo
 # Locations. Change these for your system. To re-run this code, you can always run this whole section.
 NHD_DOWNLOAD_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Zipped"
 NHD_UNZIPPED_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Unzipped_Original"
-ALL_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_merge202_jun30'
+ALL_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_merge202_jun30_deduped'
+CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
 BROAD_LAKE_RESERVOIR_FILTER = "FType IN (436, 390)"
+US_SPATIAL_EXTENT = r'D:\grad03\Data_Working\LAGOS_US_GIS_Data_v0.1.gdb\Spatial_Classifications\STATE'
+USGS_ALBERS_PROJ = arcpy.SpatialReference(102039)
 
 
 # Step 1: Download the NHD by subregion and unzip. You WILL need the HYDRO_NET to do the connectivity analyses so you cannot
@@ -52,8 +55,6 @@ nhd_gdbs = arcpy.ListWorkspaces('NHD_H*')
 waterbody_fcs = [os.path.join(gdb, 'NHDWaterbody') for gdb in nhd_gdbs]
 fc_count = len(waterbody_fcs)
 all_exist_test = all(arcpy.Exists(wb) for wb in waterbody_fcs)
-inputs_count_sum +=
-
 
 # EXECUTE
 # Start with FC containing Lake Superior to prevent spatial grid errors
@@ -80,41 +81,49 @@ else:
     print("ERROR: One or more waterbody paths is not valid. Merged waterbody feature class not created.")
 
 # TODO: Switch back
-# lakes_us.deduplicate_nhd(ALL_LAKES_FC, ALL_LAKES_FC + '_deduped')
-
-lakes_us.deduplicate_nhd(ALL_LAKES_FC + '_deduped')
-lakes_us.deduplicate_nhd(ALL_LAKES_FC + '_TEST')
+lakes_us.deduplicate_nhd(ALL_LAKES_FC)
 
 # TEST IT
 # Check that at least some duplicates were removed
 merge_count = int(arcpy.GetCount_management(ALL_LAKES_FC).getOutput(0))
 inputs_count_sum = sum([int(arcpy.GetCount_management(fc).getOutput(0)) for fc in waterbody_fcs]) + int(int(arcpy.GetCount_management(lake_superior_wb).getOutput(0)))
-assert merge_count < inputs_count_sum
+merge_count < inputs_count_sum
 
 # Check that the Permanent_Identifier field is now unique
 unique_perm_ids_count = len(set([r[0] for r in arcpy.da.SearchCursor(ALL_LAKES_FC, "Permanent_Identifier")]))
-assert merge_count == unique_perm_ids_count
+merge_count == unique_perm_ids_count
 
 #CLEANUP
 arcpy.ResetEnvironments()
 
-# Step 4:
-# Delete the Great Lakes, Long Island Sound, Delaware Bay
-updateRows = arcpy.da.UpdateCursor()
+# Step 4: Select lakes intersecting United States boundaries
 
+all_lakes_lyr = arcpy.MakeFeatureLayer_management(ALL_LAKES_FC)
+states_lyr = arcpy.MakeFeatureLayer_management(US_SPATIAL_EXTENT) # Albers USGS, slower but okay
+arcpy.SelectLayerByLocation_management(all_lakes_lyr, "INTERSECT", states_lyr)
+arcpy.CopyFeatures_management(all_lakes_lyr, CONUS_LAKES_FC)
+arcpy.Delete_management(all_lakes_lyr)
 
-###### PROBABLY CHANGE A LOT OF THIS BELOW ####
-
-
-
+# Step 5: # Spatial Join to WQP sites
 # Get WQP sites ready for spatial join
 r_file = 'D:/Continental_Limnology/Data_Working/WQP_Sites_into_ArcGIS.shp'
 arcpy.AddSpatialIndex_management(r_file)
 arcpy.MakeFeatureLayer_management(r_file, "wqp_sites")
 # NHD file: from deduping, above.
-nhd_file = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_merge202_jun16_deduped_jun22'
-arcpy.MakeFeatureLayer_management(nhd_file, "nhd_lake_polygons")
+arcpy.MakeFeatureLayer_management(ALL_LAKES_FC, "nhd_lake_polygons")
 
-# Spatial Join
+
+
+
+
+
+# Spatial Intersect Only
+arcpy.AddField_management()
+arcpy.SelectLayerByLocation
 out_file = 'D:/Continental_Limnology/Data_Working/WQP_NHD_joined.shp'
 arcpy.SpatialJoin_analysis("wqp_sites", "nhd_lake_polygons", out_file, "JOIN_ONE_TO_MANY", "KEEP_ALL", match_option = "INTERSECT")
+
+
+# Step 6:
+# Delete the Great Lakes, Long Island Sound, Delaware Bay
+updateRows = arcpy.da.UpdateCursor()

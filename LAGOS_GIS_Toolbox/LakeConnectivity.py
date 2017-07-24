@@ -1,6 +1,7 @@
 # Filename : LakeClass.py
 # Author : Scott Stopyak, Geographer, Michigan State University
 # Purpose : Classify lakes according to their connectivity to the hydrologic network using only NHD as input.
+# Modified: Nicole Smith, 2017
 
 import os
 import arcpy
@@ -8,7 +9,7 @@ import csiutils as cu
 
 XY_TOLERANCE = '1 Meters'
 
-def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
+def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines = False, debug_mode=False):
     if debug_mode:
         arcpy.env.overwriteOutput = True
         temp_gdb = cu.create_temp_GDB('classify_lake_connectivity')
@@ -19,6 +20,7 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
         arcpy.env.workspace = 'in_memory'
 
     layers_list = []
+    temp_feature_class = "in_memory/temp_fc"
 
     # Local variables:
     nhdflowline = os.path.join(nhd, "Hydrography", "NHDFLowline")
@@ -34,11 +36,20 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
     # Can't see why we shouldn't just attribute all lakes and reservoirs
     # arcpy.Select_analysis(nhdwaterbody, "csiwaterbody", lake_population_filter)
     arcpy.AddMessage("Initializing output.")
-    arcpy.Select_analysis(nhdwaterbody, out_feature_class, all_lakes_reservoirs_filter)
+    if exclude_intermit_flowlines:
+        arcpy.CopyFeatures_management(out_feature_class, temp_feature_class)
+    else:
+        arcpy.Select_analysis(nhdwaterbody, temp_feature_class, all_lakes_reservoirs_filter)
+
 
     # Get lakes, ponds and reservoirs over 10 hectares.
     lakes_10ha_filter = '''"AreaSqKm" >= 0.1 AND "FType" IN (390, 436)'''
     arcpy.Select_analysis(nhdwaterbody, "csiwaterbody_10ha", lakes_10ha_filter)
+
+    # Exclude intermittent flowlines, if requested
+    if exclude_intermit_flowlines:
+        flowline_where_clause = '''"FCode" NOT IN (46003,46007)'''
+        nhdflowline = arcpy.Select_analysis(nhdflowline, "nhdflowline_filtered", flowline_where_clause)
 
     # Make dangle points at end of nhdflowline
     arcpy.FeatureVerticesToPoints_management(nhdflowline, "dangles", "DANGLE")
@@ -46,9 +57,20 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
 
     # Isolate start dangles from end dangles.
     arcpy.FeatureVerticesToPoints_management(nhdflowline, "start", "START")
+    arcpy.FeatureVerticesToPoints_management(nhdflowline, "end", "END")
 
     arcpy.SelectLayerByLocation_management("dangles_lyr", "ARE_IDENTICAL_TO", "start")
     arcpy.CopyFeatures_management("dangles_lyr", "startdangles")
+    arcpy.SelectLayerByLocation_management("dangles_lyr", "ARE_IDENTICAL_TO", "end")
+    arcpy.CopyFeatures_management("dangles_lyr", "enddangles")
+
+    # Special handling for lakes that have some intermittent flow in and some permanent
+    if  exclude_intermit_flowlines:
+        layers_list.append(arcpy.MakeFeatureLayer_management(nhdflowline, "nhdflowline_lyr"))
+        arcpy.SelectLayerByAttribute_management("nhdflowline_lyr", "NEW_SELECTION", '''"WBArea_Permanent_Identifier" is null''')
+        arcpy.FeatureVerticesToPoints_management("nhdflowline_lyr", "non_artificial_end", "END")
+        arcpy.SelectLayerByAttribute_management("nhdflowline_lyr", "CLEAR_SELECTION")
+
     arcpy.AddMessage("Found source area nodes.")
 
     # Get junctions from lakes >= 10 hectares.
@@ -116,49 +138,73 @@ def classify_lake_connectivity(nhd, out_feature_class, debug_mode=False):
     arcpy.AddMessage("Done tracing.")
 
     # Make shapefile for seepage lakes. (Ones that don't intersect flowlines)
-    arcpy.AddField_management(out_feature_class, "LakeConnectivity", "TEXT", field_length=13)
-    layers_list.append(arcpy.MakeFeatureLayer_management(out_feature_class, "out_fc_lyr"))
+    if exclude_intermit_flowlines:
+        class_field_name = "Permanent_Lake_Connectivity"
+    else:
+        class_field_name = "Maximum_Lake_Connectivity"
+    arcpy.AddField_management(temp_feature_class, class_field_name, "TEXT", field_length=13)
+    layers_list.append(arcpy.MakeFeatureLayer_management(temp_feature_class, "out_fc_lyr"))
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, "", "SWITCH_SELECTION")
-    arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'Isolated'""", "PYTHON")
+    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
+
+    # New type of "Isolated" classification, mostly for "permanent" but there were some oddballs in "maximum" too
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
+    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "enddangles", XY_TOLERANCE, "SUBSET_SELECTION")
+    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
     # Get headwater lakes.
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
-    arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'Headwater'""", "PYTHON")
+    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "REMOVE_FROM_SELECTION", '''"{}" = 'Isolated' '''.format(class_field_name))
+    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
 
     # Select csiwaterbody that intersect trace2junctions
     arcpy.AddMessage("Beginning connectivity attribution...")
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "trace2junctions", XY_TOLERANCE, "NEW_SELECTION")
-    arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'DR_LakeStream'""", "PYTHON")
+    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_LakeStream'""", "PYTHON")
 
-    # Get stream drainage lakes.
-    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"LakeConnectivity" IS NULL''')
-    arcpy.CalculateField_management("out_fc_lyr", "LakeConnectivity", """'DR_Stream'""", "PYTHON")
+    # Get stream drainage lakes. Either unassigned so far or convert "Headwater" if a permanent stream flows into it,
+    # which is detected with "non_artificial_end"
+    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" IS NULL'''.format(class_field_name))
+    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+    if exclude_intermit_flowlines:
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" = 'Headwater' '''.format(class_field_name))
+        arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "non_artificial_end", XY_TOLERANCE, "SUBSET_SELECTION")
+        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
 
-    # Write output now. Switching CRS earlier causes trace problems.
-    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
+        # Prevent 'upgrades' due to very odd flow situations, better to stick with calling both classes 'Headwater'
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+                                            '''"Maximum_Lake_Connectivity" = 'Headwater' AND "Permanent_Lake_Connectivity" = 'DR_Stream' ''')
+        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
+
+    # Project output once done with both. Switching CRS earlier causes trace problems.
+    if not exclude_intermit_flowlines:
+        arcpy.CopyFeatures_management(temp_feature_class, out_feature_class)
+    else:
+        arcpy.Project_management(temp_feature_class, out_feature_class, arcpy.SpatialReference(102039))
+
+
     # Clean up
     for layer in layers_list:
         arcpy.Delete_management(layer)
-    if debug_mode:
-        pass
     else:
         arcpy.Delete_management("in_memory")
-    arcpy.AddMessage("Lake Connectivity classification is complete.")
+    arcpy.AddMessage("{} classification is complete.".format(class_field_name))
 
 
 def main():
     nhd = arcpy.GetParameterAsText(0)
     out_feature_class = arcpy.GetParameterAsText(1)
     classify_lake_connectivity(nhd, out_feature_class)
-
+    classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines=True)
 
 def test(out_feature_class):
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
     nhd = test_data_gdb
     out_feature_class = out_feature_class
-    classify_lake_connectivity(nhd, out_feature_class, debug_mode=True)
+    classify_lake_connectivity(nhd, out_feature_class, debug_mode = True)
+    classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines=True, debug_mode = True)
 
 
 if __name__ == '__main__':

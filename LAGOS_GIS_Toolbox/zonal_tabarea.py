@@ -51,13 +51,9 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     env.cellSize = in_value_raster
     env.extent = zone_fc
 
-
-    # Convert polygons to raster in memory
-
     # TODO: If we experience errors again, add a try/except where the except writes the
     # conversion raster to a scratch workspace instead, that eliminated the errors we
     # we getting several years ago with 10.1, not sure if they will happen still.
-
     arcpy.PolygonToRaster_conversion(zone_fc, zone_field, 'convert_raster', 'MAXIMUM_AREA')
     env.extent = "MINOF"
     arcpy.sa.ZonalStatisticsAsTable('convert_raster', zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
@@ -69,8 +65,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
         # calculate/doit
         arcpy.AddMessage("Tabulating areas...")
-        arcpy.sa.TabulateArea('convert_raster', zone_field, in_value_raster,
-                                'Value', 'temp_area_table', cell_size)
+        arcpy.sa.TabulateArea('convert_raster', zone_field, in_value_raster, 'Value', 'temp_area_table', cell_size)
 
         # making the output table
         arcpy.CopyRows_management('temp_area_table', 'temp_entire_table')
@@ -93,24 +88,31 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     calculate_expr = '100*(1-(float(!COUNT_1!)/!Count!))'
     arcpy.CalculateField_management('zones_VAT', 'Pct_NoData', calculate_expr, "PYTHON")
     refine_zonal_output('zones_VAT', zone_field, is_thematic)
+    arcpy.CopyRows_management('zones_VAT', out_table)
 
     # count whether all zones got an output record or not)
     out_count = int(arcpy.GetCount_management('temp_entire_table').getOutput(0))
     in_count = int(arcpy.GetCount_management(zone_fc).getOutput(0))
     count_diff = in_count - out_count
     if count_diff > 0:
-        warn_msg = ("WARNING: {0} zones have null zonal statistics. This can be because the zones are too small"
-                    "relative to the raster resolution. It can also be due to overlapping input zones (use the Subset"
-                    "Overlapping Zones tool to fix).").format(count_diff)
-
+        warn_msg = ("WARNING: {0} zones have null zonal statistics. There are 3 possible reasons:\n"
+                    "1) Presence of zones that are fully outside the extent of the raster summarized.\n"
+                    "2) Overlapping zones in the input. Use Subset Overlapping Zones tool, then run again.\n"
+                    "3) Zones are too small relative to the raster resolution.".format(count_diff))
         arcpy.AddWarning(warn_msg)
-        print(warn_msg)
+        # Convert missing "Pct_NoData" values to 100
+        codeblock = """def convert_pct(arg1):
+            if arg1 is None:
+                return float(100)
+            else:
+                return arg1"""
+        arcpy.CalculateField_management(out_table, 'Pct_NoData', 'convert_pct(!Pct_NoData!)', 'PYTHON_9.3', codeblock)
 
     # cleanup
-    arcpy.ResetEnvironments()
-    arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch
     for item in ['temp_zonal_table', 'temp_entire_table', 'convert_raster', 'zones_VAT']:
         arcpy.Delete_management(item)
+    arcpy.ResetEnvironments()
+    arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch
     arcpy.CheckInExtension("Spatial")
 
     return [out_table, count_diff]
@@ -137,17 +139,22 @@ def main():
     in_value_raster = arcpy.GetParameterAsText(2)
     out_table = arcpy.GetParameterAsText(4)
     is_thematic = arcpy.GetParameter(3) #boolean
-    stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
+    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
 
 
-def test():
-    test_gdb = r'C:\Users\smithn78\PycharmProjects\LAGOS_GIS_Toolbox\TestData_0411.gdb'
-    zone_fc = r'C:\Users\smithn78\PycharmProjects\LAGOS_GIS_Toolbox\TestData_0411.gdb\HU12'
+def test(out_table, is_thematic = False):
+    arcpy.env.overwriteOutput = True
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
+    zone_fc = os.path.join(test_data_gdb, 'HU12')
     zone_field = 'ZoneID'
-    in_value_raster = r'C:\Users\smithn78\PycharmProjects\LAGOS_GIS_Toolbox\TestData_0411.gdb\Total_Nitrogen_Deposition_2006'
-    out_table =  r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\test_zonal_stats_metadata'
-    is_thematic = False
-    stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
+    if is_thematic:
+        #in_value_raster = os.path.join(test_data_gdb, 'NLCD_LandCover_2006')
+        in_value_raster = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\NLCD_LandCover_2006_Clip'
+    else:
+        in_value_raster = os.path.join(test_data_gdb, 'Total_Nitrogen_Deposition_2006')
+    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
+    arcpy.env.overwriteOutput = False
 
 if __name__ == '__main__':
     main()

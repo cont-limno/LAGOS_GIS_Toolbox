@@ -164,7 +164,6 @@ def main():
     FILTER = ''
     batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER)
 
-
 def test():
     CONTROL_FILE = r"C:\Users\smithn78\Documents\Nicole temp\test_batch_run.csv"
     OUTPUT_GEODATABASE = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb'
@@ -174,4 +173,4 @@ def test():
     #test change
 
 if __name__ == '__main__':
-    test()
+    main()

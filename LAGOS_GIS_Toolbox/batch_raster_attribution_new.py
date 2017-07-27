@@ -35,30 +35,36 @@ def validate_control_file(control_file, filter=''):
                 print("ERROR: Add job number to line {}".format(linenum))
                 problem_count += 1
             else:
-                if jobnum > filter[1] or jobnum < filter[0]:
+                if filter and (jobnum > filter[1] or jobnum < filter[0]):
                     continue
                 if jobnum in jobnum_set:
                     print("ERROR: Duplicate job number. First duplication is at line {}".format(linenum))
                 else:
                     jobnum_set.add(jobnum)
+
+            # Check the zones fc
             if arcpy.Exists(zone):
                 if not arcpy.ListFields(zone, 'ZoneID') and zone not in zones_missing_ids:
                     zones_missing_ids.append(zone)
                     problem_count += 1
+                proj = arcpy.Describe(zone).spatialReference.factoryCode
+                if proj not in [102039, 5070]:
+                    print("ERROR: Zone projection is not USGS Albers for line {}".format(linenum))
+
             else:
                 print("ERROR: Zone feature class path not valid for line {}".format(linenum))
                 problem_count += 1
-            if not arcpy.Exists(raster):
+
+            # Check the raster
+            if arcpy.Exists(raster):
+                if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line['Is Thematic'] <> 'Y':
+                    print("WARNING: Check thematic flag for line {}".format(linenum))
+                    # no addition to problem_count
+            else:
                 print("ERROR: Raster path not valid for line {}".format(linenum))
                 problem_count += 1
 
-            # TODO: Add projection check for each
-            print(arcpy.Describe(zone).spatialReference.factoryCode)
 
-            if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line[
-                'Is Thematic'] <> 'Y':
-                print("WARNING: Check thematic flag for line {}".format(linenum))
-                # no addition to problem_count
         for z in zones_missing_ids:
             print("ERROR: {} is missing a ZoneID field").format(z)
         time.sleep(1)  # keep other messages from interrupting list
@@ -162,10 +168,9 @@ def main():
 def test():
     CONTROL_FILE = r"C:\Users\smithn78\Documents\Nicole temp\test_batch_run.csv"
     OUTPUT_GEODATABASE = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb'
-    # FILTER = (1,1)
-    batch_run(CONTROL_FILE, OUTPUT_GEODATABASE)
+    FILTER = (1,1)
+    validate_control_file(CONTROL_FILE, FILTER)
 
 
 if __name__ == '__main__':
-    # TODO: Switch it back to main
     test()

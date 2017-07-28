@@ -104,6 +104,13 @@ arcpy.SelectLayerByLocation_management(all_lakes_lyr, "INTERSECT", states_lyr)
 arcpy.CopyFeatures_management(all_lakes_lyr, CONUS_LAKES_FC)
 arcpy.Delete_management(all_lakes_lyr)
 
+# Step 5: Repair geometry
+# Optional: to see which features will change: arcpy.CheckGeometry_management(CONUS_LAKES_FC, 'in_memory/checkgeom_lakes')
+arcpy.RepairGeometry_management(CONUS_LAKES_FC)
+
+# Step 6: R spatial join to WQP sites
+# Is there a way to list some R code here??
+
 # Step 5: # Spatial Join to WQP sites
 # Get WQP sites ready for spatial join
 r_file = 'D:/Continental_Limnology/Data_Working/WQP_Sites_into_ArcGIS.shp'

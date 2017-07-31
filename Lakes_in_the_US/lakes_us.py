@@ -90,5 +90,7 @@ def deduplicate_nhd(in_feature_class, out_feature_class = '', unique_id = 'Perma
                         cursor.deleteRow()
         after_both_count = int(arcpy.GetCount_management(out_feature_class).getOutput(0))
         arcpy.AddMessage("{0} features were removed because they were less recently edited than another feature with the same identifier.".format(after_full_count - after_both_count))
+
+    arcpy.AddIndex_management(out_feature_class, "nhd_merge_id", "IDX_nhd_merge_id", "UNIQUE")
     arcpy.Delete_management("in_memory/freqtable")
     arcpy.Delete_management("in_memory/dupeslist")

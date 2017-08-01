@@ -139,9 +139,9 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
 
     # Make shapefile for seepage lakes. (Ones that don't intersect flowlines)
     if exclude_intermit_flowlines:
-        class_field_name = "Permanent_Lake_Connectivity"
+        class_field_name = "LakeConnectivity_Permanent"
     else:
-        class_field_name = "Maximum_Lake_Connectivity"
+        class_field_name = "LakeConnectivity"
     arcpy.AddField_management(temp_feature_class, class_field_name, "TEXT", field_length=13)
     layers_list.append(arcpy.MakeFeatureLayer_management(temp_feature_class, "out_fc_lyr"))
     arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
@@ -172,10 +172,26 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
         arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "non_artificial_end", XY_TOLERANCE, "SUBSET_SELECTION")
         arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
 
-        # Prevent 'upgrades' due to very odd flow situations, better to stick with calling both classes 'Headwater'
+        # Prevent 'upgrades' due to very odd flow situations and artifacts of bad digitization. The effects of these
+        # are varied--to avoid confusion, just keep the class  assigned with all flowlines
+
+        # 1--Purely hypothetical, not seen in testing
         arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
-                                            '''"Maximum_Lake_Connectivity" = 'Headwater' AND "Permanent_Lake_Connectivity" = 'DR_Stream' ''')
+                                                '''"LakeConnectivity" = 'Isolated' AND "LakeConnectivity_Permanent" != 'Isolated' ''')
+        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
+
+        # 2--Headwater to DR_Stream upgrade seen in testing with odd multi-inlet flow situation
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+                                            '''"LakeConnectivity" = 'Headwater' AND "LakeConnectivity_Permanent" IN ('DR_Stream', 'DR_LakeStream') ''')
         arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
+
+        # 3--DR_Stream to DR_LakeStream upgrade seen in testing when intermittent stream segments were used
+        # erroneously instead of artificial paths
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+                                            '''"LakeConnectivity" = 'DR_Stream' AND "LakeConnectivity_Permanent" = 'DR_LakeStream' ''')
+        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+
+
 
     # Project output once done with both. Switching CRS earlier causes trace problems.
     if not exclude_intermit_flowlines:

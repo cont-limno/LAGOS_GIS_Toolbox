@@ -45,9 +45,10 @@ def upstream_lakes(nhd_gdb, output_table):
 
     # select only lakes as defined in our project: waterbodies with one of these
     # types and greater than 4ha, and certain reservoirs greater than 10ha
+    all_lakes_reservoirs_filter = '''"FType" IN (390, 436)'''
     fcodes = (39000, 39004, 39009, 39010, 39011, 39012, 43600, 43613, 43615, 43617, 43618, 43619, 43621)
-    gte_4ha_lakes_query = '''("AreaSqKm" >=0.04 AND "FCode" IN %s) OR ("FCode" = 43601 AND "AreaSqKm" >= 0.1)''' % (fcodes,)
-    gte_10ha_lakes_query = '''("AreaSqKm" >=0.1 AND "FCode" IN %s) OR ("FCode" = 43601 AND "AreaSqKm" >= 0.1)''' % (fcodes,)
+    gte_4ha_lakes_query = '''("AreaSqKm" >=0.04 AND "FType" IN (390, 436) '''
+    gte_10ha_lakes_query = '''("AreaSqKm" >=0.1 AND "FType" IN (390, 436) '''
 
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_4ha_lakes', gte_4ha_lakes_query)
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_10ha_lakes', gte_10ha_lakes_query)

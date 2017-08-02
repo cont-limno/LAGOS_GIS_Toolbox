@@ -29,9 +29,9 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     network = os.path.join(nhd, "Hydrography", "HYDRO_NET")
 
     # Get lakes, ponds and reservoirs over a hectare.
-    csi_population_filter = '''"AreaSqKm" >=0.01 AND\
-    "FCode" IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)'''
-    all_lakes_reservoirs_filter = '''"FType" IN (390, 436)'''
+    #csi_population_filter = '''"AreaSqKm" >=0.01 AND\
+    #"FCode" IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)'''
+
 
     # Can't see why we shouldn't just attribute all lakes and reservoirs
     # arcpy.Select_analysis(nhdwaterbody, "csiwaterbody", lake_population_filter)

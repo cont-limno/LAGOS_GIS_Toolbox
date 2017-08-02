@@ -41,14 +41,14 @@ def upstream_lakes(nhd_gdb, output_table):
 
     arcpy.MakeFeatureLayer_management(nhd_junctions, 'junctions')
 
-    cu.multi_msg('Preparing layers and fields for calculations....')
+    arcpy.AddMessage('Preparing layers and fields for calculations....')
 
     # select only lakes as defined in our project: waterbodies with one of these
     # types and greater than 4ha, and certain reservoirs greater than 10ha
     all_lakes_reservoirs_filter = '''"FType" IN (390, 436)'''
     fcodes = (39000, 39004, 39009, 39010, 39011, 39012, 43600, 43613, 43615, 43617, 43618, 43619, 43621)
-    gte_4ha_lakes_query = '''("AreaSqKm" >=0.04 AND "FType" IN (390, 436) '''
-    gte_10ha_lakes_query = '''("AreaSqKm" >=0.1 AND "FType" IN (390, 436) '''
+    gte_4ha_lakes_query = ''' "AreaSqKm" >=0.04 AND "FType" IN (390, 436) '''
+    gte_10ha_lakes_query = ''' "AreaSqKm" >=0.1 AND "FType" IN (390, 436) '''
 
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_4ha_lakes', gte_4ha_lakes_query)
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_10ha_lakes', gte_10ha_lakes_query)
@@ -68,7 +68,7 @@ def upstream_lakes(nhd_gdb, output_table):
 
     # for each lake, use its junctions as input flags to the upstream trace, then
     # evalute the traced network for how many lakes are in it
-    cu.multi_msg("Calculating upstream network for each lake. This may take a few minutes, or a few hours...")
+    arcpy.AddMessage("Calculating upstream network for each lake. Depending on the network, this may take up to a few hours...")
     with arcpy.da.UpdateCursor('output_table', ['Permanent_Identifier'] + new_fields) as cursor:
         for row in cursor:
             id = row[0]
@@ -168,10 +168,12 @@ def main():
     output_table = arcpy.GetParameterAsText(1)
     upstream_lakes(nhd_gdb, output_table)
 
-def test():
-    nhd_gdb = 'E:/RawNHD_byHUC/NHDH0411.gdb'
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/test_upstream_lakes'
-    upstream_lakes(nhd_gdb, output_table)
+def test(out_table):
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
+    nhd = test_data_gdb
+    out_table = out_table
+    upstream_lakes(nhd, out_table)
 
 if __name__ == '__main__':
     main()

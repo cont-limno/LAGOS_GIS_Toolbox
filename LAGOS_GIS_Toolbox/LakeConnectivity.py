@@ -31,7 +31,7 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     # Get lakes, ponds and reservoirs over a hectare.
     #csi_population_filter = '''"AreaSqKm" >=0.01 AND\
     #"FCode" IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)'''
-
+    all_lakes_reservoirs_filter = '''"FType" IN (390, 436)'''
 
     # Can't see why we shouldn't just attribute all lakes and reservoirs
     # arcpy.Select_analysis(nhdwaterbody, "csiwaterbody", lake_population_filter)
@@ -177,7 +177,7 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
 
         # 1--Purely hypothetical, not seen in testing
         arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
-                                                '''"LakeConnectivity" = 'Isolated' AND "LakeConnectivity_Permanent" != 'Isolated' ''')
+                                                '''"LakeConnectivity" = 'Isolated' AND "LakeConnectivity_Permanent" <> 'Isolated' ''')
         arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
         # 2--Headwater to DR_Stream upgrade seen in testing with odd multi-inlet flow situation
@@ -190,6 +190,17 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
         arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
                                             '''"LakeConnectivity" = 'DR_Stream' AND "LakeConnectivity_Permanent" = 'DR_LakeStream' ''')
         arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "CLEAR_SELECTION")
+
+        # Add change flag for users
+        arcpy.AddField_management(temp_feature_class, "Has_Only_Permanent_Connectivity", "Text", field_length = "1")
+        flag_codeblock = """def flag_calculate(arg1, arg2):
+            if arg1 == arg2:
+                return 'Y'
+            else:
+                return 'N'"""
+        expression = 'flag_calculate(!LakeConnectivity!, !LakeConnectivity_Permanent!)'
+        arcpy.CalculateField_management(temp_feature_class, "ChangeFlag", expression, "PYTHON", flag_codeblock)
 
 
 

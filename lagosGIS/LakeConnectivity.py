@@ -20,7 +20,7 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
         arcpy.env.workspace = 'in_memory'
 
     layers_list = []
-    temp_feature_class = "in_memory/temp_fc"
+    temp_feature_class = "temp_fc"
 
     # Local variables:
     nhdflowline = os.path.join(nhd, "Hydrography", "NHDFLowline")
@@ -200,7 +200,7 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
             else:
                 return 'N'"""
         expression = 'flag_calculate(!LakeConnectivity!, !LakeConnectivity_Permanent!)'
-        arcpy.CalculateField_management(temp_feature_class, "ChangeFlag", expression, "PYTHON", flag_codeblock)
+        arcpy.CalculateField_management(temp_feature_class, "Has_Only_Permanent_Connectivity", expression, "PYTHON", flag_codeblock)
 
 
 
@@ -213,19 +213,22 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
 
     # Clean up
     for layer in layers_list:
-        arcpy.Delete_management(layer)
-    else:
+            arcpy.Delete_management(layer)
+
+    if not debug_mode:
+        arcpy.Delete_management("trace1")
+        arcpy.Delete_management("trace2")
         arcpy.Delete_management("in_memory")
     arcpy.AddMessage("{} classification is complete.".format(class_field_name))
 
-def full_classify(nhd, out_feature_class):
-    classify_lakes(nhd, out_feature_class)
-    classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines=True)
+def full_classify(nhd, out_feature_class, debug_mode = False):
+    classify_lakes(nhd, out_feature_class, debug_mode = debug_mode)
+    classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines=True, debug_mode = debug_mode)
 
 def main():
     nhd = arcpy.GetParameterAsText(0)
     out_feature_class = arcpy.GetParameterAsText(1)
-    full_classify(nhd, out_feature_class)
+    full_classify(nhd, out_feature_class, debug_mode = False)
 
 if __name__ == '__main__':
     main()

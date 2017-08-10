@@ -227,12 +227,5 @@ def main():
     out_feature_class = arcpy.GetParameterAsText(1)
     full_classify(nhd, out_feature_class)
 
-def test(out_feature_class):
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
-    nhd = test_data_gdb
-    out_feature_class = out_feature_class
-    full_classify(nhd, out_feature_class)
-
 if __name__ == '__main__':
     main()

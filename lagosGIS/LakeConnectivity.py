@@ -9,7 +9,7 @@ import csiutils as cu
 
 XY_TOLERANCE = '1 Meters'
 
-def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines = False, debug_mode=False):
+def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, debug_mode=False):
     if debug_mode:
         arcpy.env.overwriteOutput = True
         temp_gdb = cu.create_temp_GDB('classify_lake_connectivity')
@@ -219,8 +219,8 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
     arcpy.AddMessage("{} classification is complete.".format(class_field_name))
 
 def full_classify(nhd, out_feature_class):
-    classify_lake_connectivity(nhd, out_feature_class)
-    classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines=True)
+    classify_lakes(nhd, out_feature_class)
+    classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines=True)
 
 def main():
     nhd = arcpy.GetParameterAsText(0)

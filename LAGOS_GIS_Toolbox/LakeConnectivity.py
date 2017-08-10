@@ -218,21 +218,21 @@ def classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowline
         arcpy.Delete_management("in_memory")
     arcpy.AddMessage("{} classification is complete.".format(class_field_name))
 
+def full_classify(nhd, out_feature_class):
+    classify_lake_connectivity(nhd, out_feature_class)
+    classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines=True)
 
 def main():
     nhd = arcpy.GetParameterAsText(0)
     out_feature_class = arcpy.GetParameterAsText(1)
-    classify_lake_connectivity(nhd, out_feature_class)
-    classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines=True)
+    full_classify(nhd, out_feature_class)
 
 def test(out_feature_class):
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
     nhd = test_data_gdb
     out_feature_class = out_feature_class
-    classify_lake_connectivity(nhd, out_feature_class, debug_mode = True)
-    classify_lake_connectivity(nhd, out_feature_class, exclude_intermit_flowlines=True, debug_mode = True)
-
+    full_classify(nhd, out_feature_class)
 
 if __name__ == '__main__':
     main()

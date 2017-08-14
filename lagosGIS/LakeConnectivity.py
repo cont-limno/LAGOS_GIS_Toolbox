@@ -5,6 +5,7 @@
 
 import os
 import arcpy
+from arcpy import management as DM
 import csiutils as cu
 
 XY_TOLERANCE = '1 Meters'
@@ -19,8 +20,43 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
     else:
         arcpy.env.workspace = 'in_memory'
 
-    layers_list = []
-    temp_feature_class = "temp_fc"
+    if arcpy.Exists("temp_fc"):
+        print("There is a problem here.")
+        raise Exception
+
+    # Tool temporary feature classes
+    temp_fc = "temp_fc"
+    csiwaterbody_10ha = "csiwaterbody_10ha"
+    nhdflowline_filtered = "nhdflowline_filtered"
+    dangles = "dangles"
+    start = "start"
+    end = "end"
+    startdangles = "startdangles"
+    enddangles = "enddangles"
+    non_artificial_end = "non_artificial_end"
+    flags_10ha_lake_junctions = "flags_10ha_lake_junctions"
+    midvertices = "midvertices"
+    non10vertices = "non10vertices"
+    non10junctions = "non10junctions"
+    all_non_flag_points = "all_non_flag_points"
+    barriers = "barriers"
+    trace1_junctions = "trace1_junctions"
+    trace1_flowline = "trace1_flowline"
+    trace2_junctions = "trace2junctions"
+    trace2_flowline = "trace2_flowline"
+
+    # Clean up workspace in case of bad exit from prior run in same session.
+    this_tool_layers = ["dangles_lyr", "nhdflowline_lyr", "junction_lyr", "midvertices_lyr", "all_non_flag_points_lyr",
+                        "non10vertices_lyr", "out_fc_lyr", "trace1", "trace2"]
+    this_tool_temp = [temp_fc, csiwaterbody_10ha, nhdflowline_filtered, dangles, start, end, startdangles, enddangles,
+                      non_artificial_end, flags_10ha_lake_junctions, midvertices, non10vertices, non10junctions,
+                      all_non_flag_points, barriers, trace1_junctions, trace1_flowline, trace2_junctions,
+                      trace2_flowline]
+    for item in this_tool_layers + this_tool_temp:
+        try:
+            DM.Delete(item)
+        except:
+            pass
 
     # Local variables:
     nhdflowline = os.path.join(nhd, "Hydrography", "NHDFLowline")
@@ -37,104 +73,105 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
     # arcpy.Select_analysis(nhdwaterbody, "csiwaterbody", lake_population_filter)
     arcpy.AddMessage("Initializing output.")
     if exclude_intermit_flowlines:
-        arcpy.CopyFeatures_management(out_feature_class, temp_feature_class)
+        DM.CopyFeatures(out_feature_class, temp_fc)
+        DM.Delete(out_feature_class)
     else:
-        arcpy.Select_analysis(nhdwaterbody, temp_feature_class, all_lakes_reservoirs_filter)
+        arcpy.Select_analysis(nhdwaterbody, temp_fc, all_lakes_reservoirs_filter)
 
 
     # Get lakes, ponds and reservoirs over 10 hectares.
     lakes_10ha_filter = '''"AreaSqKm" >= 0.1 AND "FType" IN (390, 436)'''
-    arcpy.Select_analysis(nhdwaterbody, "csiwaterbody_10ha", lakes_10ha_filter)
+    arcpy.Select_analysis(nhdwaterbody, csiwaterbody_10ha, lakes_10ha_filter)
 
     # Exclude intermittent flowlines, if requested
     if exclude_intermit_flowlines:
         flowline_where_clause = '''"FCode" NOT IN (46003,46007)'''
-        nhdflowline = arcpy.Select_analysis(nhdflowline, "nhdflowline_filtered", flowline_where_clause)
+        nhdflowline = arcpy.Select_analysis(nhdflowline, nhdflowline_filtered, flowline_where_clause)
 
     # Make dangle points at end of nhdflowline
-    arcpy.FeatureVerticesToPoints_management(nhdflowline, "dangles", "DANGLE")
-    layers_list.append(arcpy.MakeFeatureLayer_management("dangles", "dangles_lyr"))
+    DM.FeatureVerticesToPoints(nhdflowline, dangles, "DANGLE")
+    DM.MakeFeatureLayer(dangles, "dangles_lyr")
 
     # Isolate start dangles from end dangles.
-    arcpy.FeatureVerticesToPoints_management(nhdflowline, "start", "START")
-    arcpy.FeatureVerticesToPoints_management(nhdflowline, "end", "END")
+    DM.FeatureVerticesToPoints(nhdflowline, start, "START")
+    DM.FeatureVerticesToPoints(nhdflowline, end, "END")
 
-    arcpy.SelectLayerByLocation_management("dangles_lyr", "ARE_IDENTICAL_TO", "start")
-    arcpy.CopyFeatures_management("dangles_lyr", "startdangles")
-    arcpy.SelectLayerByLocation_management("dangles_lyr", "ARE_IDENTICAL_TO", "end")
-    arcpy.CopyFeatures_management("dangles_lyr", "enddangles")
+    DM.SelectLayerByLocation("dangles_lyr", "ARE_IDENTICAL_TO", start)
+    DM.CopyFeatures("dangles_lyr", startdangles)
+    DM.SelectLayerByLocation("dangles_lyr", "ARE_IDENTICAL_TO", end)
+    DM.CopyFeatures("dangles_lyr", enddangles)
 
     # Special handling for lakes that have some intermittent flow in and some permanent
-    if  exclude_intermit_flowlines:
-        layers_list.append(arcpy.MakeFeatureLayer_management(nhdflowline, "nhdflowline_lyr"))
-        arcpy.SelectLayerByAttribute_management("nhdflowline_lyr", "NEW_SELECTION", '''"WBArea_Permanent_Identifier" is null''')
-        arcpy.FeatureVerticesToPoints_management("nhdflowline_lyr", "non_artificial_end", "END")
-        arcpy.SelectLayerByAttribute_management("nhdflowline_lyr", "CLEAR_SELECTION")
+    if exclude_intermit_flowlines:
+        DM.MakeFeatureLayer(nhdflowline, "nhdflowline_lyr")
+        DM.SelectLayerByAttribute("nhdflowline_lyr", "NEW_SELECTION", '''"WBArea_Permanent_Identifier" is null''')
+        DM.FeatureVerticesToPoints("nhdflowline_lyr", non_artificial_end, "END")
+        DM.SelectLayerByAttribute("nhdflowline_lyr", "CLEAR_SELECTION")
 
     arcpy.AddMessage("Found source area nodes.")
 
     # Get junctions from lakes >= 10 hectares.
-    layers_list.append(arcpy.MakeFeatureLayer_management(nhdjunction, "junction_lyr"))
-    arcpy.SelectLayerByLocation_management("junction_lyr", "INTERSECT", "csiwaterbody_10ha", XY_TOLERANCE,
+    DM.MakeFeatureLayer(nhdjunction, "junction_lyr")
+    DM.SelectLayerByLocation("junction_lyr", "INTERSECT", csiwaterbody_10ha, XY_TOLERANCE,
                                            "NEW_SELECTION")
 
-    arcpy.CopyFeatures_management("junction_lyr", "flags_10ha_lake_junctions")
+    DM.CopyFeatures("junction_lyr", flags_10ha_lake_junctions)
     arcpy.AddMessage("Found lakes >= 10 ha.")
 
     # Make points shapefile and layer at flowline vertices to act as potential flags and/or barriers.
     arcpy.AddMessage("Tracing...")
-    arcpy.FeatureVerticesToPoints_management(nhdflowline, "midvertices", "MID")
-    layers_list.append(arcpy.MakeFeatureLayer_management("midvertices", "midvertices_lyr"))
+    DM.FeatureVerticesToPoints(nhdflowline, midvertices, "MID")
+    DM.MakeFeatureLayer(midvertices, "midvertices_lyr")
 
     # Get vertices that are not coincident with 10 hectare lake junctions.
-    arcpy.SelectLayerByLocation_management("midvertices_lyr", "INTERSECT", "flags_10ha_lake_junctions", "",
+    DM.SelectLayerByLocation("midvertices_lyr", "INTERSECT", flags_10ha_lake_junctions, "",
                                            "NEW_SELECTION")
-    arcpy.SelectLayerByLocation_management("midvertices_lyr", "INTERSECT", "flags_10ha_lake_junctions", "",
+    DM.SelectLayerByLocation("midvertices_lyr", "INTERSECT", flags_10ha_lake_junctions, "",
                                            "SWITCH_SELECTION")
-    arcpy.CopyFeatures_management("midvertices_lyr", "non10vertices")
+    DM.CopyFeatures("midvertices_lyr", non10vertices)
 
     # Get junctions that are not coincident with 10 hectare lake junctions.
-    arcpy.SelectLayerByLocation_management("junction_lyr", "INTERSECT", "flags_10ha_lake_junctions", "",
+    DM.SelectLayerByLocation("junction_lyr", "INTERSECT", flags_10ha_lake_junctions, "",
                                            "NEW_SELECTION")
-    arcpy.SelectLayerByLocation_management("junction_lyr", "INTERSECT", "flags_10ha_lake_junctions", "",
+    DM.SelectLayerByLocation("junction_lyr", "INTERSECT", flags_10ha_lake_junctions, "",
                                            "SWITCH_SELECTION")
-    arcpy.CopyFeatures_management("junction_lyr", "non10junctions")
+    DM.CopyFeatures("junction_lyr", non10junctions)
 
     # Merge non10vertices with non10junctions
-    arcpy.Merge_management(["non10junctions", "non10vertices"], "all_non_flag_points")  # inputs both point fc in_memory
-    layers_list.append(arcpy.MakeFeatureLayer_management("all_non_flag_points", "all_non_flag_points_lyr"))
+    DM.Merge([non10junctions, non10vertices], all_non_flag_points)  # inputs both point fc in_memory
+    DM.MakeFeatureLayer(all_non_flag_points, "all_non_flag_points_lyr")
 
     # Tests the counts...for some reason I'm not getting stable behavior from the merge.
-    mid_n = int(arcpy.GetCount_management("non10vertices").getOutput(0))
-    jxn_n = int(arcpy.GetCount_management("non10junctions").getOutput(0))
-    merge_n = int(arcpy.GetCount_management("all_non_flag_points").getOutput(0))
+    mid_n = int(DM.GetCount(non10vertices).getOutput(0))
+    jxn_n = int(DM.GetCount(non10junctions).getOutput(0))
+    merge_n = int(DM.GetCount(all_non_flag_points).getOutput(0))
     if merge_n < mid_n + jxn_n:
         arcpy.AddWarning("The total number of flags ({0}) is less than the sum of the input junctions ({1}) "
                          "and input midpoints ({2})".format(merge_n, jxn_n, mid_n))
 
     # For tracing barriers, select all_non_flag_points points that intersect a 10 ha lake.
-    arcpy.SelectLayerByLocation_management("all_non_flag_points_lyr", "INTERSECT", "csiwaterbody_10ha", XY_TOLERANCE,
+    DM.SelectLayerByLocation("all_non_flag_points_lyr", "INTERSECT", csiwaterbody_10ha, XY_TOLERANCE,
                                            "NEW_SELECTION")
-    arcpy.CopyFeatures_management("all_non_flag_points_lyr", "barriers")
+    DM.CopyFeatures("all_non_flag_points_lyr", barriers)
 
     # Trace1-Trace downstream to first barrier (junctions+midvertices in 10 ha lake) starting from flags_10ha_lake_junctions flag points.
-    arcpy.TraceGeometricNetwork_management(network, "trace1", "flags_10ha_lake_junctions", "TRACE_DOWNSTREAM",
-                                           "barriers")
+    DM.TraceGeometricNetwork(network, "trace1", flags_10ha_lake_junctions, "TRACE_DOWNSTREAM",
+                                           barriers)
 
     # Save trace1 flowlines and junctions to layers on disk.
-    arcpy.CopyFeatures_management("trace1\HYDRO_NET_Junctions", "trace1_junctions")  # extra for debugging
-    arcpy.CopyFeatures_management("trace1\NHDFlowline", "trace1_flowline")
+    DM.CopyFeatures("trace1\HYDRO_NET_Junctions", trace1_junctions)  # extra for debugging
+    DM.CopyFeatures("trace1\NHDFlowline", trace1_flowline)
 
     # Select vertice midpoints that intersect trace1 flowlines selection for new flags for trace2.
-    layers_list.append(arcpy.MakeFeatureLayer_management("non10vertices", "non10vertices_lyr"))
-    arcpy.SelectLayerByLocation_management("non10vertices_lyr", "INTERSECT", "trace1_flowline", "", "NEW_SELECTION")
+    DM.MakeFeatureLayer(non10vertices, "non10vertices_lyr")
+    DM.SelectLayerByLocation("non10vertices_lyr", "INTERSECT", trace1_flowline, "", "NEW_SELECTION")
 
     # Trace2-Trace downstream from midpoints of flowlines that intersect the selected flowlines from trace1.
-    arcpy.TraceGeometricNetwork_management(network, "trace2", "non10vertices_lyr", "TRACE_DOWNSTREAM")
+    DM.TraceGeometricNetwork(network, "trace2", "non10vertices_lyr", "TRACE_DOWNSTREAM")
 
     # Save trace1 flowlines and junctions to layers and then shapes on disk.
-    arcpy.CopyFeatures_management("trace2\HYDRO_NET_Junctions", "trace2junctions")
-    arcpy.CopyFeatures_management("trace2\NHDFlowline", "trace2_flowline")  # extra for debugging
+    DM.CopyFeatures("trace2\HYDRO_NET_Junctions", trace2_junctions)
+    DM.CopyFeatures("trace2\NHDFlowline", trace2_flowline)  # extra for debugging
     arcpy.AddMessage("Done tracing.")
 
     # Make shapefile for seepage lakes. (Ones that don't intersect flowlines)
@@ -142,83 +179,80 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
         class_field_name = "LakeConnectivity_Permanent"
     else:
         class_field_name = "LakeConnectivity"
-    arcpy.AddField_management(temp_feature_class, class_field_name, "TEXT", field_length=13)
-    layers_list.append(arcpy.MakeFeatureLayer_management(temp_feature_class, "out_fc_lyr"))
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", nhdflowline, "", "SWITCH_SELECTION")
-    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
+    DM.AddField(temp_fc, class_field_name, "TEXT", field_length=13)
+    DM.MakeFeatureLayer(temp_fc, "out_fc_lyr")
+    DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
+    DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", nhdflowline, "", "SWITCH_SELECTION")
+    DM.CalculateField("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
     # New type of "Isolated" classification, mostly for "permanent" but there were some oddballs in "maximum" too
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "enddangles", XY_TOLERANCE, "SUBSET_SELECTION")
-    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
+    DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", startdangles, XY_TOLERANCE, "NEW_SELECTION")
+    DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", enddangles, XY_TOLERANCE, "SUBSET_SELECTION")
+    DM.CalculateField("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
     # Get headwater lakes.
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "startdangles", XY_TOLERANCE, "NEW_SELECTION")
-    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "REMOVE_FROM_SELECTION", '''"{}" = 'Isolated' '''.format(class_field_name))
-    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
+    DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", startdangles, XY_TOLERANCE, "NEW_SELECTION")
+    DM.SelectLayerByAttribute("out_fc_lyr", "REMOVE_FROM_SELECTION", '''"{}" = 'Isolated' '''.format(class_field_name))
+    DM.CalculateField("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
 
     # Select csiwaterbody that intersect trace2junctions
     arcpy.AddMessage("Beginning connectivity attribution...")
-    arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "trace2junctions", XY_TOLERANCE, "NEW_SELECTION")
-    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_LakeStream'""", "PYTHON")
+    DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", trace2_junctions, XY_TOLERANCE, "NEW_SELECTION")
+    DM.CalculateField("out_fc_lyr", class_field_name, """'DR_LakeStream'""", "PYTHON")
 
     # Get stream drainage lakes. Either unassigned so far or convert "Headwater" if a permanent stream flows into it,
     # which is detected with "non_artificial_end"
-    arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" IS NULL'''.format(class_field_name))
-    arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+    DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION", '''"{}" IS NULL'''.format(class_field_name))
+    DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
     if exclude_intermit_flowlines:
-        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION", '''"{}" = 'Headwater' '''.format(class_field_name))
-        arcpy.SelectLayerByLocation_management("out_fc_lyr", "INTERSECT", "non_artificial_end", XY_TOLERANCE, "SUBSET_SELECTION")
-        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+        DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION", '''"{}" = 'Headwater' '''.format(class_field_name))
+        DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", non_artificial_end, XY_TOLERANCE, "SUBSET_SELECTION")
+        DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
 
         # Prevent 'upgrades' due to very odd flow situations and artifacts of bad digitization. The effects of these
         # are varied--to avoid confusion, just keep the class  assigned with all flowlines
 
         # 1--Purely hypothetical, not seen in testing
-        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+        DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
                                                 '''"LakeConnectivity" = 'Isolated' AND "LakeConnectivity_Permanent" <> 'Isolated' ''')
-        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
+        DM.CalculateField("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
         # 2--Headwater to DR_Stream upgrade seen in testing with odd multi-inlet flow situation
-        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+        DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
                                             '''"LakeConnectivity" = 'Headwater' AND "LakeConnectivity_Permanent" IN ('DR_Stream', 'DR_LakeStream') ''')
-        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
+        DM.CalculateField("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
 
         # 3--DR_Stream to DR_LakeStream upgrade seen in testing when intermittent stream segments were used
         # erroneously instead of artificial paths
-        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "NEW_SELECTION",
+        DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
                                             '''"LakeConnectivity" = 'DR_Stream' AND "LakeConnectivity_Permanent" = 'DR_LakeStream' ''')
-        arcpy.CalculateField_management("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
-        arcpy.SelectLayerByAttribute_management("out_fc_lyr", "CLEAR_SELECTION")
+        DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+        DM.SelectLayerByAttribute("out_fc_lyr", "CLEAR_SELECTION")
 
         # Add change flag for users
-        arcpy.AddField_management(temp_feature_class, "Has_Only_Permanent_Connectivity", "Text", field_length = "1")
+        DM.AddField(temp_fc, "Has_Only_Permanent_Connectivity", "Text", field_length = "1")
         flag_codeblock = """def flag_calculate(arg1, arg2):
             if arg1 == arg2:
                 return 'Y'
             else:
                 return 'N'"""
         expression = 'flag_calculate(!LakeConnectivity!, !LakeConnectivity_Permanent!)'
-        arcpy.CalculateField_management(temp_feature_class, "Has_Only_Permanent_Connectivity", expression, "PYTHON", flag_codeblock)
-
-
+        DM.CalculateField(temp_fc, "Has_Only_Permanent_Connectivity", expression, "PYTHON", flag_codeblock)
 
     # Project output once done with both. Switching CRS earlier causes trace problems.
     if not exclude_intermit_flowlines:
-        arcpy.CopyFeatures_management(temp_feature_class, out_feature_class)
+        DM.CopyFeatures(temp_fc, out_feature_class)
     else:
-        arcpy.Project_management(temp_feature_class, out_feature_class, arcpy.SpatialReference(102039))
-
+        DM.Project(temp_fc, out_feature_class, arcpy.SpatialReference(102039))
 
     # Clean up
-    for layer in layers_list:
-            arcpy.Delete_management(layer)
+    for item in this_tool_layers + this_tool_temp:
+        if arcpy.Exists(item):
+            DM.Delete(item)
 
     if not debug_mode:
-        arcpy.Delete_management("trace1")
-        arcpy.Delete_management("trace2")
-        arcpy.Delete_management("in_memory")
+        DM.Delete("trace1")
+        DM.Delete("trace2")
     arcpy.AddMessage("{} classification is complete.".format(class_field_name))
 
 def full_classify(nhd, out_feature_class, debug_mode = False):

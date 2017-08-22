@@ -1,29 +1,41 @@
 # Filename: Export2CSV.py
-import csv, os, re
+import csv, datetime, os, math, re
 import arcpy
 import csiutils as cu
 
-def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = ''):
+def TableToCSV(in_table, out_folder, field_list, output_schema = True, new_table_name = ''):
     if new_table_name:
         name = new_table_name
     else:
         name = os.path.splitext(os.path.basename(in_table))[0]
     out_csv = os.path.join(out_folder, "{}.csv".format(name))
-    fields = [f.name for f in arcpy.ListFields(in_table) if f.type <> 'Geometry' and f.name <> 'Shape_Area' and f.name <> 'Shape_Length' and f.name <> 'TARGET_FID']
+    if field_list:
+        fields = field_list
+    else:
+        fields = [f.name for f in arcpy.ListFields(in_table) if f.type <> 'Geometry' and f.name <> 'Shape_Area' and f.name <> 'Shape_Length' and f.name <> 'TARGET_FID']
     with open(out_csv, 'w') as f:
         f.write(','.join(fields)+'\n') #csv headers
         with arcpy.da.SearchCursor(in_table, fields) as cursor:
             for row in cursor:
                 # next line PREVENTS scientific notation in exports and change null values
                 def format_value(x):
+                    try:
+                        if math.isnan(x):
+                            return 'NULL'
+                    except:
+                        pass
                     if x is None:
-                        return 'NA'
+                        return 'NULL'
                     elif isinstance(x, float):
                         out_value = '{0:.15f}'.format(x).rstrip('.0')
                         if not out_value:
                             out_value = '0'
                         return out_value
-                    else:
+                    elif isinstance(x, int):
+                        return str(x)
+                    elif isinstance(x, unicode):
+                        return x.encode('utf-8')
+                    elif isinstance(x, datetime.datetime):
                         return str(x)
                 values = map(format_value, row)
 
@@ -52,7 +64,7 @@ def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = ''):
                 f.write(','.join(values)+'\n')
     if output_schema:
         out_schema = os.path.join(out_folder, "{}_schema.csv".format(name))
-        cu.describe_arcgis_table_csv(in_table, out_schema)
+        cu.describe_arcgis_table_csv(in_table, out_schema, field_list)
 
 def main():
     in_table = arcpy.GetParameterAsText(0)

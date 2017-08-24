@@ -28,7 +28,8 @@ def TableToCSV(in_table, out_folder, field_list, output_schema = True, new_table
                         return 'NULL'
                     elif isinstance(x, float):
                         out_value = '{0:.15f}'.format(x).rstrip('.0')
-                        if not out_value:
+                        # everything before or after the decimal point is just a long-winded 0
+                        if not out_value or out_value == '-':
                             out_value = '0'
                         return out_value
                     elif isinstance(x, int):

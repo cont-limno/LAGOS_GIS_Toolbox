@@ -21,6 +21,8 @@ easily enough, with ESRI's tools or with Taudem toolbox or command line. Taudem 
 
 * Navigate to `LAGOS_GIS_Toolbox.tbx`
 
+---
+
 The toolbox is unsupported but feel free to direct questions to Patricia Soranno, soranno@msu.edu 
 
 Enjoy.

@@ -11,6 +11,16 @@ While some steps in our workflow at Michigan State University are conducted in a
 pitremove & d8flowdir were ported to RHEL to get the data processed faster), you can do these steps on a workstation
 easily enough, with ESRI's tools or with Taudem toolbox or command line. Taudem tools are very helpful.
 
+## Installation
+
+![](installation.png)
+
+* Open the ArcToolbox Pane
+
+* Right click to access the Add Toolbox command
+
+* Navigate to `LAGOS_GIS_Toolbox.tbx`
+
 The toolbox is unsupported but feel free to direct questions to Patricia Soranno, soranno@msu.edu 
 
 Enjoy.

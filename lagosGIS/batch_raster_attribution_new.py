@@ -18,8 +18,11 @@ def validate_control_file(control_file, filter=''):
         linenum = 0
         problem_count = 0
         zones_missing_ids = []
+        zones = []
+        rasters = []
         jobnum_set = set()
         combos_set = set()
+        print('Completed setup.')
         for line in reader:
             linenum += 1
             zone = line['Zone Path']
@@ -43,26 +46,33 @@ def validate_control_file(control_file, filter=''):
                     jobnum_set.add(jobnum)
 
             # Check the zones fc
-            if arcpy.Exists(zone):
-                if not arcpy.ListFields(zone, 'ZoneID') and zone not in zones_missing_ids:
-                    zones_missing_ids.append(zone)
-                    problem_count += 1
-                proj = arcpy.Describe(zone).spatialReference.factoryCode
-                if proj not in [102039, 5070]:
-                    print("ERROR: Zone projection is not USGS Albers for line {}".format(linenum))
+            if zone not in zones:
+                print("zone" + jobnum)
+                if arcpy.Exists(zone):
+                    if not arcpy.ListFields(zone, 'ZoneID') and zone not in zones_missing_ids:
+                        zones_missing_ids.append(zone)
+                        problem_count += 1
+                    proj = arcpy.Describe(zone).spatialReference.factoryCode
+                    if proj not in [102039, 5070]:
+                        print("ERROR: Zone projection is not USGS Albers for line {}".format(linenum))
 
-            else:
-                print("ERROR: Zone feature class path not valid for line {}".format(linenum))
-                problem_count += 1
+                else:
+                    print("ERROR: Zone feature class path not valid for line {}".format(linenum))
+                    problem_count += 1
 
             # Check the raster
-            if arcpy.Exists(raster):
-                if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line['Is Thematic'] <> 'Y':
-                    print("WARNING: Check thematic flag for line {}".format(linenum))
-                    # no addition to problem_count
-            else:
-                print("ERROR: Raster path not valid for line {}".format(linenum))
-                problem_count += 1
+            if raster not in rasters:
+                print("raster" + jobnum)
+                if arcpy.Exists(raster):
+                    if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line['Is Thematic'] <> 'Y':
+                        print("WARNING: Check thematic flag for line {}".format(linenum))
+                        # no addition to problem_count
+                else:
+                    print("ERROR: Raster path not valid for line {}".format(linenum))
+                    problem_count += 1
+
+            zones.append(zone)
+            rasters.append(raster)
 
 
         for z in zones_missing_ids:
@@ -168,7 +178,8 @@ def test():
     CONTROL_FILE = r"C:\Users\smithn78\Documents\Nicole temp\test_batch_run.csv"
     OUTPUT_GEODATABASE = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb'
     FILTER = (1,1)
-    validate_control_file(CONTROL_FILE, FILTER)
+    result = validate_control_file(CONTROL_FILE)
+    print("Test complete. Result = {}".format(result))
 
     #test change
 

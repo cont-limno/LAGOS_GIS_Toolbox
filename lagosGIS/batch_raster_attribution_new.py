@@ -70,6 +70,9 @@ def validate_control_file(control_file, filter=''):
                     if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line['Is Thematic'] <> 'Y':
                         print("WARNING: Check thematic flag for line {}".format(linenum))
                         # no addition to problem_count
+                    extent = arcpy.Describe(raster).extent
+                    if extent.YMax < 250000:
+                        print("ERROR: Raster does not overlap zones for line {}. Check the projection.".format(linenum))
                 else:
                     print("ERROR: Raster path not valid for line {}".format(linenum))
                     problem_count += 1
@@ -188,8 +191,9 @@ def test():
     CONTROL_FILE = r"D:\Continental_Limnology\Data_Working\test_batch_run.csv"
     OUTPUT_GEODATABASE = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb'
     FILTER = (1,1)
-    batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER, False)
-    #print("Test complete. Result = {}".format(result))
+    #batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER, False)
+    result = validate_control_file(CONTROL_FILE)
+    print("Test complete. Result = {}".format(result))
 
     #test change
 

@@ -13,6 +13,9 @@ def validate_control_file(control_file, filter=''):
     :param filter: A tuple, length 2, describing the start and stop "JOBNUM" positions for this run.
     :return: True if file is fully valid, False if any problems exist
     """
+
+    #TODO: The validation script should check the control file schema
+    #TODO: Upper case protect
     with open(control_file) as csv_file:
         reader = csv.DictReader(csv_file)
         linenum = 0
@@ -32,7 +35,7 @@ def validate_control_file(control_file, filter=''):
                 print("ERROR: Duplicate zone/raster combination. Duplicate is found at line {}".format(linenum))
             else:
                 combos_set.add(combo)
-            jobnum = line['JOBNUM']
+            jobnum = line['Jobnum']
 
             if not jobnum:
                 print("ERROR: Add job number to line {}".format(linenum))
@@ -103,70 +106,77 @@ def batch_run(control_file, output_geodatabase, filter='', validate=True):
                 "ERROR: Control file validation failed and batch run not initiated. Fix listed errors and try again.")
 
     # Read the file and filter it for only some jobs if necessary
-    tempfile = NamedTemporaryFile(delete=False)
-    with open(control_file, 'rb') as csv_file, tempfile:
-        reader = csv.DictReader(csv_file)
-        field_names = reader.fieldnames
-        writer = csv.DictWriter(tempfile, field_names)
-        writer.writeheader()
+    with open(control_file, 'rb') as csv_file:
+        reader1 = csv.DictReader(csv_file)
+        field_names = reader1.fieldnames
+        lines_mem = [line for line in reader1]
 
-        for line in reader:
-            jobnum = line['Jobnum']
-            if jobnum > filter[1] or jobnum < filter[0]:
-                continue
-            zone_fc = line['Zone Path']
-            zone_field = 'ZoneID'
-            in_value_raster = line['Raster Path']
-            out_table_shortname = '{zone}_{raster}'.format(zone=os.path.splitext(os.path.basename(zone_fc))[0],
-                                                           raster=os.path.splitext(os.path.basename(in_value_raster))[
-                                                               0])
-            out_table = os.path.join(output_geodatabase, out_table_shortname)
-            if line['Is Thematic'] == 'Y':
-                is_thematic = True
-            else:
-                is_thematic = False
-            force_rerun = line['Force Rerun']
+    line_n = 0
+    for line in lines_mem:
+        jobnum = int(line['Jobnum'])
+        if filter and (jobnum > int(filter[1]) or jobnum < int(filter[0])):
+            continue
+        zone_fc = line['Zone Path']
+        zone_field = 'ZoneID'
+        in_value_raster = line['Raster Path']
+        out_table_shortname = '{zone}_{raster}'.format(zone=os.path.splitext(os.path.basename(zone_fc))[0],
+                                                       raster=os.path.splitext(os.path.basename(in_value_raster))[
+                                                           0])
+        out_table = os.path.join(output_geodatabase, out_table_shortname)
+        if line['Is Thematic'] == 'Y':
+            is_thematic = True
+        else:
+            is_thematic = False
+        force_rerun = line['Force Rerun']
 
-            # Do not re-run for any existing tables unless the flag is set in the control file
-            if arcpy.Exists(out_table) and force_rerun <> 'Y':
-                print("SKIPPING {0}...Time {1}".format(out_table, time.strftime('%Y-%m-%d %H:%M:%S')))
-                write_line = line
-                writer.writerow(write_line)
-                continue
+        # Do not re-run for any existing tables unless the flag is set in the control file
+        if arcpy.Exists(out_table) and force_rerun <> 'Y':
+            print("SKIPPING {0}...Time {1}".format(out_table, time.strftime('%Y-%m-%d %H:%M:%S')))
+            continue
 
-            else:
-                print("Creating {0}...Start Time {1}".format(out_table, time.strftime('%Y-%m-%d %H:%M:%S')))
-                in_count = int(arcpy.GetCount_management(zone_fc)[0])
+        else:
+            if force_rerun == 'Y':
+                arcpy.env.overwriteOutput = True
+            print("Creating {0}...Start Time {1}".format(out_table, time.strftime('%Y-%m-%d %H:%M:%S')))
+            in_count = int(arcpy.GetCount_management(zone_fc).getOutput(0))
 
-                try:
-                    result = zonal_tabarea.stats_area_table(zone_fc, zone_field, in_value_raster, out_table,
-                                                            is_thematic)
-                    latest_time = time.strftime('%Y-%m-%d %H:%M:%S')
-                    count_diff = result[1]
-                    e = 'N/A'
+            try:
+                result = zonal_tabarea.stats_area_table(zone_fc, zone_field, in_value_raster, out_table,
+                                                        is_thematic)
+                latest_time = time.strftime('%Y-%m-%d %H:%M:%S')
+                count_diff = result[1]
+                e = 'N/A'
 
-                except Exception, e:
-                    # If it doesn't work, then don't change the "latest file" values for all of these
+            except Exception, e:
+                # If it doesn't work, then don't change the "latest file" values for all of these
+                print(e)
+                in_count = line['In Count']
+                count_diff = line['Count NULL']
+                latest_time = line['Latest Execution Time']
+                out_table = line['Output Table Path']
 
-                    in_count = line['In Count']
-                    count_diff = line['Count NULL']
-                    latest_time = line['Latest Completion Time']
-                    out_table = line['Output Table Path']
+            write_line = line
+            write_line['Output Table Shortname'] = out_table_shortname
+            write_line['Output Table Path'] = out_table
+            write_line['In Count'] = in_count
+            write_line['Count NULL'] = count_diff
+            write_line['Latest Execution Time'] = latest_time
+            write_line['Latest Execution Error'] = e
 
-                write_line = line
-                write_line['Output Table Shortname'] = out_table_shortname
-                write_line['Output Table Path'] = out_table
-                write_line['In Count'] = in_count
-                write_line['Count NULL'] = count_diff
-                write_line['Latest Execution Time'] = latest_time
-                write_line['Latest Execution Error'] = e
-                writer.writerow(write_line)
+            # Write out all lines each time so that batch script interruptions aren't a big issue
+            # Keeps lines_mem up-to-date in memory as well
+            lines_mem[line_n] = write_line
 
-                arcpy.ResetEnvironments()
+            tempfile = NamedTemporaryFile(delete=False)
+            with tempfile:
+                writer = csv.DictWriter(tempfile, field_names)
+                writer.writeheader()
+                writer.writerows(lines_mem)
+            shutil.copy(tempfile.name, control_file)
+            os.remove(tempfile.name)
 
-    shutil.copy(tempfile.name, control_file)
-    os.remove(tempfile.name)
-
+            arcpy.ResetEnvironments()
+            line_n += 1
 
 def main():
     CONTROL_FILE = ''
@@ -175,11 +185,11 @@ def main():
     batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER)
 
 def test():
-    CONTROL_FILE = r"C:\Users\smithn78\Documents\Nicole temp\test_batch_run.csv"
+    CONTROL_FILE = r"D:\Continental_Limnology\Data_Working\test_batch_run.csv"
     OUTPUT_GEODATABASE = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb'
     FILTER = (1,1)
-    result = validate_control_file(CONTROL_FILE)
-    print("Test complete. Result = {}".format(result))
+    batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER, False)
+    #print("Test complete. Result = {}".format(result))
 
     #test change
 

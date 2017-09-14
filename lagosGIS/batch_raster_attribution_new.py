@@ -18,74 +18,96 @@ def validate_control_file(control_file, filter=''):
     #TODO: Upper case protect
     with open(control_file) as csv_file:
         reader = csv.DictReader(csv_file)
-        linenum = 0
-        problem_count = 0
-        zones_missing_ids = []
-        zones = []
-        rasters = []
-        jobnum_set = set()
-        combos_set = set()
-        print('Completed setup.')
-        for line in reader:
-            linenum += 1
-            zone = line['Zone Path']
-            raster = line['Raster Path']
-            combo = zone + raster
-            if combo in combos_set:
-                print("ERROR: Duplicate zone/raster combination. Duplicate is found at line {}".format(linenum))
+        field_names = reader.fieldnames
+        lines = [line for line in reader]
+
+
+    linenum = 0
+    sum_problem_count = 0
+    line_problem_count = 0
+    zones_missing_ids = []
+    zones = []
+    rasters = []
+    jobnum_set = set()
+    combos_set = set()
+
+
+    for line in lines:
+        linenum += 1
+        zone = line['Zone Path']
+        raster = line['Raster Path']
+        combo = zone + raster
+        if combo in combos_set:
+            print("ERROR: Duplicate zone/raster combination. Duplicate is found at line {}".format(linenum))
+            line_problem_count += 1
+        else:
+            combos_set.add(combo)
+        jobnum = line['Jobnum']
+
+        if not jobnum:
+            print("ERROR: Add job number to line {}".format(linenum))
+            line_problem_count += 1
+        else:
+            if filter and (jobnum > filter[1] or jobnum < filter[0]):
+                continue
+            if jobnum in jobnum_set:
+                print("ERROR: Duplicate job number. First duplication is at line {}".format(linenum))
             else:
-                combos_set.add(combo)
-            jobnum = line['Jobnum']
+                jobnum_set.add(jobnum)
 
-            if not jobnum:
-                print("ERROR: Add job number to line {}".format(linenum))
-                problem_count += 1
+        # Check the zones fc
+        if zone not in zones:
+            print("zone" + jobnum)
+            if arcpy.Exists(zone):
+                if not arcpy.ListFields(zone, 'ZoneID') and zone not in zones_missing_ids:
+                    zones_missing_ids.append(zone)
+                    line_problem_count += 1
+                proj = arcpy.Describe(zone).spatialReference.factoryCode
+                if proj not in [102039, 5070]:
+                    print("ERROR: Zone projection is not USGS Albers for line {}".format(linenum))
+                    line_problem_count += 1
+
             else:
-                if filter and (jobnum > filter[1] or jobnum < filter[0]):
-                    continue
-                if jobnum in jobnum_set:
-                    print("ERROR: Duplicate job number. First duplication is at line {}".format(linenum))
-                else:
-                    jobnum_set.add(jobnum)
+                print("ERROR: Zone feature class path not valid for line {}".format(linenum))
+                line_problem_count += 1
 
-            # Check the zones fc
-            if zone not in zones:
-                print("zone" + jobnum)
-                if arcpy.Exists(zone):
-                    if not arcpy.ListFields(zone, 'ZoneID') and zone not in zones_missing_ids:
-                        zones_missing_ids.append(zone)
-                        problem_count += 1
-                    proj = arcpy.Describe(zone).spatialReference.factoryCode
-                    if proj not in [102039, 5070]:
-                        print("ERROR: Zone projection is not USGS Albers for line {}".format(linenum))
+        # Check the raster
+        if raster not in rasters:
+            print("raster" + jobnum)
+            if arcpy.Exists(raster):
+                if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line['Is Thematic'] <> 'Y':
+                    print("WARNING: Check thematic flag for line {}".format(linenum))
+                    # no addition to line_problem_count
+                extent = arcpy.Describe(raster).extent
+                if extent.YMax < 250000:
+                    raster_basename = os.path.basename(raster)
+                    print("ERROR: Raster does not overlap zones. Check the projection of {} (line {}).".format(
+                        raster_basename, linenum))
+                    line_problem_count += 1
+            else:
+                print("ERROR: Raster path not valid for line {}".format(linenum))
+                line_problem_count += 1
 
-                else:
-                    print("ERROR: Zone feature class path not valid for line {}".format(linenum))
-                    problem_count += 1
-
-            # Check the raster
-            if raster not in rasters:
-                print("raster" + jobnum)
-                if arcpy.Exists(raster):
-                    if int(arcpy.GetRasterProperties_management(raster, "VALUETYPE").getOutput(0)) < 5 and line['Is Thematic'] <> 'Y':
-                        print("WARNING: Check thematic flag for line {}".format(linenum))
-                        # no addition to problem_count
-                    extent = arcpy.Describe(raster).extent
-                    if extent.YMax < 250000:
-                        print("ERROR: Raster does not overlap zones for line {}. Check the projection.".format(linenum))
-                else:
-                    print("ERROR: Raster path not valid for line {}".format(linenum))
-                    problem_count += 1
-
-            zones.append(zone)
-            rasters.append(raster)
+        zones.append(zone)
+        rasters.append(raster)
+        if line_problem_count > 0:
+            sum_problem_count += line_problem_count
+        else:
+            lines[linenum-1]['Is Valid'] = 'Y'
+            tempfile = NamedTemporaryFile(delete=False)
+            with tempfile:
+                writer = csv.DictWriter(tempfile, field_names)
+                writer.writeheader()
+                writer.writerows(lines)
+            shutil.copy(tempfile.name, control_file)
+            os.remove(tempfile.name)
 
 
-        for z in zones_missing_ids:
-            print("ERROR: {} is missing a ZoneID field").format(z)
-        time.sleep(1)  # keep other messages from interrupting list
+    for z in zones_missing_ids:
+        print("ERROR: {} is missing a ZoneID field").format(z)
+    time.sleep(1)  # keep other messages from interrupting list
 
-    if problem_count == 0:
+    if sum_problem_count == 0:
         return True
     else:
         return False
@@ -188,7 +210,7 @@ def main():
     batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER)
 
 def test():
-    CONTROL_FILE = r"D:\Continental_Limnology\Data_Working\test_batch_run.csv"
+    CONTROL_FILE = r"C:\Users\smithn78\Documents\Nicole temp\test_batch_run.csv"
     OUTPUT_GEODATABASE = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb'
     FILTER = (1,1)
     #batch_run(CONTROL_FILE, OUTPUT_GEODATABASE, FILTER, False)

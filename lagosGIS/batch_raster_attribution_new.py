@@ -141,7 +141,7 @@ def batch_run(control_file, output_geodatabase, filter='', validate=True):
         jobnum = int(line['Jobnum'])
         if filter and (jobnum > int(filter[1]) or jobnum < int(filter[0])):
             continue
-        if line('Is Valid') != 'Y':
+        if line['Is Valid'] != 'Y':
             continue
         zone_fc = line['Zone Path']
         zone_field = 'ZoneID'

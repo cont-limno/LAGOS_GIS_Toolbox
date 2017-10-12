@@ -3,7 +3,7 @@ import csv, datetime, os, math, re
 import arcpy
 import csiutils as cu
 
-def TableToCSV(in_table, out_folder, field_list, output_schema = True, new_table_name = ''):
+def TableToCSV(in_table, out_folder, output_schema = True, field_list = [], new_table_name = ''):
     if new_table_name:
         name = new_table_name
     else:

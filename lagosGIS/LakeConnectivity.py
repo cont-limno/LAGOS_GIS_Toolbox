@@ -233,11 +233,11 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
         DM.AddField(temp_fc, "Has_Only_Permanent_Connectivity", "Text", field_length = "1")
         flag_codeblock = """def flag_calculate(arg1, arg2):
             if arg1 == arg2:
-                return 'Y'
+                return 'N'
             else:
-                return 'N'"""
+                return 'Y'"""
         expression = 'flag_calculate(!LakeConnectivity!, !LakeConnectivity_Permanent!)'
-        DM.CalculateField(temp_fc, "Has_Only_Permanent_Connectivity", expression, "PYTHON", flag_codeblock)
+        DM.CalculateField(temp_fc, "Connectivity_Class_Flucuates", expression, "PYTHON", flag_codeblock)
 
     # Project output once done with both. Switching CRS earlier causes trace problems.
     if not exclude_intermit_flowlines:

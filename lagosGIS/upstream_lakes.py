@@ -29,7 +29,7 @@ import os
 import arcpy
 import csiutils as cu
 
-def upstream_lakes(nhd_gdb, output_table):
+def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
     #define paths in nhd geodatabase
     nhd_waterbody = os.path.join(nhd_gdb, 'NHDWaterbody')
     nhd_flowline = os.path.join(nhd_gdb, 'NHDFlowline')
@@ -69,12 +69,12 @@ def upstream_lakes(nhd_gdb, output_table):
     # for each lake, use its junctions as input flags to the upstream trace, then
     # evalute the traced network for how many lakes are in it
     arcpy.AddMessage("Calculating upstream network for each lake. Depending on the network, this may take up to a few hours...")
-    with arcpy.da.UpdateCursor('output_table', ['Permanent_Identifier'] + new_fields) as cursor:
+    with arcpy.da.UpdateCursor('output_table', [unique_id] + new_fields) as cursor:
         for row in cursor:
             id = row[0]
 
             # get the junction points on top of this lake, can be 0 or several
-            where_clause = """"{0}" = '{1}'""".format('Permanent_Identifier', id)
+            where_clause = """"{0}" = '{1}'""".format(unique_id, id)
             arcpy.MakeFeatureLayer_management('gte_4ha_lakes_DISK', "this_lake",
                                                 where_clause)
             arcpy.SelectLayerByLocation_management('junctions', "INTERSECT",
@@ -152,7 +152,7 @@ def upstream_lakes(nhd_gdb, output_table):
     # clean up the output table
     all_fields = [f.name for f in arcpy.ListFields('output_table')]
     for f in all_fields:
-        if f not in ['Permanent_Identifier'] + new_fields:
+        if f not in [unique_id] + new_fields:
             try:
                 arcpy.DeleteField_management('output_table', f)
             except:

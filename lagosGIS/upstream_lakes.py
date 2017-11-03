@@ -32,30 +32,29 @@ import csiutils as cu
 def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
     #define paths in nhd geodatabase
     nhd_waterbody = os.path.join(nhd_gdb, 'NHDWaterbody')
-    nhd_flowline = os.path.join(nhd_gdb, 'NHDFlowline')
     nhd_junctions = os.path.join(nhd_gdb, 'HYDRO_NET_Junctions')
     hydro_net = os.path.join(nhd_gdb, 'Hydrography', 'HYDRO_NET')
 
     arcpy.env.workspace = 'in_memory'
-    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
-
-    arcpy.MakeFeatureLayer_management(nhd_junctions, 'junctions')
 
     arcpy.AddMessage('Preparing layers and fields for calculations....')
+    arcpy.MakeFeatureLayer_management(nhd_junctions, 'junctions')
+
 
     # select only lakes as defined in our project: waterbodies with one of these
     # types and greater than 4ha, and certain reservoirs greater than 10ha
-    all_lakes_reservoirs_filter = '''"FType" IN (390, 436)'''
-    fcodes = (39000, 39004, 39009, 39010, 39011, 39012, 43600, 43613, 43615, 43617, 43618, 43619, 43621)
+    # These filters should be aligned with LakeConnectivity (they currently are)
+    gte_1ha_lakes_query = ''' "AreaSqKm" >=0.009 AND "FType" IN (390, 436) '''
     gte_4ha_lakes_query = ''' "AreaSqKm" >=0.04 AND "FType" IN (390, 436) '''
     gte_10ha_lakes_query = ''' "AreaSqKm" >=0.1 AND "FType" IN (390, 436) '''
 
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_4ha_lakes', gte_4ha_lakes_query)
     arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_10ha_lakes', gte_10ha_lakes_query)
-    arcpy.CopyRows_management('gte_4ha_lakes', 'output_table')
+    arcpy.MakeFeatureLayer_management(nhd_waterbody, 'gte_1ha_lakes', gte_1ha_lakes_query)
+    arcpy.CopyRows_management('gte_1ha_lakes', 'output_table')
 
     # (need this for line 61 make feature layer to work right!)
-    arcpy.CopyFeatures_management('gte_4ha_lakes', 'gte_4ha_lakes_DISK')
+    arcpy.CopyFeatures_management('gte_1ha_lakes', 'gte_1ha_lakes_DISK')
 
     # add the new fields we'll calculate: count and area
     count_fields = ['Upstream_Lakes_4ha_Count', 'Upstream_Lakes_10ha_Count']
@@ -74,8 +73,9 @@ def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
             id = row[0]
 
             # get the junction points on top of this lake, can be 0 or several
-            where_clause = """"{0}" = '{1}'""".format(unique_id, id)
-            arcpy.MakeFeatureLayer_management('gte_4ha_lakes_DISK', "this_lake",
+            # TODO: Make this flexible based on whether ID is string or integer
+            where_clause = """"{0}" = {1}""".format(unique_id, id)
+            arcpy.MakeFeatureLayer_management('gte_1ha_lakes_DISK', "this_lake",
                                                 where_clause)
             arcpy.SelectLayerByLocation_management('junctions', "INTERSECT",
                                             "this_lake", "1 Meters")
@@ -160,7 +160,7 @@ def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
 
     # write out the final file and clean up intermediates
     arcpy.CopyRows_management('output_table', output_table)
-    for item in ['junctions', 'gte_4ha_lakes', 'gte_10ha_lakes', 'output_table']:
+    for item in ['junctions', 'gte_4ha_lakes', 'gte_10ha_lakes', 'gte_1ha_lakes', 'output_table', 'in_memory']:
         arcpy.Delete_management(item)
 
 def main():

@@ -2,6 +2,7 @@
 import csv, datetime, os, math, re
 import arcpy
 import csiutils as cu
+from decimal import *
 
 def TableToCSV(in_table, out_folder, output_schema = True, field_list = [], new_table_name = ''):
     if new_table_name:
@@ -18,6 +19,7 @@ def TableToCSV(in_table, out_folder, output_schema = True, field_list = [], new_
         with arcpy.da.SearchCursor(in_table, fields) as cursor:
             for row in cursor:
                 # next line PREVENTS scientific notation in exports and change null values
+
                 def format_value(x):
                     try:
                         if math.isnan(x):
@@ -27,9 +29,9 @@ def TableToCSV(in_table, out_folder, output_schema = True, field_list = [], new_
                     if x is None:
                         return 'NULL'
                     elif isinstance(x, float):
-                        out_value = '{0:.15f}'.format(x).rstrip('.0')
-                        # everything before or after the decimal point is just a long-winded 0
-                        if not out_value or out_value == '-':
+                        d = Decimal(x)
+                        out_value = str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
+                        if out_value == '-0':
                             out_value = '0'
                         return out_value
                     elif isinstance(x, int):

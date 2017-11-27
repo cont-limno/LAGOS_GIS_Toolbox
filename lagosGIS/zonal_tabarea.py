@@ -42,7 +42,7 @@ def refine_zonal_output(t, zone_field, is_thematic):
 
 def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic, warn_at_end = False):
     orig_env = arcpy.env.workspace
-    arcpy.env.workspace = 'in_memory'
+    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\debug_raster_2017-11-17.gdb'
     arcpy.CheckOutExtension("Spatial")
     arcpy.AddMessage("Calculating zonal statistics...")
 
@@ -82,11 +82,11 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     arcpy.AddMessage("Refining output table...")
 
     # Join to the input zones raster
-    arcpy.AddField_management('convert_raster', 'Pct_NoData', 'DOUBLE')
+    arcpy.AddField_management('convert_raster', 'DataCoverage_pct', 'DOUBLE')
     arcpy.CopyRows_management('convert_raster', 'zones_VAT')
     arcpy.JoinField_management('zones_VAT', zone_field, 'temp_entire_table', zone_field)
-    calculate_expr = '100*(1-(float(!COUNT_1!)/!Count!))'
-    arcpy.CalculateField_management('zones_VAT', 'Pct_NoData', calculate_expr, "PYTHON")
+    calculate_expr = '100*(float(!COUNT_1!)/!Count!)'
+    arcpy.CalculateField_management('zones_VAT', 'DataCoverage_pct', calculate_expr, "PYTHON")
     refine_zonal_output('zones_VAT', zone_field, is_thematic)
 
     # final table gets a record even for no-data zones
@@ -97,13 +97,13 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         keep_fields.remove(zone_field)
     cu.one_in_one_out('zones_VAT', keep_fields, zone_fc, zone_field, out_table)
 
-    # Convert missing "Pct_NoData" values to 100
+    # Convert missing "DataCoverage_pct" values to 100
     codeblock = """def convert_pct(arg1):
         if arg1 is None:
-            return float(100)
+            return float(0)
         else:
             return arg1"""
-    arcpy.CalculateField_management(out_table, 'Pct_NoData', 'convert_pct(!Pct_NoData!)', 'PYTHON_9.3', codeblock)
+    arcpy.CalculateField_management(out_table, 'DataCoverage_pct', 'convert_pct(!DataCoverage_pct!)', 'PYTHON_9.3', codeblock)
 
     # count whether all zones got an output record or not)
     out_count = int(arcpy.GetCount_management('temp_entire_table').getOutput(0))

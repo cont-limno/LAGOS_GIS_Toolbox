@@ -176,9 +176,9 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
 
     # Make shapefile for seepage lakes. (Ones that don't intersect flowlines)
     if exclude_intermit_flowlines:
-        class_field_name = "LakeConnectivity_Permanent"
+        class_field_name = "LakeConnection_Permanent"
     else:
-        class_field_name = "LakeConnectivity"
+        class_field_name = "LakeConnection"
     DM.AddField(temp_fc, class_field_name, "TEXT", field_length=13)
     DM.MakeFeatureLayer(temp_fc, "out_fc_lyr")
     DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", nhdflowline, XY_TOLERANCE, "NEW_SELECTION")
@@ -214,30 +214,30 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
 
         # 1--Purely hypothetical, not seen in testing
         DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
-                                                '''"LakeConnectivity" = 'Isolated' AND "LakeConnectivity_Permanent" <> 'Isolated' ''')
+                                                '''"LakeConnection" = 'Isolated' AND "LakeConnection_Permanent" <> 'Isolated' ''')
         DM.CalculateField("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
         # 2--Headwater to DR_Stream upgrade seen in testing with odd multi-inlet flow situation
         DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
-                                            '''"LakeConnectivity" = 'Headwater' AND "LakeConnectivity_Permanent" IN ('DR_Stream', 'DR_LakeStream') ''')
+                                            '''"LakeConnection" = 'Headwater' AND "LakeConnection_Permanent" IN ('DR_Stream', 'DR_LakeStream') ''')
         DM.CalculateField("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
 
         # 3--DR_Stream to DR_LakeStream upgrade seen in testing when intermittent stream segments were used
         # erroneously instead of artificial paths
         DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
-                                            '''"LakeConnectivity" = 'DR_Stream' AND "LakeConnectivity_Permanent" = 'DR_LakeStream' ''')
+                                            '''"LakeConnection" = 'DR_Stream' AND "LakeConnection_Permanent" = 'DR_LakeStream' ''')
         DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
         DM.SelectLayerByAttribute("out_fc_lyr", "CLEAR_SELECTION")
 
         # Add change flag for users
-        DM.AddField(temp_fc, "Has_Only_Permanent_Connectivity", "Text", field_length = "1")
+        DM.AddField(temp_fc, "LakeConnection_Class_Fluctuates", "Text", field_length = "1")
         flag_codeblock = """def flag_calculate(arg1, arg2):
             if arg1 == arg2:
                 return 'N'
             else:
                 return 'Y'"""
-        expression = 'flag_calculate(!LakeConnectivity!, !LakeConnectivity_Permanent!)'
-        DM.CalculateField(temp_fc, "Connectivity_Class_Flucuates", expression, "PYTHON", flag_codeblock)
+        expression = 'flag_calculate(!LakeConnection!, !LakeConnection_Permanent!)'
+        DM.CalculateField(temp_fc, "LakeConnection_Class_Fluctuates", expression, "PYTHON", flag_codeblock)
 
     # Project output once done with both. Switching CRS earlier causes trace problems.
     if not exclude_intermit_flowlines:

@@ -54,9 +54,9 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # TODO: If we experience errors again, add a try/except where the except writes the
     # conversion raster to a scratch workspace instead, that eliminated the errors we
     # we getting several years ago with 10.1, not sure if they will happen still.
-    arcpy.PolygonToRaster_conversion(zone_fc, zone_field, 'convert_raster', 'MAXIMUM_AREA')
+    arcpy.PolygonToRaster_conversion(zone_fc, zone_field, 'convertraster', 'MAXIMUM_AREA')
     env.extent = "MINOF"
-    arcpy.sa.ZonalStatisticsAsTable('convert_raster', zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
+    arcpy.sa.ZonalStatisticsAsTable('convertraster', zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
 
     if is_thematic:
         #for some reason env.cellSize doesn't work
@@ -65,7 +65,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
         # calculate/doit
         arcpy.AddMessage("Tabulating areas...")
-        arcpy.sa.TabulateArea('convert_raster', zone_field, in_value_raster, 'Value', 'temp_area_table', cell_size)
+        arcpy.sa.TabulateArea('convertraster', zone_field, in_value_raster, 'Value', 'temp_area_table', cell_size)
 
         # making the output table
         arcpy.CopyRows_management('temp_area_table', 'temp_entire_table')
@@ -82,8 +82,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     arcpy.AddMessage("Refining output table...")
 
     # Join to the input zones raster
-    arcpy.AddField_management('convert_raster', 'DataCoverage_pct', 'DOUBLE')
-    arcpy.CopyRows_management('convert_raster', 'zones_VAT')
+    arcpy.AddField_management('convertraster', 'DataCoverage_pct', 'DOUBLE')
+    arcpy.CopyRows_management('convertraster', 'zones_VAT')
     arcpy.JoinField_management('zones_VAT', zone_field, 'temp_entire_table', zone_field)
     calculate_expr = '100*(float(!COUNT_1!)/!Count!)'
     arcpy.CalculateField_management('zones_VAT', 'DataCoverage_pct', calculate_expr, "PYTHON")
@@ -111,7 +111,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     count_diff = in_count - out_count
 
     # cleanup
-    for item in ['temp_zonal_table', 'temp_entire_table', 'convert_raster', 'zones_VAT']:
+    for item in ['temp_zonal_table', 'temp_entire_table', 'convertraster', 'zones_VAT']:
         arcpy.Delete_management(item)
     arcpy.ResetEnvironments()
     arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch

@@ -42,7 +42,7 @@ def refine_zonal_output(t, zone_field, is_thematic):
 
 def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic, warn_at_end = False):
     orig_env = arcpy.env.workspace
-    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\debug_raster_2017-11-17.gdb'
+    arcpy.env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
     arcpy.AddMessage("Calculating zonal statistics...")
 

@@ -82,38 +82,41 @@ def efficient_merge(feature_class_list, output_fc, filter =''):
 
 
 
-def deduplicate_nhd(in_feature_class, out_feature_class = '', unique_id = 'Permanent_Identifier'):
+def deduplicate_nhd(in_feature_class_or_table, out_feature_class_or_table ='', unique_id ='Permanent_Identifier'):
     """
     Returns an single feature class for all NHD features with no duplicated identifiers in it.
-    :param in_feature_class: A feature class resulting from merging features from NHD datasets staged by subregion.
-    :param out_feature_class: Optional. The feature class which will be created.
+    :param in_feature_class_or_table: A feature class resulting from merging features from NHD datasets staged by subregion.
+    :param out_feature_class_or_table: Optional. The feature class which will be created.
     :param unique_id: Optional. The identifier that needs to be unique in the output.
     :return:
     """
     # SETUP
-    if out_feature_class:
+    if out_feature_class_or_table:
         arcpy.AddMessage("Copying initial features to output...")
-        arcpy.CopyFeatures_management(in_feature_class, out_feature_class)
+        if arcpy.Describe(in_feature_class_or_table).dataType == "FeatureClass":
+            arcpy.CopyFeatures_management(in_feature_class_or_table, out_feature_class_or_table)
+        if arcpy.Describe(in_feature_class_or_table).dataType == "Table":
+            arcpy.CopyRows_management(in_feature_class_or_table, out_feature_class_or_table)
     else:
-        out_feature_class = in_feature_class
+        out_feature_class_or_table = in_feature_class_or_table
 
     # EXECUTE
     # Delete full identicals first--these come from overlaps in staged subregion data
-    before_count = int(arcpy.GetCount_management(out_feature_class).getOutput(0))
+    before_count = int(arcpy.GetCount_management(out_feature_class_or_table).getOutput(0))
     arcpy.AddMessage("Deleting full identicals...")
     # Check for full identicals on original *attribute fields*, excluding the one we specifically created to make them distinct
     # Also excluding object ID since that is obviously distinct
     excluded_fields = ['Shape', 'Shape_Length', 'Shape_Area', 'OBJECTID', 'nhd_merge_id']
-    check_fields = [f.name for f in arcpy.ListFields(out_feature_class) if f.name not in excluded_fields]
-    arcpy.DeleteIdentical_management(out_feature_class, check_fields)
-    after_full_count = int(arcpy.GetCount_management(out_feature_class).getOutput(0))
+    check_fields = [f.name for f in arcpy.ListFields(out_feature_class_or_table) if f.name not in excluded_fields]
+    arcpy.DeleteIdentical_management(out_feature_class_or_table, check_fields)
+    after_full_count = int(arcpy.GetCount_management(out_feature_class_or_table).getOutput(0))
     arcpy.AddMessage("{0} features were removed because they were full identicals to remaining features.".format(before_count - after_full_count))
 
     # Delete duplicated IDs by taking the most recent FDate--these come from NHD editing process somehow
     arcpy.AddMessage("Deleting older features with duplicated identifiers...")
 
     # Get a list of distinct IDs that have duplicates
-    arcpy.Frequency_analysis(out_feature_class, "in_memory/freqtable", unique_id)
+    arcpy.Frequency_analysis(out_feature_class_or_table, "in_memory/freqtable", unique_id)
     arcpy.TableSelect_analysis("in_memory/freqtable", "in_memory/dupeslist", '''"FREQUENCY" > 1''')
     count_dupes = int(arcpy.GetCount_management("in_memory/dupeslist").getOutput(0))
 
@@ -122,16 +125,16 @@ def deduplicate_nhd(in_feature_class, out_feature_class = '', unique_id = 'Perma
         dupe_ids = [row[0] for row in arcpy.da.SearchCursor("in_memory/dupeslist", (unique_id))]
         dupe_filter = ''' "{}" = '{{}}' '''.format(unique_id)
         for id in dupe_ids:
-            dates = [row[0] for row in arcpy.da.SearchCursor(out_feature_class, ["FDate"], dupe_filter.format(id))]
-            with arcpy.da.UpdateCursor(out_feature_class, [unique_id, "FDate"], dupe_filter.format(id)) as cursor:
+            dates = [row[0] for row in arcpy.da.SearchCursor(out_feature_class_or_table, ["FDate"], dupe_filter.format(id))]
+            with arcpy.da.UpdateCursor(out_feature_class_or_table, [unique_id, "FDate"], dupe_filter.format(id)) as cursor:
                 for row in cursor:
                     if row[1] == max(dates):
                         pass
                     else:
                         cursor.deleteRow()
-        after_both_count = int(arcpy.GetCount_management(out_feature_class).getOutput(0))
+        after_both_count = int(arcpy.GetCount_management(out_feature_class_or_table).getOutput(0))
         arcpy.AddMessage("{0} features were removed because they were less recently edited than another feature with the same identifier.".format(after_full_count - after_both_count))
 
-    arcpy.AddIndex_management(out_feature_class, "nhd_merge_id", "IDX_nhd_merge_id", "UNIQUE")
+    arcpy.AddIndex_management(out_feature_class_or_table, "nhd_merge_id", "IDX_nhd_merge_id")
     arcpy.Delete_management("in_memory/freqtable")
     arcpy.Delete_management("in_memory/dupeslist")

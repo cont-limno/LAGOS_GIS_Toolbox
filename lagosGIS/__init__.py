@@ -6,6 +6,7 @@ from zonal_tabarea import handle_overlaps as zonal_attribution_of_raster_data
 from Export2CSV import TableToCSV as export_to_csv
 from upstream_lakes import upstream_lakes
 
+
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
     fc_count = len(feature_class_or_table_list)
     all_exist_test = all(arcpy.Exists(fct) for fct in feature_class_or_table_list)
@@ -59,3 +60,21 @@ def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
         print("ERROR: One or more feature class paths is not valid. Merged feature class not created.")
         return False
 
+def list_shared_words(string1, string2, exclude_lake_words = True ):
+    """
+    Return a list of common words in two strings formatted as normal text (with spaces in between words).
+    :param string1: String to compare
+    :param string2: String to compare
+    :param exclusion_set: Excludes the words 'LAKE' and 'POND' by default. False allows these words to be returned in
+    the result
+    :return: A list of words.
+    """
+    EXCLUSION_SET = set(['LAKE', 'POND', 'RESERVOIR', 'DAM'])
+    if not (isinstance(string1, basestring) and isinstance(string2, basestring)):
+        raise TypeError("inputs must each be a string")
+    words1 = set(string1.upper().split())
+    words2 = set(string2.upper().split())
+    if exclude_lake_words:
+        words1 = words1.difference(EXCLUSION_SET)
+        words2 = words2.difference(EXCLUSION_SET)
+    return ' '.join(list(words1.intersection(words2)))

@@ -6,15 +6,18 @@ from lagosGIS import list_shared_words
 
 MASTER_LAKES_FC = r''
 MASTER_STREAMS_FC = r''
-MASTER_COUNTY_FC = r''
 MASTER_LAKE_ID = 'lagoslakeid'
 MASTER_GNIS_NAME = "GNIS_Name"
 MASTER_STREAM_ID = 'Permanent_Identifier'
 MASTER_COUNTY_NAME = 'NAME'
+MASTER_STATE_NAME = 'STATE'
+STATES = ("AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","GU","HI","IA","ID", "IL","IN","KS","KY","LA","MA","MD","ME","MH","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","NY", "OH","OK","OR","PA","PR","PW","RI","SC","SD","TN","TX","UT","VA","VI","VT","WA","WI","WV","WY")
 
 
 
-def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, lake_county_field = ''):
+def georeference_lakes(lake_points_fc, out_fc, state, lake_id_field, lake_name_field, lake_county_field = ''):
+    if state.upper() not in STATES:
+        raise ValueError('Use the 2-letter state code abbreviation')
     arcpy.env.workspace = 'in_memory'
     join1 = '{}_1'.format(os.path.splitext(out_fc)[0])
     join2 = '{}_2'.format(os.path.splitext(out_fc)[0])
@@ -22,6 +25,8 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     join4 = '{}_4'.format(os.path.splitext(out_fc)[0])
     join5 = '{}_5'.format(os.path.splitext(out_fc)[0])
     freq = 'frequency_of_lake_id'
+
+    # TODO: Get things in the same projection
 
     point_fields = arcpy.ListFields(lake_points_fc)
 
@@ -78,9 +83,20 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                     review = 2
         cursor.updateRow(words, comment, review)
 
+    # Select down to a minimum set because we're about to join on county, which will create lots of duplicate matches
+    # Then join calculated results back to full set
     join5 = AN.Select(join4, join5, 'Manual_Review IS NULL')
+    lakes_state = AN.Select(MASTER_LAKES_FC, 'lakes_state', '{1} = {2}'.format(MASTER_STATE_NAME, state))
     if lake_county_field:
-        join5 = DM.JoinField(join5, lake_county_field, MASTER_COUNTY_FC, MASTER_COUNTY_NAME, MASTER_COUNTY_NAME)
+        join5 = DM.JoinField(join5, lake_county_field, lakes_state, MASTER_COUNTY_NAME, MASTER_COUNTY_NAME)
+        cursor_fields = [lake_id_field, lake_name_field, lake_county_field,
+                         MASTER_LAKE_ID + '_12', MASTER_GNIS_NAME + '_12_13',  # 100m match
+                         'Comment', 'Manual_Review', 'Shared_Words']
+        cursor = arcpy.da.UpdateCursor(join5, update_fields.extend([lake_county_field, MASTER_COUNTY_NAME]))
+        for whatever in cursor:
+            if mcounty is not None:
+                words = list_shared_words()
+
 
 
 

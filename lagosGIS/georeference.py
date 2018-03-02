@@ -30,9 +30,9 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     DM.CopyFeatures('xylayer', out_fc)
 
-def georeference_lakes(lake_points_fc, out_fc, state, lake_id_field, lake_name_field, lake_county_field = ''):
+def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, lake_county_field = '', state = ''):
     arcpy.AddMessage("Joining...")
-    if state.upper() not in STATES:
+    if state and state.upper() not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
     arcpy.env.workspace = 'in_memory'
     out_short = os.path.splitext(os.path.basename(out_fc))[0]
@@ -170,11 +170,11 @@ def georeference_lakes(lake_points_fc, out_fc, state, lake_id_field, lake_name_f
 
     DM.AssignDomainToField(out_fc, 'Comment', 'Comment')
 
-    DM.AddField(out_fc, 'Join_Count', 'Short')
+    DM.AddField(out_fc, 'Total_points_in_lake_poly', 'Short')
 
     # Get the join_count for each limno lake ID
     # De-dupe anything resulting from limno ID duplicates first before counting
-    id_pairs = list(set([row[0] for row in arcpy.da.SearchCursor(out_fc, [lake_id_field, MASTER_LAKE_ID])]))
+    id_pairs = list(set(arcpy.da.SearchCursor(out_fc, [lake_id_field, MASTER_LAKE_ID])))
     # THEN pull out LAGOS id. Any duplicate now are only due to multiple distinct points within lake
     lagos_ids = [ids[1] for ids in id_pairs]
     counts = Counter(lagos_ids)
@@ -182,7 +182,7 @@ def georeference_lakes(lake_points_fc, out_fc, state, lake_id_field, lake_name_f
     with arcpy.da.UpdateCursor(out_fc, [MASTER_LAKE_ID, 'Total_points_in_lake_poly']) as cursor:
         for lagos_id, join_count in cursor:
             join_count = counts[lagos_id]
-            cursor.updateRow(lagos_id, join_count)
+            cursor.updateRow((lagos_id, join_count))
 
 
 

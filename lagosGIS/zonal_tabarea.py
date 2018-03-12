@@ -61,7 +61,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     if is_thematic:
         #for some reason env.cellSize doesn't work
         desc = arcpy.Describe(in_value_raster)
-        cell_size = desc.meanCelLHeight
+        cell_size = desc.meanCellHeight
 
         # calculate/doit
         arcpy.AddMessage("Tabulating areas...")

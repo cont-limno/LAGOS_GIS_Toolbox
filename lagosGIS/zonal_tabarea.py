@@ -6,7 +6,7 @@ import arcpy
 from arcpy import env
 import csiutils as cu
 
-def refine_zonal_output(t, zone_field, is_thematic):
+def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
     """Makes a nicer output for this tool. Rename some fields, drop unwanted
         ones, calculate percentages using raster AREA before deleting that
         field."""
@@ -28,21 +28,29 @@ def refine_zonal_output(t, zone_field, is_thematic):
             arcpy.CalculateField_management(t, pct_field, expr, "PYTHON")
 
             #Delete the old field
-            arcpy.DeleteField_management(t, f.name)
+            if not debug_mode:
+                arcpy.DeleteField_management(t, f.name)
 
     else:
         # continuous variables don't have these in the output
         drop_fields = drop_fields + ['VARIETY', 'MAJORITY', 'MINORITY', 'MEDIAN']
 
-    for df in drop_fields:
-        try:
-            arcpy.DeleteField_management(t, df)
-        except:
-            continue
+    if not debug_mode:
+        for df in drop_fields:
+            try:
+                arcpy.DeleteField_management(t, df)
+            except:
+                continue
 
-def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic, warn_at_end = False):
+def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic, debug_mode = False):
     orig_env = arcpy.env.workspace
-    arcpy.env.workspace = 'in_memory'
+    if debug_mode:
+        arcpy.env.overwriteOutput = True
+        temp_gdb = cu.create_temp_GDB('zonal_tabarea')
+        arcpy.env.workspace = temp_gdb
+        arcpy.AddMessage('Debugging workspace located at {}'.format(temp_gdb))
+    else:
+        arcpy.env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
     arcpy.AddMessage("Calculating zonal statistics...")
 
@@ -111,15 +119,17 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     count_diff = in_count - out_count
 
     # cleanup
-    for item in ['temp_zonal_table', 'temp_entire_table', 'convertraster', 'zones_VAT']:
-        arcpy.Delete_management(item)
+    if not debug_mode:
+        for item in ['temp_zonal_table', 'temp_entire_table', 'convertraster', 'zones_VAT']:
+            arcpy.Delete_management(item)
     arcpy.ResetEnvironments()
     arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch
     arcpy.CheckInExtension("Spatial")
 
     return [out_table, count_diff]
 
-def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic):
+def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, debug_mode = False):
+    # TODO: Add in debug_mode feature for this wrapper (for overlaps)
     overlap_grp_field = arcpy.ListFields(zone_fc, 'OVERLAP_GROUP*')
     total_count_diff = 0
     if overlap_grp_field:
@@ -165,7 +175,7 @@ def test(out_table, is_thematic = False):
         in_value_raster = os.path.join(test_data_gdb, 'NLCD_LandCover_2006')
     else:
         in_value_raster = os.path.join(test_data_gdb, 'Total_Nitrogen_Deposition_2006')
-    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
+    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, debug_mode = True)
     arcpy.env.overwriteOutput = False
 
 if __name__ == '__main__':

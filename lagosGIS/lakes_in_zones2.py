@@ -15,11 +15,12 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
     # using in_memory workspace means no SHAPE@AREA attribute later so I
     # need to calculate another field with the area using temp on disk
     # then go ahead and copy to memory, delete temp
+    temp_workspace = cu.create_temp_GDB('lakezone')
+    temp_lakes = os.path.join(temp_workspace, 'temp_lakes')
+    arcpy.CopyFeatures_management(lakes_fc, temp_lakes)
+
     hectares_field = arcpy.ListFields(lakes_fc, 'Hectares')
     if not hectares_field:
-        temp_workspace = cu.create_temp_GDB('lakezone')
-        temp_lakes = os.path.join(temp_workspace, 'temp_lakes')
-        arcpy.CopyFeatures_management(lakes_fc, temp_lakes)
         arcpy.AddField_management(temp_lakes, 'Hectares', 'DOUBLE')
         arcpy.CalculateField_management(temp_lakes, 'Hectares', '!shape.area@hectares!', 'PYTHON')
 

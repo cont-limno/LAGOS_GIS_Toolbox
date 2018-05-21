@@ -29,6 +29,8 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', arcpy.SpatialReference(CRS_DICT[in_crs]))
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     DM.CopyFeatures('xylayer', out_fc)
+    arcpy.Delete_management('xylayer')
+    return(out_fc)
 
 def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, lake_county_field = '', state = ''):
     arcpy.AddMessage("Joining...")
@@ -43,7 +45,8 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     join5 = '{}_5'.format(out_short)
     freq = 'frequency_of_lake_id'
 
-    if lake_county_field and not lake_county_field in arcpy.ListFields(lake_points_fc, '{}*'.format(lake_county_field)):
+    county_name_results = arcpy.ListFields(lake_points_fc, '{}*'.format(lake_county_field))[0].name
+    if lake_county_field and not lake_county_field in county_name_results:
         print('{} field does not exist in dataset.'.format(lake_county_field))
         raise Exception
 

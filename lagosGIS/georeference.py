@@ -13,7 +13,7 @@ MASTER_STREAMS_FC = r'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessor
 MASTER_LAKE_ID = 'lagoslakeid'
 MASTER_GNIS_NAME = "GNIS_Name"
 #MASTER_STREAM_ID = 'Permanent_Identifier' #hard-coded below
-MASTER_COUNTY_NAME = 'NAME'
+MASTER_COUNTY_NAME = 'COUNTY_NAME'
 MASTER_STATE_NAME = 'STATE'
 STATES = ("AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","GU","HI","IA","ID", "IL","IN","KS","KY","LA","MA",
           "MD","ME","MH","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","NY", "OH","OK","OR","PA","PR",
@@ -177,20 +177,20 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
 
     # Get the join_count for each limno lake ID
     # De-dupe anything resulting from limno ID duplicates first before counting
-    id_pairs = list(set(arcpy.da.SearchCursor(out_fc, [lake_id_field, MASTER_LAKE_ID])))
+    id_pairs = list(set(arcpy.da.SearchCursor(out_fc, [lake_id_field, 'Linked_lagoslakeid'])))
     # THEN pull out LAGOS id. Any duplicate now are only due to multiple distinct points within lake
     lagos_ids = [ids[1] for ids in id_pairs]
     counts = Counter(lagos_ids)
 
-    with arcpy.da.UpdateCursor(out_fc, [MASTER_LAKE_ID, 'Total_points_in_lake_poly']) as cursor:
+    with arcpy.da.UpdateCursor(out_fc, ['Linked_lagoslakeid', 'Total_points_in_lake_poly']) as cursor:
         for lagos_id, join_count in cursor:
             join_count = counts[lagos_id]
             cursor.updateRow((lagos_id, join_count))
 
-
-
     DM.AddField(out_fc, 'Note', 'TEXT', field_length=140)
     DM.Delete('in_memory')
+
+    arcpy.AddMessage('Completed.')
 
     # Then deal with the frequency issue somehow
 

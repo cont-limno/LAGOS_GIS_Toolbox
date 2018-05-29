@@ -84,29 +84,30 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 'Lakes10ha_Isolated',
                 'Lakes10ha_Headwater',
                 'Lakes10ha_DRStream',
-                'Lakes10ha_DRLakeStream'
-                'Lakes4ha_Isolated_PermanentConnectionsOnly',
-                'Lakes4ha_Headwater_PermanentConnectionsOnly',
-                'Lakes4ha_DRStream_PermanentConnectionsOnly',
-                'Lakes4ha_DRLakeStream_PermanentConnectionsOnly',
-                'Lakes4to10ha_Isolated_PermanentConnectionsOnly',
-                'Lakes4to10ha_Headwater_PermanentConnectionsOnly',
-                'Lakes4to10ha_DRStream_PermanentConnectionsOnly',
-                'Lakes4to10ha_DRLakeStream_PermanentConnectionsOnly',
-                'Lakes10ha_Isolated_PermanentConnectionsOnly',
-                'Lakes10ha_Headwater_PermanentConnectionsOnly',
-                'Lakes10ha_DRStream_PermanentConnectionsOnly',
-                'Lakes10ha_DRLakeStream_PermanentConnectionsOnly'
+                'Lakes10ha_DRLakeStream',
+                'Lakes4ha_Isolated_DuringLowFlow',
+                'Lakes4ha_Headwater_DuringLowFlow',
+                'Lakes4ha_DRStream_DuringLowFlow',
+                'Lakes4ha_DRLakeStream_DuringLowFlow',
+                'Lakes4to10ha_Isolated_DuringLowFlow',
+                'Lakes4to10ha_Headwater_DuringLowFlow',
+                'Lakes4to10ha_DRStream_DuringLowFlow',
+                'Lakes4to10ha_DRLakeStream_DuringLowFlow',
+                'Lakes10ha_Isolated_DuringLowFlow',
+                'Lakes10ha_Headwater_DuringLowFlow',
+                'Lakes10ha_DRStream_DuringLowFlow',
+                'Lakes10ha_DRLakeStream_DuringLowFlow'
                 ]
 
     for sel, temp_table in zip(selections, temp_tables):
         cu.multi_msg("Creating temporary table called {0} for lakes where {1}".format(temp_table, sel))
         polygons_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
-        new_fields = ['Poly_Overlapping_Hectares', 'Poly_Contributing_Hectares', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
+        new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
         avg_size_field = temp_table + '_AvgSize_ha'
         arcpy.AddField_management(temp_table, avg_size_field , 'DOUBLE')
-        arcpy.CalculateField_management(temp_table, avg_size_field, '!Poly_Contributing_Hectares!/!Poly_Count!', 'PYTHON')
+        arcpy.CalculateField_management(temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
         for f in new_fields:
+            print(f.replace('Poly', temp_table))
             cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
     # join em up and copy to final

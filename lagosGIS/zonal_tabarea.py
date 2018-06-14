@@ -11,21 +11,22 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
         ones, calculate percentages using raster AREA before deleting that
         field."""
 
-    drop_fields = ['VALUE', 'COUNT', '{}_1'.format(zone_field), 'COUNT_1', 'AREA', 'RANGE', 'SUM', 'ZONE_CODE']
+    drop_fields = ['VALUE', 'COUNT', '{}_1'.format(zone_field), 'AREA', 'RANGE', 'SUM', 'ZONE_CODE', 'STD']
     if is_thematic:
         fields = arcpy.ListFields(t, "VALUE*")
-        for f  in fields:
-            # convert area to hectares in a new field
-            ha_field = f.name.replace("VALUE", "Ha")
-            arcpy.AddField_management(t, ha_field, f.type)
-            expr = "!%s!/10000" % f.name
-            arcpy.CalculateField_management(t, ha_field, expr, "PYTHON")
-
+        for f in fields:
             # find percent of total area in a new field
             pct_field = f.name.replace("VALUE", "Pct")
             arcpy.AddField_management(t, pct_field, f.type)
             expr = "100 * !%s!/!AREA!" % f.name
             arcpy.CalculateField_management(t, pct_field, expr, "PYTHON")
+
+            # convert area to hectares in a new field
+            # scale to match the area of the original feature!
+            ha_field = f.name.replace("VALUE", "Ha")
+            arcpy.AddField_management(t, ha_field, f.type)
+            expr = "!%s!/10000" % f.name
+            arcpy.CalculateField_management(t, ha_field, expr, "PYTHON")
 
             #Delete the old field
             if not debug_mode:
@@ -35,6 +36,7 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
         # continuous variables don't have these in the output
         drop_fields = drop_fields + ['VARIETY', 'MAJORITY', 'MINORITY', 'MEDIAN']
 
+    arcpy.AlterField_management(t, 'COUNT_1', 'CELL_COUNT', 'CELL_COUNT')
     if not debug_mode:
         for df in drop_fields:
             try:
@@ -55,25 +57,29 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     arcpy.AddMessage("Calculating zonal statistics...")
 
     # Set up environments for alignment between zone raster and theme raster
-    env.snapRaster = in_value_raster
-    env.cellSize = in_value_raster
+    env.snapRaster = '../common_grid.tif'
+    env.cellSize = '../common_grid.tif'
+    CELL_SIZE = 30
     env.extent = zone_fc
 
-    # TODO: If we experience errors again, add a try/except where the except writes the
-    # conversion raster to a scratch workspace instead, that eliminated the errors we
-    # we getting several years ago with 10.1, not sure if they will happen still.
-    arcpy.PolygonToRaster_conversion(zone_fc, zone_field, 'convertraster', 'MAXIMUM_AREA')
+    zone_desc = arcpy.Describe(zone_fc)
+    zone_raster = 'convertraster'
+    if zone_desc.dataType != 'RasterDataset':
+        arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER', cellsize = CELL_SIZE)
+    else:
+        zone_raster = zone_fc
     env.extent = "MINOF"
-    arcpy.sa.ZonalStatisticsAsTable('convertraster', zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
+
+    # I tested and there is no need to resample the raster being summarized. It will be resampled correctly
+    # internally in the following tool given that the necessary environments are set above (cell size, snap).
+    in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
+    arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
 
     if is_thematic:
         #for some reason env.cellSize doesn't work
-        desc = arcpy.Describe(in_value_raster)
-        cell_size = desc.meanCellHeight
-
         # calculate/doit
         arcpy.AddMessage("Tabulating areas...")
-        arcpy.sa.TabulateArea('convertraster', zone_field, in_value_raster, 'Value', 'temp_area_table', cell_size)
+        arcpy.sa.TabulateArea(zone_raster, zone_field, in_value_raster, 'Value', 'temp_area_table', CELL_SIZE)
 
         # making the output table
         arcpy.CopyRows_management('temp_area_table', 'temp_entire_table')
@@ -90,8 +96,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     arcpy.AddMessage("Refining output table...")
 
     # Join to the input zones raster
-    arcpy.AddField_management('convertraster', 'DataCoverage_pct', 'DOUBLE')
-    arcpy.CopyRows_management('convertraster', 'zones_VAT')
+    arcpy.CopyRows_management(zone_raster, 'zones_VAT')
+    arcpy.AddField_management('zones_VAT', 'DataCoverage_pct', 'DOUBLE')
     arcpy.JoinField_management('zones_VAT', zone_field, 'temp_entire_table', zone_field)
     calculate_expr = '100*(float(!COUNT_1!)/!Count!)'
     arcpy.CalculateField_management('zones_VAT', 'DataCoverage_pct', calculate_expr, "PYTHON")
@@ -120,7 +126,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
     # cleanup
     if not debug_mode:
-        for item in ['temp_zonal_table', 'temp_entire_table', 'convertraster', 'zones_VAT']:
+        for item in ['temp_zonal_table', 'temp_entire_table', 'in_memory', 'zones_VAT']:
             arcpy.Delete_management(item)
     arcpy.ResetEnvironments()
     arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch
@@ -141,12 +147,12 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
             arcpy.Select_analysis(zone_fc, i_zone_fc, '"OVERLAP_GROUP" = {}'.format(group))
             i_out_table = 'in_memory/stats{}'.format(group)
             i_out_tables.append(i_out_table)
-            result = stats_area_table(i_zone_fc, zone_field, in_value_raster, i_out_table, is_thematic, warn_at_end = True)
+            result = stats_area_table(i_zone_fc, zone_field, in_value_raster, i_out_table, is_thematic, debug_mode)
             total_count_diff += result[1]
         arcpy.Merge_management(i_out_tables, out_table)
 
     else:
-        result = stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
+        result = stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_thematic, debug_mode)
         total_count_diff = result[1]
 
     if total_count_diff > 0:
@@ -165,18 +171,18 @@ def main():
     handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic)
 
 
-def test(out_table, is_thematic = False):
-    arcpy.env.overwriteOutput = True
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
-    zone_fc = os.path.join(test_data_gdb, 'HU12')
-    zone_field = 'ZoneID'
-    if is_thematic:
-        in_value_raster = os.path.join(test_data_gdb, 'NLCD_LandCover_2006')
-    else:
-        in_value_raster = os.path.join(test_data_gdb, 'Total_Nitrogen_Deposition_2006')
-    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, debug_mode = True)
-    arcpy.env.overwriteOutput = False
+# def test(out_table, is_thematic = False):
+#     arcpy.env.overwriteOutput = True
+#     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+#     test_data_gdb = os.path.abspath(os.path.join(os.pardir, 'TestData_0411.gdb'))
+#     zone_fc = os.path.join(test_data_gdb, 'HU12')
+#     zone_field = 'ZoneID'
+#     if is_thematic:
+#         in_value_raster = os.path.join(test_data_gdb, 'NLCD_LandCover_2006')
+#     else:
+#         in_value_raster = os.path.join(test_data_gdb, 'Total_Nitrogen_Deposition_2006')
+#     handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, debug_mode = True)
+#     arcpy.env.overwriteOutput = False
 
 if __name__ == '__main__':
     main()

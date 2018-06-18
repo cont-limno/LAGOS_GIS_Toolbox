@@ -36,7 +36,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     arcpy.AddMessage("Joining...")
     if state and state.upper() not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
-    arcpy.env.workspace = 'in_memory'
+    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\scratch.gdb'
     out_short = os.path.splitext(os.path.basename(out_fc))[0]
     join1 = '{}_1'.format(out_short)
     join2 = '{}_2'.format(out_short)
@@ -139,14 +139,67 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     if lake_county_field:
         join5 = AN.Select(join4, join5, 'Manual_Review IS NULL')
         lakes_state = AN.Select(MASTER_LAKES_FC, 'lakes_state', "{0} = '{1}'".format(MASTER_STATE_NAME, state))
-        join5 = DM.JoinField(join5, lake_county_field, lakes_state, MASTER_COUNTY_NAME, MASTER_COUNTY_NAME)
-        # cursor_fields = [lake_id_field, lake_name_field, lake_county_field,
-        #                  MASTER_LAKE_ID + '_12', MASTER_GNIS_NAME + '_12_13',  # 100m match
-        #                  'Comment', 'Manual_Review', 'Shared_Words']
-        # cursor = arcpy.da.UpdateCursor(join5, update_fields.extend([lake_county_field, MASTER_COUNTY_NAME]))
-        # for whatever in cursor:
-        #     if mcounty is not None:
+        lakes_state_lyr = DM.MakeFeatureLayer(lakes_state, 'lakes_state_lyr')
+        join5_lyr = DM.MakeFeatureLayer(join5, 'join5_lyr')
+        DM.AddJoin(join5_lyr, lake_county_field, lakes_state_lyr, MASTER_COUNTY_NAME)
+        join5_with_county = DM.CopyFeatures(join5_lyr, 'join5_with_cty')
+        j5 = 'DEDUPED_CA_SWAMP_data_linked_5.'
+
+        county_update_fields = [j5 + lake_id_field, j5 + lake_name_field, j5 + lake_county_field,
+                                'lakes_state.' + MASTER_LAKE_ID, 'lakes_state.' + MASTER_GNIS_NAME, 'lakes_state.' + MASTER_COUNTY_NAME,
+                                j5 + 'Auto_Comment', j5 + 'Manual_Review', j5 + 'Shared_Words',
+                                j5 + 'Linked_lagoslakeid']
+        with arcpy.da.UpdateCursor(join5_lyr, county_update_fields) as cursor:
+            for row in cursor:
+                id, name, county, mid_cty, mname_cty, mcounty, comment, review, words, lagosid = row
+                if county is not None and mcounty is not None:
+                    if name and mname_cty:
+                        words = lagosGIS.list_shared_words(name, mname_cty, exclude_lake_words=True)
+                    if words:
+                        comment = 'PRELIMINARY: Linked by common name and location'
+                        lagosid = mid_cty
+                        review = 2
+                cursor.updateRow((id, name, county, mid_cty, mname_cty, mcounty, comment, review, words, lagosid))
+        DM.RemoveJoin(join5_lyr)
+        join5_with_county = DM.CopyFeatures(join5_lyr, 'join5_with_county')
+
+        # join5 = DM.JoinField(join5, lake_county_field, lakes_state, MASTER_COUNTY_NAME,
+        #                      fields = [MASTER_COUNTY_NAME, MASTER_LAKE_ID, MASTER_GNIS_NAME])
+
+        # # This is a long way to make a join
+        # join_dict = {}
+        # with arcpy.da.SearchCursor(lakes_state, [MASTER_COUNTY_NAME, MASTER_LAKE_ID, MASTER_GNIS_NAME]) as cursor:
+        #     for row in cursor:
+        #         join_value, val1, val2 = row
+        #         join_dict[join_value] = [val1, val2]
+        #
+        # arcpy.AddField_management(join5, MASTER_LAKE_ID + 'cntyj', 'LONG')
+        # arcpy.AddField_management(join5, MASTER_GNIS_NAME + 'cntyj', 'TEXT', 255)
+        #
+        # with arcpy.da.SearchCursor(join5, [lake_county_field, MASTER_LAKE_ID + 'cntyj', MASTER_GNIS_NAME + 'cntyj']) as cursor:
+        #     for row in cursor:
+        #         key_value = row[0]
         #         words = lagosGIS.list_shared_words()
+        #         if join_dict.has_key(key_value):
+        #             row[1] = join_dict[key_value][0]
+        #             row[2] = join_dict[key_value][1]
+        #         else:
+        #             row[1] = None
+        #             row[2] = None
+        #         cursor.updateRow(row)
+        #
+
+
+
+        county_update_fields = update_fields = [lake_id_field, lake_name_field, lake_county_field,
+                    MASTER_LAKE_ID + '_12_13_14', MASTER_GNIS_NAME + '_12_13',  MASTER_COUNTY_NAME + '_12_13', # county
+                     'Auto_Comment', 'Manual_Review', 'Shared_Words',
+                     'Linked_lagoslakeid']
+        cursor = arcpy.da.UpdateCursor(join5, county_update_fields)
+        for row in cursor:
+            id, name, county, lagosid_cty, lagosname_cty, mcounty, comment, mreview, words, linked_lagosid = row
+            if mcounty is not None:
+                words = lagosGIS.list_shared_words()
     else:
         join5 = join4
 

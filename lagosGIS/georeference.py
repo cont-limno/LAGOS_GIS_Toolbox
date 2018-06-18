@@ -82,6 +82,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     DM.AddField(join4, 'Manual_Review', 'SHORT')
     DM.AddField(join4, 'Shared_Words', 'TEXT', field_length = 100)
     DM.AddField(join4, 'Linked_lagoslakeid', 'LONG')
+    DM.AddField(join4, 'GEO_Discovered_Name', 'TEXT', field_length = 255)
 
     update_fields = [lake_id_field, lake_name_field,  MASTER_LAKE_ID, MASTER_GNIS_NAME, # 0m match
                      'PERMANENT_IDENTIFIER_1', 'GNIS_NAME_1', # stream match

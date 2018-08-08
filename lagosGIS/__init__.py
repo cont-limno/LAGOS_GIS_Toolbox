@@ -1,10 +1,20 @@
-__all__ = ["lake_connectivity_classification", "zonal_attribution_of_raster_data", "efficient_merge", "export_to_csv", "upstream_lakes"]
+__all__ = ["lake_connectivity_classification",
+           "zonal_attribution_of_raster_data",
+           "efficient_merge", "export_to_csv",
+           "upstream_lakes",
+           "spatialize_lakes",
+           "georeference_lakes",
+           "multi_convert_to_raster"]
 
+import os
 import arcpy
 from LakeConnectivity import full_classify as lake_connectivity_classification
 from zonal_tabarea import handle_overlaps as zonal_attribution_of_raster_data
 from Export2CSV import TableToCSV as export_to_csv
 from upstream_lakes import upstream_lakes
+from georeference import spatialize_lakes
+from georeference import georeference_lakes
+from multi_convert_to_raster import multi_convert_to_raster
 
 
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
@@ -72,9 +82,39 @@ def list_shared_words(string1, string2, exclude_lake_words = True ):
     EXCLUSION_SET = set(['LAKE', 'POND', 'RESERVOIR', 'DAM'])
     if not (isinstance(string1, basestring) and isinstance(string2, basestring)):
         raise TypeError("inputs must each be a string")
+
     words1 = set(string1.upper().split())
     words2 = set(string2.upper().split())
     if exclude_lake_words:
         words1 = words1.difference(EXCLUSION_SET)
         words2 = words2.difference(EXCLUSION_SET)
     return ' '.join(list(words1.intersection(words2)))
+
+def select_fields(feature_class_or_table, output, field_list, convert_to_table = False):
+    '''
+    Select outputs a dataset with only the user-selected fields, the OID, and the geometry, if applicable.
+    :param feature_class_or_table: The feature class or table to select from.
+    :param output: The path to the output feature class or table.
+    :param field_list: A list of fields to be selected.
+    :param convert_to_table: Optional, boolean. Default True. Whether to return the output as the Table dataset type.
+    :return: ArcGIS Result object.
+    '''
+    input_type = arcpy.Describe(feature_class_or_table).dataType
+    out_workspace = os.path.dirname(output)
+    out_basename = os.path.basename(output)
+
+    field_mapping = arcpy.FieldMappings()
+    for f in field_list:
+        map = arcpy.FieldMap()
+        map.addInputField(feature_class_or_table, f)
+        field_mapping.addFieldMap(map)
+
+    if not convert_to_table and input_type == "FeatureClass":
+        result = arcpy.FeatureClassToFeatureClass_conversion(feature_class_or_table, out_workspace, out_basename, '#', field_mapping)
+    else:
+        if input_type == "FeatureClass":
+            feature_class_or_table = arcpy.CopyRows_management(feature_class_or_table, 'in_memory/temp_copy')
+        result = arcpy.TableToTable_conversion(feature_class_or_table, out_workspace, out_basename, '#', field_mapping)
+        arcpy.Delete_management('in_memory/temp_copy')
+
+    return result

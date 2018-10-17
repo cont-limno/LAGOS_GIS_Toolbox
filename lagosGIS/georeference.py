@@ -19,7 +19,8 @@ STATES = ("AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","GU","HI","IA",
           "MD","ME","MH","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","NY", "OH","OK","OR","PA","PR",
           "PW","RI","SC","SD","TN","TX","UT","VA","VI","VT","WA","WI","WV","WY")
 CRS_DICT = {'NAD83':4269,
-            'WGS84':4326
+            'WGS84':4326,
+            'NAD27':4267
             }
 
 

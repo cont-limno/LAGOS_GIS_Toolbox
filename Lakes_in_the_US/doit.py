@@ -9,10 +9,14 @@ NHD_DOWNLOAD_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrograp
 NHD_UNZIPPED_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Unzipped_Original"
 ALL_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_merge202_jun30_deduped'
 <<<<<<< HEAD
+<<<<<<< HEAD
 ALL_XREF_TABLE = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDReachCrossReference_all_merged'
 LAKES_XREF_TABLE = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDReachCrossReference_lakes'
 CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2'
 CONUS_LAKES_FC_PROJ = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2_Albers'
+=======
+CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
+>>>>>>> parent of 38a20a8... change names of the variables
 =======
 CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
 >>>>>>> parent of 38a20a8... change names of the variables
@@ -112,6 +116,7 @@ arcpy.CopyFeatures_management(all_lakes_lyr, CONUS_LAKES_FC)
 arcpy.Delete_management(all_lakes_lyr)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Step 5: Repair geometry
 # Optional: to see which features will change: arcpy.CheckGeometry_management(CONUS_LAKES_FC, 'in_memory/checkgeom_lakes')
 # 155 self-intersections
@@ -186,6 +191,8 @@ with arcpy.da.UpdateCursor(LAGOS_LAKES_FC, 'Permanent_Identifier', mexico_lake_m
 # Step 6: R spatial join to WQP sites
 # Is there a way to list some R code here??
 
+=======
+>>>>>>> parent of 38a20a8... change names of the variables
 =======
 >>>>>>> parent of 38a20a8... change names of the variables
 # Step 5: # Spatial Join to WQP sites

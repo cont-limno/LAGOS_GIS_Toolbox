@@ -65,6 +65,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     join1 = '{}_1'.format(out_short)
     join2 = '{}_2'.format(out_short)
     join3 = '{}_3'.format(out_short)
+    join3_select = join3 + '_select'
     join4 = '{}_4'.format(out_short)
     join5 = '{}_5'.format(out_short)
     freq = 'frequency_of_lake_id'
@@ -228,11 +229,9 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
             comment = ac
             cursor.updateRow((flag, ac, comment))
 
-    # Identify sites that were linked to more than one candidate lake
-    sample_ids = arcpy.da.SearchCursor(out_fc, [lake_id_field, ])
-
     # Then make sure to only keep the fields necessary when you write to an output
-    copy_fields = point_fields + ['Linked_lagoslakeid', 'Auto_Comment', 'Manual_Review', 'Shared_Words', 'Comment']
+    copy_fields = point_fields + ['Linked_lagoslakeid', 'Auto_Comment', 'Manual_Review',
+                                  'Shared_Words', 'Comment', 'Duplicate_Candidate', 'GEO_Discovered_Name']
     copy_fields.remove('Shape')
     copy_fields.remove('OBJECTID')
 
@@ -241,6 +240,12 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     DM.AssignDomainToField(out_fc, 'Comment', 'Comment')
 
     DM.AddField(out_fc, 'Total_points_in_lake_poly', 'Short')
+
+    # Remove any duplicates. (These originate from the join3/join4 transition because a point can be both
+    # within 10m and 100m of lakes, this code takes the closest lake as true for my current sanity.)
+    # Or, in other words, this is a hack solution.
+    out_fc_fields = [f.name for f in arcpy.ListFields(out_fc) if f.name != 'OBJECTID']
+    DM.DeleteIdentical(out_fc, out_fc_fields)
 
     # Get the join_count for each limno lake ID
     # De-dupe anything resulting from limno ID duplicates first before counting
@@ -266,7 +271,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                 duplicate_flag = "Y"
             else:
                 duplicate_flag = "N"
-            cursor.updateRow((lake_id_field, duplicate_flag))
+            cursor.updateRow((sample_id, duplicate_flag))
 
     # clean up
     DM.AddField(out_fc, 'Note', 'TEXT', field_length=140)

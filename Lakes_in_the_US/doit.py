@@ -8,21 +8,16 @@ import lakes_us # in this repo
 NHD_DOWNLOAD_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Zipped"
 NHD_UNZIPPED_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Unzipped_Original"
 ALL_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_merge202_jun30_deduped'
-<<<<<<< HEAD
-<<<<<<< HEAD
 ALL_XREF_TABLE = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDReachCrossReference_all_merged'
 LAKES_XREF_TABLE = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDReachCrossReference_lakes'
 CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2'
 CONUS_LAKES_FC_PROJ = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2_Albers'
-=======
-CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
->>>>>>> parent of 38a20a8... change names of the variables
-=======
-CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
->>>>>>> parent of 38a20a8... change names of the variables
+CONUS_LAKES_FC_PROJ_PT = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2_Albers_Points'
 BROAD_LAKE_RESERVOIR_FILTER = "FType IN (436, 390)"
-US_SPATIAL_EXTENT = r'D:\grad03\Data_Working\LAGOS_US_GIS_Data_v0.1.gdb\Spatial_Classifications\STATE'
+US_SPATIAL_EXTENT = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.1_1.gdb\Spatial_Classifications\STATE'
 USGS_ALBERS_PROJ = arcpy.SpatialReference(102039)
+LAGOS_LAKE_FILTER = "AreaSqKm > .009 AND AreaHa >= 1 AND FCode IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)"
+LAGOS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_LAGOS'
 
 
 # Step 1: Download the NHD by subregion and unzip. You WILL need the HYDRO_NET to do the connectivity analyses so you cannot
@@ -80,7 +75,7 @@ if all_exist_test:
     insertRows = arcpy.da.InsertCursor(ALL_LAKES_FC, ["SHAPE@", "*"])
 
     for wb in waterbody_fcs:
-        print("Merging {0} features from {1}".format(arcpy.GetCount_management(wb).getOutput(0), wb.split(nhd_parent_directory)[1]))
+        print("Merging {0} features from {1}".format(arcpy.GetCount_management(wb).getOutput(0), wb))
         searchRows = arcpy.da.SearchCursor(wb, ["SHAPE@", "*"], BROAD_LAKE_RESERVOIR_FILTER)
         for searchRow in searchRows:
             insertRows.insertRow(searchRow)
@@ -104,10 +99,69 @@ merge_count < inputs_count_sum
 unique_perm_ids_count = len(set([r[0] for r in arcpy.da.SearchCursor(ALL_LAKES_FC, "Permanent_Identifier")]))
 merge_count == unique_perm_ids_count
 
-#CLEANUP
+# Add indexes
+arcpy.AddIndex_management(ALL_LAKES_FC, 'Permanent_Identifier', "IDX_Permanent_Identifier")
+arcpy.AddIndex_management(ALL_LAKES_FC, 'ReachCode', 'IDX_ReachCode')
+
+# Step 4: Merge the NHDReachCrossReference tables and de-duplicate, so we can can connect to other NHD products later
+xref_tables = [os.path.join(gdb, 'NHDReachCrossReference') for gdb in nhd_gdbs]
+t_count = len(xref_tables)
+all_exist_test = all(arcpy.Exists(t) for t in xref_tables)
+
+if all_exist_test:
+    print("Beginning merge of {} tables".format(t_count))
+    arcpy.SetLogHistory = False  # speeds up iterative updates, won't write to geoprocessing for every step
+    arcpy.CopyRows_management(xref_tables.pop(0), ALL_XREF_TABLE)
+    insertRows = arcpy.da.InsertCursor(ALL_XREF_TABLE, "*")
+
+    for t in xref_tables:
+        print("Merging {0} rows from {1}".format(arcpy.GetCount_management(t).getOutput(0), t))
+        searchRows = arcpy.da.SearchCursor(t, "*")
+        for searchRow in searchRows:
+            insertRows.insertRow(searchRow)
+        del searchRow, searchRows
+    del insertRows
+    arcpy.SetLogHistory = True
+
+before_count = int(arcpy.GetCount_management(t).getOutput(0))
+check_fields = [f.name for f in arcpy.ListFields(t) if f.name != 'OBJECTID']
+arcpy.DeleteIdentical_management(ALL_XREF_TABLE, check_fields)
+after_count = int(arcpy.GetCount_management(t).getOutput(0))
+arcpy.AddIndex_management(ALL_XREF_TABLE, "NewReachCode", "IDX_NewReachCode")
+arcpy.AddIndex_management(ALL_XREF_TABLE, "OldReachCode", "IDX_OldReachCode")
+
+
+# Step 5: Select only NHDReachCrossReference rows that have a corresponding lake (the rest are stream reaches, etc.)
+# with a join. For some reason, Join Field is way too slow and others have noted that. Use Add Join instead.
+# Also field mappings are too annoying so copy and then delete fields instead
+arcpy.MakeTableView_management(ALL_XREF_TABLE, 'xref_lyr')
+arcpy.MakeTableView_management(ALL_LAKES_FC, 'lakes_lyr')
+keep_fields = [f.name for f in arcpy.ListFields(ALL_XREF_TABLE)]
+underscore_perm_id_field = '{}_Permanent_Identifier'.format(os.path.splitext(os.path.basename(ALL_LAKES_FC))[0])
+keep_fields.append(underscore_perm_id_field)
+arcpy.AddJoin_management('xref_lyr', 'NewReachCode', 'lakes_lyr', 'ReachCode')
+print([f.name for f in arcpy.ListFields('xref_lyr')])
+
+# Copy table, with selection
+dot_perm_id_field = '{}.Permanent_Identifier'.format(os.path.splitext(os.path.basename(ALL_LAKES_FC))[0])
+arcpy.TableToTable_conversion('xref_lyr', os.path.dirname(ALL_XREF_TABLE), os.path.basename(LAKES_XREF_TABLE), '{} is not null'.format(joined_perm_id_field))
+arcpy.RemoveJoin_management('xref_lyr')
+
+# Delete extra fields
+output_fields = [f.name for f in arcpy.ListFields(LAKES_XREF_TABLE)]
+for f in output_fields:
+    if f not in keep_fields:
+        arcpy.DeleteField_management(LAKES_XREF_TABLE, f)
+arcpy.AlterField_management(LAKES_XREF_TABLE, underscore_perm_id_field, new_field_name = 'New_Permanent_Identifier')
+
+# Indexes and stuff?
+arcpy.AddIndex_management(LAKES_XREF_TABLE, 'NewReachCode', 'IDX_NewReachCode')
+arcpy.AddIndex_management(LAKES_XREF_TABLE, 'OldReachCode', 'IDX_OldReachCode')
+arcpy.AddIndex_management(LAKES_XREF_TABLE, 'New_Permanent_Identifier', 'IDX_New_Permanent_Identifier')
+
 arcpy.ResetEnvironments()
 
-# Step 4: Select lakes intersecting United States boundaries
+# Step 4: Select lakes intersecting United States boundaries (~5-8 min)
 
 all_lakes_lyr = arcpy.MakeFeatureLayer_management(ALL_LAKES_FC)
 states_lyr = arcpy.MakeFeatureLayer_management(US_SPATIAL_EXTENT) # Albers USGS, slower but okay
@@ -115,8 +169,6 @@ arcpy.SelectLayerByLocation_management(all_lakes_lyr, "INTERSECT", states_lyr)
 arcpy.CopyFeatures_management(all_lakes_lyr, CONUS_LAKES_FC)
 arcpy.Delete_management(all_lakes_lyr)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 # Step 5: Repair geometry
 # Optional: to see which features will change: arcpy.CheckGeometry_management(CONUS_LAKES_FC, 'in_memory/checkgeom_lakes')
 # 155 self-intersections
@@ -132,7 +184,7 @@ arcpy.Densify_edit(CONUS_LAKES_FC, "OFFSET", max_deviation = "10 Meters")
 arcpy.CalculateField_management(conus_lakes_lyr, "VertexCount", "!shape!.pointcount", "PYTHON")
 arcpy.Delete_management(conus_lakes_lyr)
 
-# Step 7: Add HU2, HU4, HU6, HU8 based on reach code
+# Step 7: Add HU2, HU4, HU6, HU8 based on reach code.
 arcpy.AddField_management(CONUS_LAKES_FC, "HU4", "TEXT", field_length = 4)
 arcpy.AddField_management(CONUS_LAKES_FC, "HU6", "TEXT", field_length = 6)
 arcpy.AddField_management(CONUS_LAKES_FC, "HU8", "TEXT", field_length = 8)
@@ -161,6 +213,10 @@ conus_lakes_lyr = arcpy.MakeFeatureLayer_management(CONUS_LAKES_FC_PROJ)
 arcpy.CalculateField_management(conus_lakes_lyr, "AreaHa",'!shape!.area*0.0001', "PYTHON")
 arcpy.Delete_management(conus_lakes_lyr)
 
+#Step 10a: Updated 2018-01-03. Add STATE
+arcpy.FeatureToPoint_management(CONUS_LAKES_FC_PROJ, CONUS_LAKES_FC_PROJ_PT)
+arcpy.SpatialJoin_analysis(CONUS_LAKES_FC_PROJ_PT, US_SPATIAL_EXTENT, )
+
 # Step 11: Filter for LAGOS lakes
 arcpy.Select_analysis(CONUS_LAKES_FC_PROJ, LAGOS_LAKES_FC, LAGOS_LAKE_FILTER)
 arcpy.AddIndex_management(LAGOS_LAKES_FC, 'Permanent_Identifier', 'IDX_Permanent_Identifier')
@@ -172,6 +228,9 @@ mexico_lake_mismatch_filter = '''Permanent_Identifier = 'e05e57b5-d29f-4e1e-8369
 with arcpy.da.UpdateCursor(LAGOS_LAKES_FC, 'Permanent_Identifier', mexico_lake_mismatch_filter) as cursor:
     for row in cursor:
         cursor.deleteRow()
+
+# Step 12: Add
+
 
 
 
@@ -191,10 +250,6 @@ with arcpy.da.UpdateCursor(LAGOS_LAKES_FC, 'Permanent_Identifier', mexico_lake_m
 # Step 6: R spatial join to WQP sites
 # Is there a way to list some R code here??
 
-=======
->>>>>>> parent of 38a20a8... change names of the variables
-=======
->>>>>>> parent of 38a20a8... change names of the variables
 # Step 5: # Spatial Join to WQP sites
 # Get WQP sites ready for spatial join
 r_file = 'D:/Continental_Limnology/Data_Working/WQP_Sites_into_ArcGIS.shp'
@@ -215,6 +270,3 @@ out_file = 'D:/Continental_Limnology/Data_Working/WQP_NHD_joined.shp'
 arcpy.SpatialJoin_analysis("wqp_sites", "nhd_lake_polygons", out_file, "JOIN_ONE_TO_MANY", "KEEP_ALL", match_option = "INTERSECT")
 
 
-# Step 6:
-# Delete the Great Lakes, Long Island Sound, Delaware Bay
-updateRows = arcpy.da.UpdateCursor()

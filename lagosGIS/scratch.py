@@ -52,3 +52,16 @@ for row in csv_f:
     file_url = row[7]
     file_url
     urllib.urlretrieve(file_url, os.path.basename(file_url)
+
+
+def test_var_args(f_arg, *argv):
+    print "first normal arg:", f_arg
+    for arg in argv:
+        print "another arg through *argv :", arg
+
+
+test_var_args('yasoob', 'python', 'eggs', 'test')
+
+def my_function(**whatever):
+    print str(whatever)
+    print whatever['age']

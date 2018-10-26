@@ -8,7 +8,18 @@ import lakes_us # in this repo
 NHD_DOWNLOAD_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Zipped"
 NHD_UNZIPPED_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Unzipped_Original"
 ALL_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_merge202_jun30_deduped'
+<<<<<<< HEAD
+<<<<<<< HEAD
+ALL_XREF_TABLE = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDReachCrossReference_all_merged'
+LAKES_XREF_TABLE = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDReachCrossReference_lakes'
+CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2'
+CONUS_LAKES_FC_PROJ = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS_2_Albers'
+=======
 CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
+>>>>>>> parent of 38a20a8... change names of the variables
+=======
+CONUS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_CONUS'
+>>>>>>> parent of 38a20a8... change names of the variables
 BROAD_LAKE_RESERVOIR_FILTER = "FType IN (436, 390)"
 US_SPATIAL_EXTENT = r'D:\grad03\Data_Working\LAGOS_US_GIS_Data_v0.1.gdb\Spatial_Classifications\STATE'
 USGS_ALBERS_PROJ = arcpy.SpatialReference(102039)
@@ -104,6 +115,86 @@ arcpy.SelectLayerByLocation_management(all_lakes_lyr, "INTERSECT", states_lyr)
 arcpy.CopyFeatures_management(all_lakes_lyr, CONUS_LAKES_FC)
 arcpy.Delete_management(all_lakes_lyr)
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+# Step 5: Repair geometry
+# Optional: to see which features will change: arcpy.CheckGeometry_management(CONUS_LAKES_FC, 'in_memory/checkgeom_lakes')
+# 155 self-intersections
+arcpy.RepairGeometry_management(CONUS_LAKES_FC)
+
+# Step 6: Densify features with 2 vertices (circular arcs) using 10 meters as maximum deviation (within National Map
+# horizontal accuracy standards)
+arcpy.AddField_management(CONUS_LAKES_FC, "VertexCount", "LONG")
+arcpy.CalculateField_management(CONUS_LAKES_FC, "VertexCount", "!shape!.pointcount", "PYTHON")
+conus_lakes_lyr = arcpy.MakeFeatureLayer_management(CONUS_LAKES_FC)
+arcpy.SelectLayerByAttribute_management(conus_lakes_lyr, "NEW_SELECTION", "VertexCount < 4")
+arcpy.Densify_edit(CONUS_LAKES_FC, "OFFSET", max_deviation = "10 Meters")
+arcpy.CalculateField_management(conus_lakes_lyr, "VertexCount", "!shape!.pointcount", "PYTHON")
+arcpy.Delete_management(conus_lakes_lyr)
+
+# Step 7: Add HU2, HU4, HU6, HU8 based on reach code
+arcpy.AddField_management(CONUS_LAKES_FC, "HU4", "TEXT", field_length = 4)
+arcpy.AddField_management(CONUS_LAKES_FC, "HU6", "TEXT", field_length = 6)
+arcpy.AddField_management(CONUS_LAKES_FC, "HU8", "TEXT", field_length = 8)
+conus_lakes_lyr = arcpy.MakeFeatureLayer_management(CONUS_LAKES_FC)
+arcpy.CalculateField_management(conus_lakes_lyr, "HU4", "!ReachCode![0:4]", "PYTHON")
+arcpy.CalculateField_management(conus_lakes_lyr, "HU6", "!ReachCode![0:6]", "PYTHON")
+arcpy.CalculateField_management(conus_lakes_lyr, "HU8", "!ReachCode![0:8]", "PYTHON")
+arcpy.Delete_management(conus_lakes_lyr)
+
+# Step 8: Remove Great Lakes, etc.
+great_lakes_filter = '''HU8 IN ('04020300', '04060200', '04080300', '04090001', '04120200', '04150200') AND AreaSqKm > 10'''
+with arcpy.da.UpdateCursor(CONUS_LAKES_FC, ['Permanent_Identifier','HU8', 'AreaSqKm'], where_clause = great_lakes_filter) as cursor:
+    perm_ids = []
+    for row in cursor:
+        perm_ids.append(row[0])
+        cursor.deleteRow()
+
+# Manual step 9: Add processing note to lakes layer listing the removed Permanent_Identifiers
+print(', '.join(perm_ids))
+
+
+# Step 10: Project and add Area calculated in Hectares
+arcpy.Project_management(CONUS_LAKES_FC, CONUS_LAKES_FC_PROJ, USGS_ALBERS_PROJ)
+arcpy.AddField_management(CONUS_LAKES_FC_PROJ, "AreaHa", "DOUBLE")
+conus_lakes_lyr = arcpy.MakeFeatureLayer_management(CONUS_LAKES_FC_PROJ)
+arcpy.CalculateField_management(conus_lakes_lyr, "AreaHa",'!shape!.area*0.0001', "PYTHON")
+arcpy.Delete_management(conus_lakes_lyr)
+
+# Step 11: Filter for LAGOS lakes
+arcpy.Select_analysis(CONUS_LAKES_FC_PROJ, LAGOS_LAKES_FC, LAGOS_LAKE_FILTER)
+arcpy.AddIndex_management(LAGOS_LAKES_FC, 'Permanent_Identifier', 'IDX_Permanent_Identifier')
+arcpy.AddIndex_management(LAGOS_LAKES_FC, 'nhd_merge_id', 'IDX_nhd_merge_id')
+
+# There is one lake discrepency between my file and Alex's. It's a lake in Mexico--probably the intersect operation
+# was done in different projections. Just remove that lake from my layer.
+mexico_lake_mismatch_filter = '''Permanent_Identifier = 'e05e57b5-d29f-4e1e-8369-73e55f8be9df' '''
+with arcpy.da.UpdateCursor(LAGOS_LAKES_FC, 'Permanent_Identifier', mexico_lake_mismatch_filter) as cursor:
+    for row in cursor:
+        cursor.deleteRow()
+
+
+
+
+# Step 11: Repair areas of lakes that have the wrong AreaSqKm value by more than 0.1 hectare. (10 lakes, 9 of which are in 0310)
+#(100*AreaSqKm) - Hectares > 0.1
+
+
+
+
+
+
+
+
+
+
+# Step 6: R spatial join to WQP sites
+# Is there a way to list some R code here??
+
+=======
+>>>>>>> parent of 38a20a8... change names of the variables
+=======
+>>>>>>> parent of 38a20a8... change names of the variables
 # Step 5: # Spatial Join to WQP sites
 # Get WQP sites ready for spatial join
 r_file = 'D:/Continental_Limnology/Data_Working/WQP_Sites_into_ArcGIS.shp'

@@ -1,0 +1,40 @@
+#!/bin/bash --login
+#PBS -j oe
+#PBS -l walltime=0:10:00,nodes=9:ppn=1,mem=8gb,feature=gbe
+#PBS -t 1-4
+#PBS -N julydev_pitremove
+
+## To update this script: ##
+############################
+# Mandatory: You must change the PBS -t parameter to be 1-number of files
+# 'ls *tif | wc -l' works well for counting files
+# if you are in the directory and the only files inside are the necessary tifs
+
+# Mandatory: Update files variable to correct directory
+# Optional: Change walltime/mem based on file size
+# most files take under 5-10 min but a very few long ones take up to 2 hours
+# even fewer will take >2 hours and fail. 8GB mem was fine so far.
+
+# Optional: PBS -N to a name you like
+
+cd /mnt/research/csilimno/apps/taudem506
+GLOBIGNORE="*fel.tif:*p.tif:*sd8.tif"
+
+# FILES MUST BE IN SCRATCH WORKSPACE
+# Or you will experience file locking errors
+#the $files variable must end in *tif for now
+files=/mnt/scratch/smithn78/julydev/huc8clips0411/*tif
+file=`ls ${files} | tail -n ${PBS_ARRAYID} | head -n 1`
+
+echo ${PBS_JOBID} ${file}
+
+#translate the file into the one-file tif taudem likes
+gdal_translate $file ${file/.tif/_t.tif}
+rm ${file/tif/}*
+mv ${file/.tif/_t.tif} $file
+time mpiexec -n 9 pitremove ${file}
+
+qstat -f ${PBS_ARRAYID}
+
+
+

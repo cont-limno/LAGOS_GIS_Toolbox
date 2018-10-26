@@ -1,0 +1,116 @@
+<PAMDataset>
+  <Metadata>
+    <MDI key="DataType">Thematic</MDI>
+  </Metadata>
+  <Metadata domain="Esri">
+    <MDI key="PyramidResamplingType">NEAREST</MDI>
+  </Metadata>
+  <PAMRasterBand band="1">
+    <GDALRasterAttributeTable>
+      <FieldDefn index="0">
+        <Name>OID</Name>
+        <Type>0</Type>
+        <Usage>0</Usage>
+      </FieldDefn>
+      <FieldDefn index="1">
+        <Name>Value</Name>
+        <Type>0</Type>
+        <Usage>0</Usage>
+      </FieldDefn>
+      <FieldDefn index="2">
+        <Name>Count</Name>
+        <Type>1</Type>
+        <Usage>0</Usage>
+      </FieldDefn>
+      <Row index="0">
+        <F>0</F>
+        <F>0</F>
+        <F>7854240512</F>
+      </Row>
+      <Row index="1">
+        <F>1</F>
+        <F>11</F>
+        <F>464840229</F>
+      </Row>
+      <Row index="2">
+        <F>2</F>
+        <F>12</F>
+        <F>1599897</F>
+      </Row>
+      <Row index="3">
+        <F>3</F>
+        <F>21</F>
+        <F>291999288</F>
+      </Row>
+      <Row index="4">
+        <F>4</F>
+        <F>22</F>
+        <F>129204631</F>
+      </Row>
+      <Row index="5">
+        <F>5</F>
+        <F>23</F>
+        <F>51536088</F>
+      </Row>
+      <Row index="6">
+        <F>6</F>
+        <F>24</F>
+        <F>17603557</F>
+      </Row>
+      <Row index="7">
+        <F>7</F>
+        <F>31</F>
+        <F>108241770</F>
+      </Row>
+      <Row index="8">
+        <F>8</F>
+        <F>41</F>
+        <F>986290661</F>
+      </Row>
+      <Row index="9">
+        <F>9</F>
+        <F>42</F>
+        <F>1068808361</F>
+      </Row>
+      <Row index="10">
+        <F>10</F>
+        <F>43</F>
+        <F>184827310</F>
+      </Row>
+      <Row index="11">
+        <F>11</F>
+        <F>52</F>
+        <F>1917468368</F>
+      </Row>
+      <Row index="12">
+        <F>12</F>
+        <F>71</F>
+        <F>1298964410</F>
+      </Row>
+      <Row index="13">
+        <F>13</F>
+        <F>81</F>
+        <F>603901909</F>
+      </Row>
+      <Row index="14">
+        <F>14</F>
+        <F>82</F>
+        <F>1392680390</F>
+      </Row>
+      <Row index="15">
+        <F>15</F>
+        <F>90</F>
+        <F>347592714</F>
+      </Row>
+      <Row index="16">
+        <F>16</F>
+        <F>95</F>
+        <F>112304465</F>
+      </Row>
+    </GDALRasterAttributeTable>
+    <Metadata>
+      <MDI key="RepresentationType">THEMATIC</MDI>
+      <MDI key="SourceBandIndex">0</MDI>
+    </Metadata>
+  </PAMRasterBand>
+</PAMDataset>

@@ -25,6 +25,16 @@ CRS_DICT = {'NAD83':4269,
 
 
 def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = 'NAD83'):
+    """
+    Casts xy data as spatial points.
+    :param lake_points_csv: The lake water quality dataset containing coordinates as text columns.
+    :param out_fc: The output feature class
+    :param in_x_field: Field containing the longitude or x coordinates
+    :param in_y_field: Field containing the latitude or y coordinates
+    :param in_crs: Abbreviation of the coordinate reference system used to specify the coordinates.
+    Options supported are 'WGS84', 'NAD83', 'NAD27.
+    :return: The output feature class
+    """
     if in_crs not in CRS_DICT.keys():
         raise ValueError('Use one of the following CRS names: {}'.format(','.join(CRS_DICT.keys())))
     DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', arcpy.SpatialReference(CRS_DICT[in_crs]))
@@ -34,6 +44,19 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     return(out_fc)
 
 def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, lake_county_field = '', state = ''):
+    """
+    Evaluate water quality sampling point locations and either assign the point to a lake polygon or flag the
+    point for manual review.
+    :param lake_points_fc:
+    :param out_fc:
+    :param lake_id_field:
+    :param lake_name_field:
+    :param lake_county_field:
+    :param state:
+    :return:
+    """
+
+    # setup
     arcpy.AddMessage("Joining...")
     if state and state.upper() not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
@@ -51,20 +74,6 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
         print('{} field does not exist in dataset.'.format(lake_county_field))
         raise Exception
 
-    # # This code doesn't work because you can't project to in_memory. For now enforce externally (thru work practice)
-    # # Ensure same projection
-    # master_streams_fc = MASTER_STREAMS_FC
-    # d_lakes_fc = arcpy.Describe(MASTER_LAKES_FC).spatialReference.exportToString()
-    # d_streams_fc = arcpy.Describe(master_streams_fc).spatialReference.exportToString()
-    # d_points_fc = arcpy.Describe(lake_points_fc).spatialReference.exportToString()
-    #
-    # if d_lakes_fc <> d_streams_fc:
-    #     master_streams_fc = DM.Project(lake_points_fc, 'in_memory/master_streams_fc_proj',
-    #                                 arcpy.Describe(MASTER_STREAMS_FC).spatialReference)
-    #     if d_lakes_fc <> d_points_fc:
-    #         lake_points_fc = DM.Project(lake_points_fc, 'in_memory/lake_points_fc_proj',
-    #                                     arcpy.Describe(MASTER_LAKES_FC).spatialReference)
-
     point_fields = [f.name for f in arcpy.ListFields(lake_points_fc)]
 
     # If identifier matches a LAGOS lake in the crosswalk, then do these steps
@@ -79,11 +88,13 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     # TODO: Add back frequency thing
     # freq = AN.Frequency(join4, freq, lake_id_field)
 
+    # setup for editing lake assignment values
     DM.AddField(join4, 'Auto_Comment', 'TEXT', field_length = 100)
     DM.AddField(join4, 'Manual_Review', 'SHORT')
     DM.AddField(join4, 'Shared_Words', 'TEXT', field_length = 100)
     DM.AddField(join4, 'Linked_lagoslakeid', 'LONG')
     DM.AddField(join4, 'GEO_Discovered_Name', 'TEXT', field_length = 255)
+    DM.AddField(join4, 'Duplicate_Candidate', 'TEXT', field_length = 1)
 
     update_fields = [lake_id_field, lake_name_field,  MASTER_LAKE_ID, MASTER_GNIS_NAME, # 0m match
                      'PERMANENT_IDENTIFIER_1', 'GNIS_NAME_1', # stream match
@@ -92,11 +103,9 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                      'Auto_Comment', 'Manual_Review', 'Shared_Words',
                      'Linked_lagoslakeid']
     all_fields = [f.name for f  in arcpy.ListFields(join4)]
-    for f in update_fields:
-        if f not in all_fields:
-            print f
-    cursor = arcpy.da.UpdateCursor(join4, update_fields)
 
+    # use a cursor to go through each point and evaluate its assignment
+    cursor = arcpy.da.UpdateCursor(join4, update_fields)
     arcpy.AddMessage("Calculating link status...")
     for row in cursor:
         id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, comment, review, words, lagosid = row
@@ -136,75 +145,76 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                         review = 2
         cursor.updateRow((id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, comment, review, words, lagosid))
 
+    # # So I haven't been able to get the county logic to work and it hasn't been that important yet, ignore for now
     # Select down to a minimum set because we're about to join on county, which will create lots of duplicate matches
     # Then join calculated results back to full set
-    if lake_county_field:
-        join5 = AN.Select(join4, join5, 'Manual_Review IS NULL')
-        lakes_state = AN.Select(MASTER_LAKES_FC, 'lakes_state', "{0} = '{1}'".format(MASTER_STATE_NAME, state))
-        lakes_state_lyr = DM.MakeFeatureLayer(lakes_state, 'lakes_state_lyr')
-        join5_lyr = DM.MakeFeatureLayer(join5, 'join5_lyr')
-        DM.AddJoin(join5_lyr, lake_county_field, lakes_state_lyr, MASTER_COUNTY_NAME)
-        join5_with_county = DM.CopyFeatures(join5_lyr, 'join5_with_cty')
-        j5 = 'DEDUPED_CA_SWAMP_data_linked_5.'
-
-        county_update_fields = [j5 + lake_id_field, j5 + lake_name_field, j5 + lake_county_field,
-                                'lakes_state.' + MASTER_LAKE_ID, 'lakes_state.' + MASTER_GNIS_NAME, 'lakes_state.' + MASTER_COUNTY_NAME,
-                                j5 + 'Auto_Comment', j5 + 'Manual_Review', j5 + 'Shared_Words',
-                                j5 + 'Linked_lagoslakeid']
-        with arcpy.da.UpdateCursor(join5_lyr, county_update_fields) as cursor:
-            for row in cursor:
-                id, name, county, mid_cty, mname_cty, mcounty, comment, review, words, lagosid = row
-                if county is not None and mcounty is not None:
-                    if name and mname_cty:
-                        words = lagosGIS.list_shared_words(name, mname_cty, exclude_lake_words=True)
-                    if words:
-                        comment = 'PRELIMINARY: Linked by common name and location'
-                        lagosid = mid_cty
-                        review = 2
-                cursor.updateRow((id, name, county, mid_cty, mname_cty, mcounty, comment, review, words, lagosid))
-        DM.RemoveJoin(join5_lyr)
-        join5_with_county = DM.CopyFeatures(join5_lyr, 'join5_with_county')
-
-        # join5 = DM.JoinField(join5, lake_county_field, lakes_state, MASTER_COUNTY_NAME,
-        #                      fields = [MASTER_COUNTY_NAME, MASTER_LAKE_ID, MASTER_GNIS_NAME])
-
-        # # This is a long way to make a join
-        # join_dict = {}
-        # with arcpy.da.SearchCursor(lakes_state, [MASTER_COUNTY_NAME, MASTER_LAKE_ID, MASTER_GNIS_NAME]) as cursor:
-        #     for row in cursor:
-        #         join_value, val1, val2 = row
-        #         join_dict[join_value] = [val1, val2]
-        #
-        # arcpy.AddField_management(join5, MASTER_LAKE_ID + 'cntyj', 'LONG')
-        # arcpy.AddField_management(join5, MASTER_GNIS_NAME + 'cntyj', 'TEXT', 255)
-        #
-        # with arcpy.da.SearchCursor(join5, [lake_county_field, MASTER_LAKE_ID + 'cntyj', MASTER_GNIS_NAME + 'cntyj']) as cursor:
-        #     for row in cursor:
-        #         key_value = row[0]
-        #         words = lagosGIS.list_shared_words()
-        #         if join_dict.has_key(key_value):
-        #             row[1] = join_dict[key_value][0]
-        #             row[2] = join_dict[key_value][1]
-        #         else:
-        #             row[1] = None
-        #             row[2] = None
-        #         cursor.updateRow(row)
-        #
-
-
-
-        county_update_fields = update_fields = [lake_id_field, lake_name_field, lake_county_field,
-                    MASTER_LAKE_ID + '_12_13_14', MASTER_GNIS_NAME + '_12_13',  MASTER_COUNTY_NAME + '_12_13', # county
-                     'Auto_Comment', 'Manual_Review', 'Shared_Words',
-                     'Linked_lagoslakeid']
-        cursor = arcpy.da.UpdateCursor(join5, county_update_fields)
-        for row in cursor:
-            id, name, county, lagosid_cty, lagosname_cty, mcounty, comment, mreview, words, linked_lagosid = row
-            if mcounty is not None:
-                words = lagosGIS.list_shared_words()
-    else:
-        join5 = join4
-
+    # if lake_county_field:
+    #     join5 = AN.Select(join4, join5, 'Manual_Review IS NULL')
+    #     lakes_state = AN.Select(MASTER_LAKES_FC, 'lakes_state', "{0} = '{1}'".format(MASTER_STATE_NAME, state))
+    #     lakes_state_lyr = DM.MakeFeatureLayer(lakes_state, 'lakes_state_lyr')
+    #     join5_lyr = DM.MakeFeatureLayer(join5, 'join5_lyr')
+    #     DM.AddJoin(join5_lyr, lake_county_field, lakes_state_lyr, MASTER_COUNTY_NAME)
+    #     join5_with_county = DM.CopyFeatures(join5_lyr, 'join5_with_cty')
+    #     j5 = 'DEDUPED_CA_SWAMP_data_linked_5.'
+    #
+    #     county_update_fields = [j5 + lake_id_field, j5 + lake_name_field, j5 + lake_county_field,
+    #                             'lakes_state.' + MASTER_LAKE_ID, 'lakes_state.' + MASTER_GNIS_NAME, 'lakes_state.' + MASTER_COUNTY_NAME,
+    #                             j5 + 'Auto_Comment', j5 + 'Manual_Review', j5 + 'Shared_Words',
+    #                             j5 + 'Linked_lagoslakeid']
+    #     with arcpy.da.UpdateCursor(join5_lyr, county_update_fields) as cursor:
+    #         for row in cursor:
+    #             id, name, county, mid_cty, mname_cty, mcounty, comment, review, words, lagosid = row
+    #             if county is not None and mcounty is not None:
+    #                 if name and mname_cty:
+    #                     words = lagosGIS.list_shared_words(name, mname_cty, exclude_lake_words=True)
+    #                 if words:
+    #                     comment = 'PRELIMINARY: Linked by common name and location'
+    #                     lagosid = mid_cty
+    #                     review = 2
+    #             cursor.updateRow((id, name, county, mid_cty, mname_cty, mcounty, comment, review, words, lagosid))
+    #     DM.RemoveJoin(join5_lyr)
+    #     join5_with_county = DM.CopyFeatures(join5_lyr, 'join5_with_county')
+    #
+    #     # join5 = DM.JoinField(join5, lake_county_field, lakes_state, MASTER_COUNTY_NAME,
+    #                          fields = [MASTER_COUNTY_NAME, MASTER_LAKE_ID, MASTER_GNIS_NAME])
+    #
+    #     # This is a long way to make a join
+    #     join_dict = {}
+    #     with arcpy.da.SearchCursor(lakes_state, [MASTER_COUNTY_NAME, MASTER_LAKE_ID, MASTER_GNIS_NAME]) as cursor:
+    #         for row in cursor:
+    #             join_value, val1, val2 = row
+    #             join_dict[join_value] = [val1, val2]
+    #
+    #     arcpy.AddField_management(join5, MASTER_LAKE_ID + 'cntyj', 'LONG')
+    #     arcpy.AddField_management(join5, MASTER_GNIS_NAME + 'cntyj', 'TEXT', 255)
+    #
+    #     with arcpy.da.SearchCursor(join5, [lake_county_field, MASTER_LAKE_ID + 'cntyj', MASTER_GNIS_NAME + 'cntyj']) as cursor:
+    #         for row in cursor:
+    #             key_value = row[0]
+    #             words = lagosGIS.list_shared_words()
+    #             if join_dict.has_key(key_value):
+    #                 row[1] = join_dict[key_value][0]
+    #                 row[2] = join_dict[key_value][1]
+    #             else:
+    #                 row[1] = None
+    #                 row[2] = None
+    #             cursor.updateRow(row)
+    #
+    #
+    #     county_update_fields = [lake_id_field, lake_name_field, lake_county_field,
+    #                 MASTER_LAKE_ID + '_12_13_14', MASTER_GNIS_NAME + '_12_13',  MASTER_COUNTY_NAME + '_12_13', # county
+    #                  'Auto_Comment', 'Manual_Review', 'Shared_Words',
+    #                  'Linked_lagoslakeid']
+    #     cursor = arcpy.da.UpdateCursor(join5, county_update_fields)
+    #     for row in cursor:
+    #         id, name, county, lagosid_cty, lagosname_cty, mcounty, comment, mreview, words, linked_lagosid = row
+    #         if mcounty is not None:
+    #             words = lagosGIS.list_shared_words()
+    # else:
+    #     join5 = join4
+    #
+    # # Undo the next line if you ever bring this chunk back.
+    join5 = join4
 
     # then re-code the no matches as a 3 and copy comments to the editable field
     # compress the joined lake ids into one field
@@ -218,6 +228,8 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
             comment = ac
             cursor.updateRow((flag, ac, comment))
 
+    # Identify sites that were linked to more than one candidate lake
+    sample_ids = arcpy.da.SearchCursor(out_fc, [lake_id_field, ])
 
     # Then make sure to only keep the fields necessary when you write to an output
     copy_fields = point_fields + ['Linked_lagoslakeid', 'Auto_Comment', 'Manual_Review', 'Shared_Words', 'Comment']
@@ -235,19 +247,31 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     id_pairs = list(set(arcpy.da.SearchCursor(out_fc, [lake_id_field, 'Linked_lagoslakeid'])))
     # THEN pull out LAGOS id. Any duplicate now are only due to multiple distinct points within lake
     lagos_ids = [ids[1] for ids in id_pairs]
-    counts = Counter(lagos_ids)
+    sample_ids = [ids[0] for ids in id_pairs]
+    lagos_lake_counts = Counter(lagos_ids)
+    linked_multiple_lake_counts = Counter(sample_ids)
 
+    # Get the count of points in the polygon
     with arcpy.da.UpdateCursor(out_fc, ['Linked_lagoslakeid', 'Total_points_in_lake_poly']) as cursor:
         for lagos_id, join_count in cursor:
-            join_count = counts[lagos_id]
+            join_count = lagos_lake_counts[lagos_id]
             cursor.updateRow((lagos_id, join_count))
 
+    # Mark any samples linked to more than one lake so that the analyst can select the correct lake in the
+    # manual process
+    with arcpy.da.UpdateCursor(out_fc, [lake_id_field, 'Duplicate_Candidate']) as cursor:
+        for sample_id, duplicate_flag in cursor:
+            duplicate_count = linked_multiple_lake_counts[sample_id]
+            if duplicate_count > 1:
+                duplicate_flag = "Y"
+            else:
+                duplicate_flag = "N"
+            cursor.updateRow((lake_id_field, duplicate_flag))
+
+    # clean up
     DM.AddField(out_fc, 'Note', 'TEXT', field_length=140)
     DM.Delete('in_memory')
-
     arcpy.AddMessage('Completed.')
-
-    # Then deal with the frequency issue somehow
 
 
 

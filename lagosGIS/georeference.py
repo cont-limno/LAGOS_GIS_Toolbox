@@ -6,8 +6,9 @@ from arcpy import management as DM
 import lagosGIS
 
 # Change these to match your computer. Yes, this is a crap way to code this.
-MASTER_LAKES_FC = r'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_LAGOS'
-MASTER_STREAMS_FC = r'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDArea_Natl_SelectStreamRiver'
+MASTER_LAKES_FC = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDWaterbody_LAGOS'
+MASTER_LAKES_LINES =  r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDWaterbody_LAGOS_Line'
+MASTER_STREAMS_FC = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDArea_LAGOS'
 
 # Can change but probably don't need to
 MASTER_LAKE_ID = 'lagoslakeid'
@@ -228,6 +229,13 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                 ac = 'Not linked'
             comment = ac
             cursor.updateRow((flag, ac, comment))
+
+    # Re-code points more than 100m into the polygon of the lake as no need to check
+    DM.MakeFeatureLayer(join5, 'join5_lyr')
+    DM.MakeFeatureLayer(MASTER_LAKES_LINES, 'lake_lines_lyr')
+    DM.SelectLayerByLocation('join5_lyr', 'INTERSECT', 'lake_lines_lyr', '100 meters', 'NEW_SELECTION', 'INVERT')
+    DM.CalculateField('join5_lyr', 'Manual_Review', '-2', 'PYTHON')
+    DM.Delete('join5_lyr', 'lake_lines_lyr')
 
     # Then make sure to only keep the fields necessary when you write to an output
     copy_fields = point_fields + ['Linked_lagoslakeid', 'Auto_Comment', 'Manual_Review',

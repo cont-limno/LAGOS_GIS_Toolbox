@@ -4,7 +4,8 @@ __all__ = ["lake_connectivity_classification",
            "upstream_lakes",
            "spatialize_lakes",
            "georeference_lakes",
-           "multi_convert_to_raster"]
+           "multi_convert_to_raster",
+           "lake_from_to"]
 
 import os
 import arcpy
@@ -15,6 +16,7 @@ from upstream_lakes import upstream_lakes
 from georeference import spatialize_lakes
 from georeference import georeference_lakes
 from multi_convert_to_raster import multi_convert_to_raster
+from lake_from_to import lake_from_to
 
 
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):

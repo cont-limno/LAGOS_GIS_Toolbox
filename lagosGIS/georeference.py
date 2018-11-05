@@ -234,6 +234,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     DM.MakeFeatureLayer(join5, 'join5_lyr')
     DM.MakeFeatureLayer(MASTER_LAKES_LINES, 'lake_lines_lyr')
     DM.SelectLayerByLocation('join5_lyr', 'INTERSECT', 'lake_lines_lyr', '100 meters', 'NEW_SELECTION', 'INVERT')
+    DM.SelectLayerByAttribute('join5_lyr', 'REMOVE_FROM_SELECTION', "Auto_Comment LIKE 'Not linked%'")
     DM.CalculateField('join5_lyr', 'Manual_Review', '-2', 'PYTHON')
     DM.Delete('join5_lyr', 'lake_lines_lyr')
 

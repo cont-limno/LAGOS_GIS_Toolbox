@@ -33,12 +33,17 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     :param in_x_field: Field containing the longitude or x coordinates
     :param in_y_field: Field containing the latitude or y coordinates
     :param in_crs: Abbreviation of the coordinate reference system used to specify the coordinates.
-    Options supported are 'WGS84', 'NAD83', 'NAD27.
+    Options supported are 'WGS84', 'NAD83', 'NAD27' or the EPSG code for a projection.
     :return: The output feature class
     """
     if in_crs not in CRS_DICT.keys():
-        raise ValueError('Use one of the following CRS names: {}'.format(','.join(CRS_DICT.keys())))
-    DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', arcpy.SpatialReference(CRS_DICT[in_crs]))
+        try:
+            sr = arcpy.SpatialReference(in_crs)
+        except:
+            raise ValueError('Use one of the following CRS names: {} or a valid EPSG code'.format(','.join(CRS_DICT.keys())))
+    else:
+        sr = arcpy.SpatialReference(CRS_DICT[in_crs])
+    DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', sr)
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     DM.CopyFeatures('xylayer', out_fc)
     arcpy.Delete_management('xylayer')

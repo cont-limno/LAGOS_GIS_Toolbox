@@ -37,6 +37,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
             id = row[0]
             where_clause = """"{0}" = '{1}'""".format('Permanent_Identifier', id)
             this_waterbody = DM.MakeFeatureLayer(waterbody, 'this_waterbody', where_clause)
+            count_this_waterbody = int(arcpy.GetCount_management(this_waterbody).getOutput(0))
 
             # select junctions overlapping this lake. only the downstream one matters, rest have no effect
             DM.SelectLayerByLocation(junctions, 'INTERSECT', this_waterbody, '1 Meters')
@@ -66,6 +67,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
                         results.append(result)
 
                 # delete all the intermediates
+            DM.SelectLayerByAttribute(waterbody, 'CLEAR_SELECTION')
             for item in [this_waterbody, this_junctions, 'downstream']:
                 DM.Delete(item)
 

@@ -6,7 +6,8 @@ __all__ = ["lake_connectivity_classification",
            "georeference_lakes",
            "multi_convert_to_raster",
            "lake_from_to",
-           "polygons_in_zones"]
+           "polygons_in_zones",
+           "lakes_in_zones"]
 
 import os
 import arcpy
@@ -19,7 +20,7 @@ from georeference import georeference_lakes
 from multi_convert_to_raster import multi_convert_to_raster
 from lake_from_to import lake_from_to
 from polygons_in_zones import polygons_in_zones
-
+from lakes_in_zones2 import lakes_in_zones
 
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
     fc_count = len(feature_class_or_table_list)

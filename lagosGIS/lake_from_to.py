@@ -2,6 +2,7 @@ import math
 import os
 import arcpy
 from arcpy import management as DM
+LAGOS_LAKE_FILTER = "AreaSqKm > .01 AND FCode IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)"
 
 def lake_from_to(nhd_subregion_gdb, output_table):
     arcpy.env.workspace = 'in_memory'
@@ -10,7 +11,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
     junctions0 = os.path.join(nhd_subregion_gdb, 'HYDRO_NET_Junctions')
 
     # use layers for selections. We will only work with lakes over 1 hectare for this tool.
-    waterbody = DM.MakeFeatureLayer(waterbody0, 'waterbody', where_clause = 'AreaSqKm >= 0.01')
+    waterbody = DM.MakeFeatureLayer(waterbody0, 'waterbody', where_clause = LAGOS_LAKE_FILTER)
     num_wbs = int(arcpy.GetCount_management(waterbody).getOutput(0))
     junctions = DM.MakeFeatureLayer(junctions0, 'junctions')
 
@@ -37,7 +38,6 @@ def lake_from_to(nhd_subregion_gdb, output_table):
             id = row[0]
             where_clause = """"{0}" = '{1}'""".format('Permanent_Identifier', id)
             this_waterbody = DM.MakeFeatureLayer(waterbody, 'this_waterbody', where_clause)
-            count_this_waterbody = int(arcpy.GetCount_management(this_waterbody).getOutput(0))
 
             # select junctions overlapping this lake. only the downstream one matters, rest have no effect
             DM.SelectLayerByLocation(junctions, 'INTERSECT', this_waterbody, '1 Meters')
@@ -48,6 +48,14 @@ def lake_from_to(nhd_subregion_gdb, output_table):
             else:
                 # copy with selection on
                 this_junctions = DM.CopyFeatures(junctions, 'this_junctions')
+
+                # NEW
+                # select junctions that overlay 1 ha lakes
+                DM.SelectLayerByLocation(junctions, 'INTERSECT', waterbody, '1 Meters', 'NEW_SELECTION')
+                DM.SelectLayerByLocation(junctions, 'INTERSECT', this_waterbody, '1 Meters','REMOVE_FROM_SELECTION')
+                other_lake_junctions = DM.CopyFeatures(junctions, 'other_lake_junctions')
+
+
                 DM.TraceGeometricNetwork(network, 'downstream', this_junctions, 'TRACE_DOWNSTREAM')
                 # select lakes that intersect the downstream network with a tolerance of 1 meters
                 DM.SelectLayerByLocation(waterbody, 'INTERSECT', 'downstream/NHDFlowline', '1 Meters', 'NEW_SELECTION')

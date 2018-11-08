@@ -198,16 +198,16 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
     # Select csiwaterbody that intersect trace2junctions
     arcpy.AddMessage("Beginning connectivity attribution...")
     DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", trace2_junctions, XY_TOLERANCE, "NEW_SELECTION")
-    DM.CalculateField("out_fc_lyr", class_field_name, """'DR_LakeStream'""", "PYTHON")
+    DM.CalculateField("out_fc_lyr", class_field_name, """'DrainageLk'""", "PYTHON")
 
     # Get stream drainage lakes. Either unassigned so far or convert "Headwater" if a permanent stream flows into it,
     # which is detected with "non_artificial_end"
     DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION", '''"{}" IS NULL'''.format(class_field_name))
-    DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+    DM.CalculateField("out_fc_lyr", class_field_name, """'Drainage'""", "PYTHON")
     if exclude_intermit_flowlines:
         DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION", '''"{}" = 'Headwater' '''.format(class_field_name))
         DM.SelectLayerByLocation("out_fc_lyr", "INTERSECT", non_artificial_end, XY_TOLERANCE, "SUBSET_SELECTION")
-        DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+        DM.CalculateField("out_fc_lyr", class_field_name, """'Drainage'""", "PYTHON")
 
         # Prevent 'upgrades' due to very odd flow situations and artifacts of bad digitization. The effects of these
         # are varied--to avoid confusion, just keep the class  assigned with all flowlines
@@ -217,16 +217,16 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
                                                 '''"LakeConnection" = 'Isolated' AND "LakeConnection_Permanent" <> 'Isolated' ''')
         DM.CalculateField("out_fc_lyr", class_field_name, """'Isolated'""", "PYTHON")
 
-        # 2--Headwater to DR_Stream upgrade seen in testing with odd multi-inlet flow situation
+        # 2--Headwater to Drainage upgrade seen in testing with odd multi-inlet flow situation
         DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
-                                            '''"LakeConnection" = 'Headwater' AND "LakeConnection_Permanent" IN ('DR_Stream', 'DR_LakeStream') ''')
+                                            '''"LakeConnection" = 'Headwater' AND "LakeConnection_Permanent" IN ('Drainage', 'DrainageLk') ''')
         DM.CalculateField("out_fc_lyr", class_field_name, """'Headwater'""", "PYTHON")
 
-        # 3--DR_Stream to DR_LakeStream upgrade seen in testing when intermittent stream segments were used
+        # 3--Drainage to DrainageLk upgrade seen in testing when intermittent stream segments were used
         # erroneously instead of artificial paths
         DM.SelectLayerByAttribute("out_fc_lyr", "NEW_SELECTION",
-                                            '''"LakeConnection" = 'DR_Stream' AND "LakeConnection_Permanent" = 'DR_LakeStream' ''')
-        DM.CalculateField("out_fc_lyr", class_field_name, """'DR_Stream'""", "PYTHON")
+                                            '''"LakeConnection" = 'Drainage' AND "LakeConnection_Permanent" = 'DrainageLk' ''')
+        DM.CalculateField("out_fc_lyr", class_field_name, """'Drainage'""", "PYTHON")
         DM.SelectLayerByAttribute("out_fc_lyr", "CLEAR_SELECTION")
 
         # Add change flag for users

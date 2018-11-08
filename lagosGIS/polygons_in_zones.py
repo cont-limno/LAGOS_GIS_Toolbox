@@ -34,20 +34,20 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
                                         'tabulate_intersection_table')
 
     # area was calculated in map units which was m2 so convert to hectares
-    arcpy.AddField_management(tab_table, 'Poly_Area_Ha', 'DOUBLE')
-    arcpy.CalculateField_management(tab_table, 'Poly_Area_Ha', '!AREA!/10000', 'PYTHON')
+    arcpy.AddField_management(tab_table, 'Poly_Ha', 'DOUBLE')
+    arcpy.CalculateField_management(tab_table, 'Poly_Ha', '!AREA!/10000', 'PYTHON')
 
 
     # just change the name of the percent field
-    cu.rename_field(tab_table, 'PERCENTAGE', 'Poly_Area_Pct', True)
+    cu.rename_field(tab_table, 'PERCENTAGE', 'Poly_Pct', True)
 
     # Now just get the count as there is no other area metric anymore
     spjoin_fc = arcpy.SpatialJoin_analysis(zone_fc, selected_polys, 'spatial_join_output')
-    arcpy.AlterField_management(spjoin_fc, 'Join_Count', 'Poly_Count')
+    arcpy.AlterField_management(spjoin_fc, 'Join_Count', 'Poly_n')
 
     arcpy.AddMessage('Refining output...')
-    arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_Count"])
-    final_fields = ['Poly_Area_Ha', 'Poly_Area_Pct', 'Poly_Count']
+    arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_n"])
+    final_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n']
 
     # make output nice
     cu.one_in_one_out(tab_table, final_fields, zone_fc, zone_field, output_table)

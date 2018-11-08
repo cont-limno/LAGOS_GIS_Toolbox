@@ -69,13 +69,5 @@ def main():
     output_table = arcpy.GetParameterAsText(4)
     polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
 
-def test():
-    zone_fc = r'C:\Users\smithn78\CSI_Processing\CSI\TestData_0411.gdb\HU12'
-    zone_field = 'ZoneID'
-    polygons_of_interest = r'C:\Users\smithn78\CSI_Processing\CSI\TestData_0411.gdb\Wetlands'
-    interest_selection_expr = ''
-    output_table = 'C:/GISData/Scratch/Scratch.gdb/POLYZONE_TEST_SEP18'
-    polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
-
 if __name__ == '__main__':
     main()

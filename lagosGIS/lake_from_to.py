@@ -7,7 +7,6 @@ LAGOS_LAKE_FILTER = "AreaSqKm > .01 AND FCode IN (39000,39004,39009,39010,39011,
 def lake_from_to(nhd_subregion_gdb, output_table):
     arcpy.env.workspace = 'in_memory'
     waterbody0 = os.path.join(nhd_subregion_gdb, 'NHDWaterbody')
-    flowline0 = os.path.join(nhd_subregion_gdb, 'NHDFlowline')
     network = os.path.join(nhd_subregion_gdb, 'Hydrography','HYDRO_NET')
     junctions0 = os.path.join(nhd_subregion_gdb, 'HYDRO_NET_Junctions')
 
@@ -15,13 +14,9 @@ def lake_from_to(nhd_subregion_gdb, output_table):
     waterbody = DM.MakeFeatureLayer(waterbody0, 'waterbody', where_clause = LAGOS_LAKE_FILTER)
     num_wbs = int(arcpy.GetCount_management(waterbody).getOutput(0))
     junctions = DM.MakeFeatureLayer(junctions0, 'junctions')
-    flowline = DM.MakeFeatureLayer(flowline0, 'flowline')
 
     DM.SelectLayerByLocation(junctions, 'INTERSECT', waterbody, '1 Meters', 'NEW_SELECTION')
     junctions_1ha = DM.MakeFeatureLayer(junctions, 'junctions_1ha')
-    DM.SelectLayerByLocation(flowline, 'INTERSECT', waterbody, 'NEW_SELECTION')
-    flowline_1ha_lakes = DM.MakeFeatureLayer(flowline, 'flowline_1ha')
-    outlets_1ha_lakes = DM.FeatureVerticesToPoints(flowline_1ha_lakes, 'outlets_1ha_lakes', 'END')
 
     # insert results into output table
     DM.CreateTable(os.path.dirname(output_table), os.path.basename(output_table))
@@ -30,7 +25,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
 
     # create a dictionary to hold results in memory
     results = []
- 
+
     counter = 0
     progress = .01
     arcpy.AddMessage("Starting network tracing...")
@@ -55,13 +50,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
                 results.append({'FROM': id, 'TO': None})
             else:
                 # copy with selection on
-                this_junctions = DM.MakeFeatureLayer(junctions, 'this_junctions')
-
-                # NEW
-                DM.SelectLayerByLocation(junctions_1ha, 'INTERSECT', this_waterbody, '1 Meters','REMOVE_FROM_SELECTION')
-                other_lake_junctions = DM.MakeFeatureLayer(junctions, 'other_lake_junctions')
-
-
+                this_junctions = DM.MakeFeatureLayer(junctions_1ha, 'this_junctions')
                 DM.TraceGeometricNetwork(network, 'downstream', this_junctions, 'TRACE_DOWNSTREAM')
                 # select lakes that intersect the downstream network with a tolerance of 1 meters
                 DM.SelectLayerByLocation(waterbody, 'INTERSECT', 'downstream/NHDFlowline', '1 Meters', 'NEW_SELECTION')
@@ -92,7 +81,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
         insert_cursor.insertRow([result['FROM'], result['TO']])
 
     # delete everything
-    for item in [waterbody, junctions, 'in_memory']:
+    for item in [waterbody, junctions, junctions_1ha, 'in_memory']:
         DM.Delete(item)
     arcpy.AddMessage("Completed.")
 

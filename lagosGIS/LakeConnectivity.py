@@ -246,9 +246,10 @@ def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, d
         DM.Project(temp_fc, out_feature_class, arcpy.SpatialReference(102039))
 
     # Clean up
-    for item in this_tool_layers + this_tool_temp:
-        if arcpy.Exists(item):
-            DM.Delete(item)
+    if not debug_mode:
+        for item in this_tool_layers + this_tool_temp:
+            if arcpy.Exists(item):
+                DM.Delete(item)
 
     if not debug_mode:
         DM.Delete("trace1")

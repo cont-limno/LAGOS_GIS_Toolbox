@@ -44,7 +44,7 @@ def lake_from_to(nhd_subregion_gdb, output_table):
 
             # select junctions overlapping this lake. only the downstream one matters, rest have no effect
             DM.SelectLayerByLocation(junctions_1ha, 'INTERSECT', this_waterbody, '1 Meters')
-            count_junctions = int(arcpy.GetCount_management(junctions).getOutput(0))
+            count_junctions = int(arcpy.GetCount_management(junctions_1ha).getOutput(0))
             if count_junctions == 0:
                 # add a row with no "TO" lake to the results
                 results.append({'FROM': id, 'TO': None})

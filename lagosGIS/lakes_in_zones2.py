@@ -44,10 +44,10 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
 
     selections = [""""Hectares" >= 4""",
 
-            """"Hectares" >= 4 AND "Connectivity" = 'Isolated'""",
-            """"Hectares" >= 4 AND "Connectivity" = 'Headwater'""",
-            """"Hectares" >= 4 AND "Connectivity" = 'Drainage'""",
-            """"Hectares" >= 4 AND "Connectivity" = 'DrainageLk'""",
+            """"Hectares" >= 4 AND "Connectivity_Class" = 'Isolated'""",
+            """"Hectares" >= 4 AND "Connectivity_Class" = 'Headwater'""",
+            """"Hectares" >= 4 AND "Connectivity_Class" = 'Drainage'""",
+            """"Hectares" >= 4 AND "Connectivity_Class" = 'DrainageLk'""",
 
             """"Hectares" >= 4 AND "Connectivity_Permanent" = 'Isolated'""",
             """"Hectares" >= 4 AND "Connectivity_Permanent" = 'Headwater'""",

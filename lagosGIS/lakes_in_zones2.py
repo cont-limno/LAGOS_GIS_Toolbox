@@ -62,10 +62,10 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 'Lakes4ha_Drainage',
                 'Lakes4ha_DrainageLk',
 
-                'Lakes4ha_Isolated_Permanent',
-                'Lakes4ha_Headwater_Permanent',
-                'Lakes4ha_Drainage_Permanent',
-                'Lakes4ha_DrainageLk_Permanent'
+                'Lakes4ha_IsolatedPerm',
+                'Lakes4ha_HeadwaterPerm',
+                'Lakes4ha_DrainagePerm',
+                'Lakes4ha_DrainageLkPerm'
                 ]
 
     for sel, temp_table in zip(selections, temp_tables):

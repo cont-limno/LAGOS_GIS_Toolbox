@@ -77,7 +77,7 @@ def rename_variables(file):
 
     shutil.move(tempfile.name, file)
 
-def TableToCSV(in_table, out_folder, output_schema = True, export_qa_version = True, field_list = [], new_table_name = ''):
+def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '', export_qa_version = True, field_list = []):
     if new_table_name:
         name = new_table_name
     else:

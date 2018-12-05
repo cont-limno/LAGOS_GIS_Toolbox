@@ -6,9 +6,9 @@ from arcpy import management as DM
 import lagosGIS
 
 # Change these to match your computer. Yes, this is a crap way to code this.
-MASTER_LAKES_FC = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDWaterbody_LAGOS'
-MASTER_LAKES_LINES =  r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDWaterbody_LAGOS_Line'
-MASTER_STREAMS_FC = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDArea_LAGOS'
+MASTER_LAKES_FC = 'NHDWaterbody_LAGOS'
+MASTER_LAKES_LINES = 'NHDWaterbody_LAGOS_Line'
+MASTER_STREAMS_FC = 'NHDArea_LAGOS'
 
 # Can change but probably don't need to
 MASTER_LAKE_ID = 'lagoslakeid'
@@ -33,9 +33,11 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     :param in_x_field: Field containing the longitude or x coordinates
     :param in_y_field: Field containing the latitude or y coordinates
     :param in_crs: Abbreviation of the coordinate reference system used to specify the coordinates.
+
     Options supported are 'WGS84', 'NAD83', 'NAD27.
     :return: The output feature class
     """
+
     if in_crs not in CRS_DICT.keys():
         raise ValueError('Use one of the following CRS names: {}'.format(','.join(CRS_DICT.keys())))
     DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', arcpy.SpatialReference(CRS_DICT[in_crs]))
@@ -44,7 +46,10 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     arcpy.Delete_management('xylayer')
     return(out_fc)
 
-def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, lake_county_field = '', state = ''):
+def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
+                       lake_name_field, lake_county_field = '', state = '',
+                       master_gdb=r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb'
+                       ):
     """
     Evaluate water quality sampling point locations and either assign the point to a lake polygon or flag the
     point for manual review.
@@ -54,14 +59,18 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     :param lake_name_field:
     :param lake_county_field:
     :param state:
+    :param master_gdb: Location of master geodatabase used for linking
     :return:
     """
+    master_lakes_fc = os.path.join(master_gdb, MASTER_LAKES_FC)
+    master_lakes_lines = os.path.join(master_gdb, MASTER_LAKES_LINES)
+    master_streams_fc = os.path.join(master_gdb, MASTER_STREAMS_FC)
 
     # setup
     arcpy.AddMessage("Joining...")
     if state and state.upper() not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
-    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\scratch.gdb'
+    arcpy.env.workspace = 'in_memory'
     out_short = os.path.splitext(os.path.basename(out_fc))[0]
     join1 = '{}_1'.format(out_short)
     join2 = '{}_2'.format(out_short)
@@ -82,10 +91,10 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     # TODO: Finish the crosswalk so you can use this step
 
     # Try to make some spatial connections and fulfill some logic to assign a link
-    join1 = AN.SpatialJoin(lake_points_fc, MASTER_LAKES_FC, join1, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
-    join2 = AN.SpatialJoin(join1, MASTER_STREAMS_FC, join2, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
-    join3 = AN.SpatialJoin(join2, MASTER_LAKES_FC, join3, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius = '10 meters')
-    join4 = AN.SpatialJoin(join3, MASTER_LAKES_FC, join4, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius =  '100 meters')
+    join1 = AN.SpatialJoin(lake_points_fc, master_lakes_fc, join1, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
+    join2 = AN.SpatialJoin(join1, master_streams_fc, join2, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
+    join3 = AN.SpatialJoin(join2, master_lakes_fc, join3, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius = '10 meters')
+    join4 = AN.SpatialJoin(join3, master_lakes_fc, join4, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius =  '100 meters')
 
     # TODO: Add back frequency thing
     # freq = AN.Frequency(join4, freq, lake_id_field)
@@ -232,7 +241,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
 
     # Re-code points more than 100m into the polygon of the lake as no need to check
     DM.MakeFeatureLayer(join5, 'join5_lyr')
-    DM.MakeFeatureLayer(MASTER_LAKES_LINES, 'lake_lines_lyr')
+    DM.MakeFeatureLayer(master_lakes_lines, 'lake_lines_lyr')
     DM.SelectLayerByLocation('join5_lyr', 'INTERSECT', 'lake_lines_lyr', '100 meters', 'NEW_SELECTION', 'INVERT')
     DM.SelectLayerByAttribute('join5_lyr', 'REMOVE_FROM_SELECTION', "Auto_Comment LIKE 'Not linked%'")
     DM.CalculateField('join5_lyr', 'Manual_Review', '-2', 'PYTHON')

@@ -12,13 +12,13 @@ import os
 import arcpy
 import csiutils as cu
 
+# requires higher than ArcGIS 10.1--uses in_memory workspace that allows access to the geometry
 def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
     old_workspace = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
 
-    temp_polyzones = cu.create_temp_GDB('temp_polyzones')
-    selected_polys = os.path.join(temp_polyzones, 'selected_polys')
+    selected_polys = 'selected_polys'
     arcpy.AddMessage('Copying/selecting polygon features...')
     if interest_selection_expr:
         arcpy.Select_analysis(polygons_of_interest, selected_polys, interest_selection_expr)
@@ -39,24 +39,27 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
 
 
     # just change the name of the percent field
-    cu.rename_field(tab_table, 'PERCENTAGE', 'Poly_Pct', True)
+    arcpy.AlterField_management(tab_table, 'PERCENTAGE', 'Poly_Pct')
 
     # Now just get the count as there is no other area metric anymore
     spjoin_fc = arcpy.SpatialJoin_analysis(zone_fc, selected_polys, 'spatial_join_output')
     arcpy.AlterField_management(spjoin_fc, 'Join_Count', 'Poly_n')
 
+    # Add the density
+    arcpy.AddField_management(spjoin_fc, 'Poly_nperha', 'DOUBLE')
+    arcpy.CalculateField_management(spjoin_fc, 'Poly_nperha', '!Poly_n!/!shape.area@hectares!', 'PYTHON')
+
     arcpy.AddMessage('Refining output...')
-    arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_n"])
-    final_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n']
+    arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_n", 'Poly_nperha'])
+    final_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n', 'Poly_nperha']
 
     # make output nice
     cu.one_in_one_out(tab_table, final_fields, zone_fc, zone_field, output_table)
+
     cu.redefine_nulls(output_table, final_fields, [0, 0, 0, 0])
 
     # clean up
-    for item in [selected_polys, tab_table, spjoin_fc]:
-        arcpy.Delete_management(item)
-    arcpy.Delete_management(temp_polyzones)
+    arcpy.Delete_management('in_memory')
     arcpy.env.workspace = old_workspace
 
     arcpy.AddMessage('Polygons in zones tool complete.')

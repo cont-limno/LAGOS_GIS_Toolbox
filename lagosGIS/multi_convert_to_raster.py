@@ -15,8 +15,9 @@ def multi_convert_to_raster(polygon_fc_list, output_workspace):
         short_name = os.path.splitext(os.path.basename(polygon_fc))[0]
         arcpy.AddMessage("Converting {}...".format(short_name))
         output_raster = os.path.join(output_workspace, short_name + '_raster')
+        zone_field = arcpy.ListFields(polygon_fc, '*zoneid')[0].name
         arcpy.PolygonToRaster_conversion(polygon_fc,
-                                         'ZoneID',
+                                         zone_field,
                                          output_raster,
                                          'CELL_CENTER',
                                          cellsize = CELL_SIZE)

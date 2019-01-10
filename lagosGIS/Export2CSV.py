@@ -64,7 +64,7 @@ def rename_variables(file):
         #update the header
         desired_header = ['{}_{}'.format(short_f, name).lower() for name in header]
         update_dict = dict(zip(header, desired_header))
-        filtered_header = [name for name in desired_header if 'OBJECT' not in name]
+        filtered_header = [name for name in desired_header if 'OBJECT' not in name and 'zoneid' not in name]
 
         # write out selected fields with new names
         with tempfile:

@@ -12,11 +12,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
     # get checked at some point
     arcpy.env.workspace = 'in_memory'
 
-    # using in_memory workspace means no SHAPE@AREA attribute later so I
-    # need to calculate another field with the area using temp on disk
-    # then go ahead and copy to memory, delete temp
-    temp_workspace = cu.create_temp_GDB('lakezone')
-    temp_lakes = os.path.join(temp_workspace, 'temp_lakes')
+    temp_lakes = 'temp_lakes'
     arcpy.CopyFeatures_management(lakes_fc, temp_lakes)
 
     hectares_field = arcpy.ListFields(lakes_fc, 'Hectares')
@@ -42,7 +38,22 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
         temp_lakes = os.path.join(arcpy.env.workspace, "lakes_4ha")
 
 
-    selections = [""""Hectares" >= 4""",
+    selections = [
+            # all lake selections
+            "",
+
+            """"Connectivity_Class" = 'Isolated'""",
+            """"Connectivity_Class" = 'Headwater'""",
+            """"Connectivity_Class" = 'Drainage'""",
+            """"Connectivity_Class" = 'DrainageLk'""",
+
+            """"Connectivity_Permanent" = 'Isolated'""",
+            """"Connectivity_Permanent" = 'Headwater'""",
+            """"Connectivity_Permanent" = 'Drainage'""",
+            """"Connectivity_Permanent" = 'DrainageLk'""",
+            
+            # 4 hectare selections
+            """"Hectares" >= 4""",
 
             """"Hectares" >= 4 AND "Connectivity_Class" = 'Isolated'""",
             """"Hectares" >= 4 AND "Connectivity_Class" = 'Headwater'""",
@@ -55,7 +66,19 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"Hectares" >= 4 AND "Connectivity_Permanent" = 'DrainageLk'"""
                 ]
 
-    temp_tables = ['Lakes4ha_All',
+    temp_tables = ['Lakes1ha_All',
+
+                'Lakes1ha_Isolated',
+                'Lakes1ha_Headwater',
+                'Lakes1ha_Drainage',
+                'Lakes1ha_DrainageLk',
+
+                'Lakes1ha_IsolatedPerm',
+                'Lakes1ha_HeadwaterPerm',
+                'Lakes1ha_DrainagePerm',
+                'Lakes1ha_DrainageLkPerm',
+
+                'Lakes4ha_All',
 
                 'Lakes4ha_Isolated',
                 'Lakes4ha_Headwater',
@@ -71,33 +94,31 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
     for sel, temp_table in zip(selections, temp_tables):
         arcpy.AddMessage("Creating temporary table called {0} for lakes where {1}".format(temp_table, sel))
         polygons_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
-        new_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n']
+        new_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n', 'Poly_nperha']
         for f in new_fields:
-            print(f.replace('Poly', temp_table))
-            cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
+            arcpy.AlterField_management(temp_table, f, f.replace('Poly', temp_table))
 
     # join em up and copy to final
-    temp_tables.remove('Lakes4ha_All')
+    temp_tables.remove('Lakes1ha_All')
     for t in temp_tables:
         try:
-            arcpy.JoinField_management('Lakes4ha_All', zone_field, t, zone_field)
+            arcpy.JoinField_management('Lakes1ha_All', zone_field, t, zone_field)
         #sometimes there's no table if it was an empty selection
         except:
             empty_fields = [f.replace('Poly', t) for f in new_fields]
             for ef in empty_fields:
-                arcpy.AddField_management('Lakes4ha_All', ef, 'Double')
-                arcpy.CalculateField_management('Lakes4ha_All', ef, '0', 'PYTHON')
+                arcpy.AddField_management('Lakes1ha_All', ef, 'Double')
+                arcpy.CalculateField_management('Lakes1ha_All', ef, '0', 'PYTHON')
             continue
 
     # remove all the extra zoneID fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('Lakes4ha_All', 'ZoneID_*')]
+    drop_fields = [f.name for f in arcpy.ListFields('Lakes1ha_All', 'ZoneID_*')]
     for f in drop_fields:
-        arcpy.DeleteField_management('Lakes4ha_All', f)
-    arcpy.CopyRows_management('Lakes4ha_All', output_table)
+        arcpy.DeleteField_management('Lakes1ha_All', f)
+    arcpy.CopyRows_management('Lakes1ha_All', output_table)
 
     # clean up
-    for item in ['Lakes4ha_All', temp_lakes, os.path.dirname(temp_workspace)] + temp_tables:
-        arcpy.Delete_management(item)
+    arcpy.Delete_management('in_memory')
 
 
 def main():

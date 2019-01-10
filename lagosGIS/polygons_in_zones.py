@@ -17,8 +17,11 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
     old_workspace = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
-
     selected_polys = 'selected_polys'
+    # fixes some stupid ArcGIS thing with the interactive Python window
+    if arcpy.Exists(selected_polys):
+        arcpy.env.overwriteOutput = True
+
     arcpy.AddMessage('Copying/selecting polygon features...')
     if interest_selection_expr:
         arcpy.Select_analysis(polygons_of_interest, selected_polys, interest_selection_expr)
@@ -54,12 +57,15 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
     final_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n', 'Poly_nperha']
 
     # make output nice
+    arcpy.env.overwriteOutput = False
     cu.one_in_one_out(tab_table, final_fields, zone_fc, zone_field, output_table)
 
     cu.redefine_nulls(output_table, final_fields, [0, 0, 0, 0])
 
     # clean up
-    arcpy.Delete_management('in_memory')
+    # can't delete all of in_memory because this function is meant to be called from another one that uses in_memory
+    for item in [selected_polys, tab_table, spjoin_fc]:
+        arcpy.Delete_management(item)
     arcpy.env.workspace = old_workspace
 
     arcpy.AddMessage('Polygons in zones tool complete.')

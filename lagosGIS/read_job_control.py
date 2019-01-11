@@ -20,6 +20,11 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1):
     outputs = []
     csv_paths = []
     def cook_string(input):
+        """
+        This function takes a "raw" string contained inside another string and makes it just a plain string.
+        :param input: A string with contents that include r'[text'.
+        :return: String
+        """
         if input.startswith('r\'') and input.endswith('\''):
             return input[2:-1]
         else:
@@ -32,11 +37,21 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1):
         arg2 = cook_string(line['Arg2'])
         arg3 = cook_string(line['Arg3'])
         arg4 = cook_string(line['Arg4'])
+        arg5 = cook_string(line['Arg5'])
         output = cook_string(line['Output'])
         csv_path = cook_string(line['CSV'])
         outputs.append(output)
         csv_paths.append(csv_path)
-        calls.append("lagosGIS.{f}(r'{a1}', r'{a2}', r'{a3}', r'{a4}')".format(
+        if arg5:
+            calls.append("lagosGIS.{f}(r'{a1}', r'{a2}', r'{a3}', r'{a4}', r'{a5})".format(
+                f=function,
+                a1=arg1,
+                a2=arg2,
+                a3=arg3,
+                a4=arg4,
+                a5=arg5))
+        else:
+            calls.append("lagosGIS.{f}(r'{a1}', r'{a2}', r'{a3}', r'{a4}')".format(
             f = function,
             a1 = arg1,
             a2 = arg2,

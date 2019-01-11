@@ -54,11 +54,13 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     else:
         arcpy.env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
-    arcpy.AddMessage("Calculating zonal statistics...")
 
     # Set up environments for alignment between zone raster and theme raster
-    env.snapRaster = '../common_grid.tif'
-    env.cellSize = '../common_grid.tif'
+    this_files_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(this_files_dir)
+    common_grid = os.path.abspath('../common_grid.tif')
+    env.snapRaster = common_grid
+    env.cellSize = common_grid
     CELL_SIZE = 30
     env.extent = zone_fc
 
@@ -68,11 +70,11 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER', cellsize = CELL_SIZE)
     else:
         zone_raster = zone_fc
-    env.extent = "MINOF"
 
     # I tested and there is no need to resample the raster being summarized. It will be resampled correctly
     # internally in the following tool given that the necessary environments are set above (cell size, snap).
-    in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
+    #in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
+    arcpy.AddMessage("Calculating Zonal Statistics...")
     arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
 
     if is_thematic:

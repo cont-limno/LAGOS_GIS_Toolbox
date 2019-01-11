@@ -16,6 +16,7 @@ import csiutils as cu
 def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
     old_workspace = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
+    arcpy.SetLogHistory(False)
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     selected_polys = 'selected_polys'
     # fixes some stupid ArcGIS thing with the interactive Python window
@@ -27,9 +28,6 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
         arcpy.Select_analysis(polygons_of_interest, selected_polys, interest_selection_expr)
     else:
         arcpy.CopyFeatures_management(polygons_of_interest, selected_polys)
-
-    arcpy.AddField_management(selected_polys, 'POLYAREA_ha', 'DOUBLE')
-    arcpy.CalculateField_management(selected_polys, 'POLYAREA_ha', '!shape.area@hectares!', 'PYTHON')
 
     # use tabulate intersection for the areas overlapping
     arcpy.AddMessage('Tabulating intersection between zones and polygons...')
@@ -69,6 +67,7 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
     arcpy.env.workspace = old_workspace
 
     arcpy.AddMessage('Polygons in zones tool complete.')
+    arcpy.SetLogHistory(True)
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

@@ -112,7 +112,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             continue
 
     # remove all the extra zoneID fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('Lakes1ha_All', 'ZoneID_*')]
+    drop_fields = [f.name for f in arcpy.ListFields('Lakes1ha_All', '*_zoneid_*')]
     for f in drop_fields:
         arcpy.DeleteField_management('Lakes1ha_All', f)
     arcpy.CopyRows_management('Lakes1ha_All', output_table)

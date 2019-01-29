@@ -15,13 +15,22 @@ def multi_convert_to_raster(polygon_fc_list, output_workspace):
         short_name = os.path.splitext(os.path.basename(polygon_fc))[0]
         arcpy.AddMessage("Converting {}...".format(short_name))
         output_raster = os.path.join(output_workspace, short_name + '_raster')
-        zone_field = arcpy.ListFields(polygon_fc, '*zoneid')[0].name
-        arcpy.PolygonToRaster_conversion(polygon_fc,
+        lagoslakeid_field = arcpy.ListFields(polygon_fc, '*lagoslakeid')[0].name
+        zoneid_field = arcpy.ListFields(polygon_fc, '*zoneid')[0].name
+        if lagoslakeid_field:
+            zone_field = lagoslakeid_field
+        else:
+            zone_field = zoneid_field
+        output_raster = arcpy.PolygonToRaster_conversion(polygon_fc,
                                          zone_field,
                                          output_raster,
                                          'CELL_CENTER',
                                          cellsize = CELL_SIZE)
         arcpy.BuildPyramids_management(output_raster, SKIP_FIRST = True)
+        if lagoslakeid_field:
+            arcpy.BuildRasterAttributeTable_management(output_raster, True)
+            arcpy.AddField_management(output_raster, 'lagoslakeid', 'LONG')
+            arcpy.CalculateField_management(output_raster, 'lagoslakeid', '!Value!', 'PYTHON_9.3')
     arcpy.AddMessage("Completed.")
 
 def main():

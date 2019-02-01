@@ -43,7 +43,7 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1):
         outputs.append(output)
         csv_paths.append(csv_path)
         if arg5:
-            calls.append("lagosGIS.{f}(r'{a1}', r'{a2}', r'{a3}', r'{a4}', r'{a5})".format(
+            calls.append("lagosGIS.{f}(r'{a1}', r'{a2}', r'{a3}', r'{a4}', r'{a5}')".format(
                 f=function,
                 a1=arg1,
                 a2=arg2,

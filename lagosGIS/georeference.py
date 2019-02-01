@@ -21,7 +21,8 @@ STATES = ("AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","GU","HI","IA",
           "PW","RI","SC","SD","TN","TX","UT","VA","VI","VT","WA","WI","WV","WY")
 CRS_DICT = {'NAD83':4269,
             'WGS84':4326,
-            'NAD27':4267
+            'NAD27':4267,
+            'NAD_1983_StatePlane_Washington_North_FIPS_4601_Feet':102748
             }
 
 

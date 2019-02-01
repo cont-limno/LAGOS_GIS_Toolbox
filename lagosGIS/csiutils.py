@@ -87,19 +87,37 @@ def one_in_one_out(tool_table, calculated_fields, zone_fc, zone_field, output_ta
     tool_fields: the calculated fields you want to retain, besides zone_field
     """
 
-    # This function is mostly a hack on an outer right join. Want to join to
-    # zone_fc but select ONLY the ID field, and keep all records in zone_fc
-    # If you find a better way, update this.
-    arcpy.CopyRows_management(zone_fc, output_table)
-    arcpy.JoinField_management(output_table, zone_field, tool_table, zone_field)
-    calculated_fields.append(zone_field)
-    field_names = [f.name for f in arcpy.ListFields(output_table)]
-    for f in field_names:
-        if f not in calculated_fields:
-            try:
-                arcpy.DeleteField_management(output_table, f)
-            except:
-                continue
+    # # This function is mostly a hack on an outer right join. Want to join to
+    # # zone_fc but select ONLY the ID field, and keep all records in zone_fc
+    # # If you find a better way, update this.
+    # arcpy.CopyRows_management(zone_fc, output_table)
+    # arcpy.JoinField_management(output_table, zone_field, tool_table, zone_field)
+    # calculated_fields.append(zone_field)
+    # field_names = [f.name for f in arcpy.ListFields(output_table)]
+    # for f in field_names:
+    #     if f not in calculated_fields:
+    #         try:
+    #             arcpy.DeleteField_management(output_table, f)
+    #         except:
+    #             continue
+
+    # replaces old method, and is faster
+    zone_field_vals = [row[0] for row in arcpy.da.SearchCursor(zone_fc)]
+    editable_fields = [f.name for f in arcpy.ListFields(tool_table) if f.editable].remove(zone_field)
+    with arcpy.da.UpdateCursor(tool_table, [zone_field] + editable_fields) as uCursor:
+        for row in uCursor:
+            zone_value = row[0]
+            if zone_value in zone_field_vals:
+                zone_field_vals.remove(zone_value)
+        # now, with the IDs that are left, make null rows
+        for val in zone_field_vals:
+            new_row = val + [None]*len(editable_fields)
+            uCursor.updateRow(new_row)
+    output_table = tool_table
+    return output_table
+
+
+
 
 def redefine_nulls(in_table, in_fields, out_values):
     """Sometimes, when a zone has nothing in it, it gets an output value of

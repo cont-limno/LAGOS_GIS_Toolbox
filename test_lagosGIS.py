@@ -6,7 +6,10 @@ import lagosGIS
 
 arcpy.env.overwriteOutput = True
 
-__all__ = ["lake_connectivity_classification", "zonal_attribution_of_raster_data"]
+__all__ = ["lake_connectivity_classification",
+           "zonal_attribution_of_raster_data",
+           "polygons_in_zones",
+           "lakes_in_zones"]
 
 def lake_connectivity_classification(out_feature_class, debug_mode = True):
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -21,7 +24,8 @@ def zonal_attribution_of_raster_data(out_table, is_thematic = False, debug_mode 
         in_value_raster = os.path.join(test_data_gdb, 'NLCD_LandCover_2006')
     else:
         in_value_raster = os.path.join(test_data_gdb, 'Total_Nitrogen_Deposition_2006')
-    lagosGIS.zonal_attribution_of_raster_data(zone_fc, 'ZoneID', in_value_raster,
+    zone_field = arcpy.ListFields(zone_fc, '*zoneid')[0].name
+    lagosGIS.zonal_attribution_of_raster_data(zone_fc, zone_field, in_value_raster,
                                               out_table, is_thematic = is_thematic, debug_mode =  debug_mode)
 # hand-verified to be correct
 # update 2018-05-29, these numbers rely on the old method of using the source raster data grid instead of the
@@ -29,3 +33,17 @@ def zonal_attribution_of_raster_data(out_table, is_thematic = False, debug_mode 
 hu12_7509_totalN_2006 = {"CELL_COUNT": 7, "MIN": 6.749966, "MAX": 7.41714, "MEAN": 7.026327, "STD": 0.226898}
 hu12_7454_totalN_2006 = {"CELL_COUNT": None, "MIN": None, "MAX": None, "MEAN": None, "STD": None}
 
+
+def polygons_in_zones(out_table, selection_expression = ''):
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    test_data_gdb = os.path.abspath(os.path.join(os.curdir, 'TestData_0411.gdb'))
+    zone_fc = os.path.join(test_data_gdb, 'HU12')
+    polygons_fc = os.path.join(test_data_gdb, 'Lakes_1ha')
+    lagosGIS.polygons_in_zones(zone_fc, 'ZoneID', polygons_fc, out_table, selection_expression)
+
+def lakes_in_zones(out_table):
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    test_data_gdb = os.path.abspath(os.path.join(os.curdir, 'TestData_0411.gdb'))
+    zone_fc = os.path.join(test_data_gdb, 'HU12')
+    polygons_fc = os.path.join(test_data_gdb, 'Lakes_1ha')
+    lagosGIS.lakes_in_zones(zone_fc, 'ZoneID', polygons_fc, out_table)

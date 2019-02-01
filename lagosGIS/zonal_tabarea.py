@@ -10,33 +10,43 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
     """Makes a nicer output for this tool. Rename some fields, drop unwanted
         ones, calculate percentages using raster AREA before deleting that
         field."""
-
-    drop_fields = ['VALUE', 'COUNT', '{}_1'.format(zone_field), 'AREA', 'RANGE', 'SUM', 'ZONE_CODE', 'STD']
     if is_thematic:
-        fields = arcpy.ListFields(t, "VALUE*")
-        for f in fields:
+        value_fields = arcpy.ListFields(t, "VALUE*")
+        pct_fields = [f.name.replace("VALUE", "Pct") for f in value_fields]
+        ha_fields = [f.name.replace("VALUE", "Ha") for f in value_fields]
+        # add all the new fields needed
+        # ha field does NOT add up to original feature area, cannot if vector inputs aren't used.
+        # it's unnecessary--being dropped at the export stage. calculating for data QA only.
+        for f, pct_field, ha_field in zip(value_fields, pct_fields, ha_fields):
             # find percent of total area in a new field
-            pct_field = f.name.replace("VALUE", "Pct")
             arcpy.AddField_management(t, pct_field, f.type)
-            expr = "100 * !%s!/!AREA!" % f.name
-            arcpy.CalculateField_management(t, pct_field, expr, "PYTHON")
-
-            # convert area to hectares in a new field
-            # scale to match the area of the original feature!
-            ha_field = f.name.replace("VALUE", "Ha")
             arcpy.AddField_management(t, ha_field, f.type)
-            expr = "!%s!/10000" % f.name
-            arcpy.CalculateField_management(t, ha_field, expr, "PYTHON")
 
-            #Delete the old field
-            if not debug_mode:
-                arcpy.DeleteField_management(t, f.name)
+        value_field_names = [f.name for f in value_fields]
+        cursor_fields = ['AREA'] + value_field_names + pct_fields + ha_fields
+        print cursor_fields
+        uCursor = arcpy.da.UpdateCursor(t, cursor_fields)
+        for uRow in uCursor:
+            # unpacks area + 3 tuples of the right fields for each, no matter how many there are
+            vf_i_end = len(value_field_names)+1
+            pf_i_end = vf_i_end + len(pct_fields)+1
+            hf_i_end = pf_i_end + len(ha_fields)+1
+            print uRow
+            print vf_i_end
+            print pf_i_end
+            print hf_i_end
+            # pct_values and ha_values are both null at this point but unpack for clarity
+            area, value_values, pct_values, ha_values = uRow[0], uRow[1:vf_i_end], uRow[vf_i_end:pf_i_end], uRow[pf_i_end:hf_i_end]
+            new_pct_values = [100*vv/area for vv in value_values]
+            new_ha_values = [vv/10000 for vv in value_values] # convert square m to ha
+            new_row = (area, value_values, new_pct_values, new_ha_values)
+            uCursor.updateRow(new_row)
 
-    else:
-        # continuous variables don't have these in the output
-        drop_fields = drop_fields + ['VARIETY', 'MAJORITY', 'MINORITY', 'MEDIAN']
+        for vf in value_field_names:
+            arcpy.DeleteField_management(t, vf)
 
-    arcpy.AlterField_management(t, 'COUNT_1', 'CELL_COUNT', 'CELL_COUNT')
+    arcpy.AlterField_management(t, 'COUNT', 'CELL_COUNT')
+    drop_fields = ['ZONE_CODE', 'COUNT', 'AREA']
     if not debug_mode:
         for df in drop_fields:
             try:
@@ -54,11 +64,13 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     else:
         arcpy.env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
-    arcpy.AddMessage("Calculating zonal statistics...")
 
     # Set up environments for alignment between zone raster and theme raster
-    env.snapRaster = '../common_grid.tif'
-    env.cellSize = '../common_grid.tif'
+    this_files_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(this_files_dir)
+    common_grid = os.path.abspath('../common_grid.tif')
+    env.snapRaster = common_grid
+    env.cellSize = common_grid
     CELL_SIZE = 30
     env.extent = zone_fc
 
@@ -68,47 +80,68 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
         arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER', cellsize = CELL_SIZE)
     else:
         zone_raster = zone_fc
-    env.extent = "MINOF"
 
     # I tested and there is no need to resample the raster being summarized. It will be resampled correctly
     # internally in the following tool given that the necessary environments are set above (cell size, snap).
-    in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
-    arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'ALL')
+    #in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
+    if not is_thematic:
+        arcpy.AddMessage("Calculating Zonal Statistics...")
+        temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'MIN_MAX_MEAN')
 
     if is_thematic:
         #for some reason env.cellSize doesn't work
         # calculate/doit
         arcpy.AddMessage("Tabulating areas...")
-        arcpy.sa.TabulateArea(zone_raster, zone_field, in_value_raster, 'Value', 'temp_area_table', CELL_SIZE)
+        temp_entire_table = arcpy.sa.TabulateArea(zone_raster, zone_field, in_value_raster, 'Value', 'temp_area_table', CELL_SIZE)
 
-        # making the output table
-        arcpy.CopyRows_management('temp_area_table', 'temp_entire_table')
-        zonal_stats_fields = ['COUNT', 'AREA']
-        arcpy.JoinField_management('temp_entire_table', zone_field, 'temp_zonal_table', zone_field, zonal_stats_fields)
+        # replaces join to Zonal Stats in previous versions of tool
+        # no joining, just calculate the area/count from what's produced by TabulateArea
+        arcpy.AddField_management(temp_entire_table, 'AREA', 'LONG')
+        arcpy.AddField_management(temp_entire_table, 'COUNT', 'LONG')
 
-        # cleanup
-        arcpy.Delete_management('temp_area_table')
-
-    if not is_thematic:
-        # making the output table
-        arcpy.CopyRows_management('temp_zonal_table', 'temp_entire_table')
+        cursor_fields = ['AREA', 'COUNT']
+        value_fields = [f.name for f in arcpy.ListFields(temp_entire_table, 'VALUE*')]
+        cursor_fields.extend(value_fields)
+        with arcpy.da.UpdateCursor(temp_entire_table, cursor_fields) as uCursor:
+            for uRow in uCursor:
+                area, count, value_fields = uRow[0], uRow[1], uRow[2:]
+                area = sum(value_fields)
+                count = area/(CELL_SIZE*CELL_SIZE)
+                new_row = [area, count] + value_fields
+                uCursor.updateRow(new_row)
 
     arcpy.AddMessage("Refining output table...")
 
-    # Join to the input zones raster
-    arcpy.CopyRows_management(zone_raster, 'zones_VAT')
-    arcpy.AddField_management('zones_VAT', 'DataCoverage_pct', 'DOUBLE')
-    arcpy.JoinField_management('zones_VAT', zone_field, 'temp_entire_table', zone_field)
-    calculate_expr = '100*(float(!COUNT_1!)/!Count!)'
-    arcpy.CalculateField_management('zones_VAT', 'DataCoverage_pct', calculate_expr, "PYTHON")
-    refine_zonal_output('zones_VAT', zone_field, is_thematic)
+    arcpy.AddField_management(temp_entire_table, 'DataCoverage_pct', 'DOUBLE')
+
+    # calculate DataCoverage_pct by comparing to original areas in zone raster
+    # alternative to using JoinField, which is prohibitively slow if zones exceed hu12 count
+    zone_raster_dict = {row[0]:row[1] for row in arcpy.da.SearchCursor(zone_raster, [zone_field, 'Count'])}
+    temp_entire_table_dict = {row[0]:row[1] for row in arcpy.da.SearchCursor(temp_entire_table, [zone_field, 'COUNT'])}
+    with arcpy.da.UpdateCursor(temp_entire_table, [zone_field, 'DataCoverage_Pct']) as cursor:
+        for uRow in cursor:
+            key_value, data_pct = uRow
+            count_orig = zone_raster_dict[key_value]
+            if key_value in temp_entire_table_dict:
+                count_summarized = temp_entire_table_dict[key_value]
+                data_pct = 100*float(count_summarized/count_orig)
+            else:
+                data_pct = None
+            cursor.updateRow((key_value, data_pct))
+
+    # Refine the output
+    refine_zonal_output(temp_entire_table, zone_field, is_thematic)
 
     # final table gets a record even for no-data zones
-    keep_fields = [f.name for f in arcpy.ListFields('zones_VAT')]
+    keep_fields = [f.name for f in arcpy.ListFields(temp_entire_table)]
     if zone_field.upper() in keep_fields:
         keep_fields.remove(zone_field.upper())
     if zone_field in keep_fields:
         keep_fields.remove(zone_field)
+
+    # not needed as long we are working only with rasters
+    # in order to add vector capabilities back, need to do something with this
+    # right now we just can't fill in polygon zones that didn't convert to raster in our system
     cu.one_in_one_out('zones_VAT', keep_fields, zone_fc, zone_field, out_table)
 
     # Convert missing "DataCoverage_pct" values to 100

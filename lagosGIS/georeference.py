@@ -5,10 +5,11 @@ from arcpy import analysis as AN
 from arcpy import management as DM
 import lagosGIS
 
-# Change these to match your computer. Yes, this is a crap way to code this.
-MASTER_LAKES_FC = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDWaterbody_LAGOS'
-MASTER_LAKES_LINES =  r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDWaterbody_LAGOS_Line'
-MASTER_STREAMS_FC = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb\NHDArea_LAGOS'
+#
+MASTER_LAKES_FC = 'NHDWaterbody_LAGOS'
+MASTER_LAKES_LINES = 'NHDWaterbody_LAGOS_Line'
+MASTER_STREAMS_FC = 'NHDArea_LAGOS'
+MASTER_XWALK = 'LAGOS_Lake_Link_v1_legacy_only'
 
 # Can change but probably don't need to
 MASTER_LAKE_ID = 'lagoslakeid'
@@ -19,10 +20,11 @@ MASTER_STATE_NAME = 'STATE'
 STATES = ("AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","GU","HI","IA","ID", "IL","IN","KS","KY","LA","MA",
           "MD","ME","MH","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","NY", "OH","OK","OR","PA","PR",
           "PW","RI","SC","SD","TN","TX","UT","VA","VI","VT","WA","WI","WV","WY")
+#LAGOSNE_STATES = ("CT","IA","IL","IN","MA","ME","MI","MN","MO","NH","NJ","NY", "OH","PA","RI","VT","WI")
 CRS_DICT = {'NAD83':4269,
             'WGS84':4326,
-            'NAD27':4267
-            }
+            'NAD27':4267,
+            'NAD_1983_StatePlane_Washington_North_FIPS_4601_Feet':102748}
 
 
 def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = 'NAD83'):
@@ -33,23 +35,23 @@ def spatialize_lakes(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs = '
     :param in_x_field: Field containing the longitude or x coordinates
     :param in_y_field: Field containing the latitude or y coordinates
     :param in_crs: Abbreviation of the coordinate reference system used to specify the coordinates.
-    Options supported are 'WGS84', 'NAD83', 'NAD27' or the EPSG code for a projection.
+
+    Options supported are 'WGS84', 'NAD83', 'NAD27.
     :return: The output feature class
     """
+
     if in_crs not in CRS_DICT.keys():
-        try:
-            sr = arcpy.SpatialReference(in_crs)
-        except:
-            raise ValueError('Use one of the following CRS names: {} or a valid EPSG code'.format(','.join(CRS_DICT.keys())))
-    else:
-        sr = arcpy.SpatialReference(CRS_DICT[in_crs])
-    DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', sr)
+        raise ValueError('Use one of the following CRS names: {}'.format(','.join(CRS_DICT.keys())))
+    DM.MakeXYEventLayer(lake_points_csv, in_x_field, in_y_field, 'xylayer', arcpy.SpatialReference(CRS_DICT[in_crs]))
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     DM.CopyFeatures('xylayer', out_fc)
     arcpy.Delete_management('xylayer')
     return(out_fc)
 
-def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, lake_county_field = '', state = ''):
+def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
+                       lake_name_field, lake_county_field = '', state = '',
+                       master_gdb=r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb'
+                       ):
     """
     Evaluate water quality sampling point locations and either assign the point to a lake polygon or flag the
     point for manual review.
@@ -59,14 +61,19 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     :param lake_name_field:
     :param lake_county_field:
     :param state:
+    :param master_gdb: Location of master geodatabase used for linking
     :return:
     """
+    master_lakes_fc = os.path.join(master_gdb, MASTER_LAKES_FC)
+    master_lakes_lines = os.path.join(master_gdb, MASTER_LAKES_LINES)
+    master_streams_fc = os.path.join(master_gdb, MASTER_STREAMS_FC)
+    master_xwalk = os.path.join(master_gdb, MASTER_XWALK)
 
     # setup
     arcpy.AddMessage("Joining...")
     if state and state.upper() not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
-    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\scratch.gdb'
+    arcpy.env.workspace = 'in_memory'
     out_short = os.path.splitext(os.path.basename(out_fc))[0]
     join1 = '{}_1'.format(out_short)
     join2 = '{}_2'.format(out_short)
@@ -74,6 +81,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     join3_select = join3 + '_select'
     join4 = '{}_4'.format(out_short)
     join5 = '{}_5'.format(out_short)
+    joinx = '{}_x'.format(out_short)
     freq = 'frequency_of_lake_id'
 
     county_name_results = arcpy.ListFields(lake_points_fc, '{}*'.format(lake_county_field))[0].name
@@ -83,17 +91,14 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
 
     point_fields = [f.name for f in arcpy.ListFields(lake_points_fc)]
 
-    # If identifier matches a LAGOS lake in the crosswalk, then do these steps
-    # TODO: Finish the crosswalk so you can use this step
-
     # Try to make some spatial connections and fulfill some logic to assign a link
-    join1 = AN.SpatialJoin(lake_points_fc, MASTER_LAKES_FC, join1, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
-    join2 = AN.SpatialJoin(join1, MASTER_STREAMS_FC, join2, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
-    join3 = AN.SpatialJoin(join2, MASTER_LAKES_FC, join3, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius = '10 meters')
-    join4 = AN.SpatialJoin(join3, MASTER_LAKES_FC, join4, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius =  '100 meters')
+    join1 = AN.SpatialJoin(lake_points_fc, master_lakes_fc, join1, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
+    join2 = AN.SpatialJoin(join1, master_streams_fc, join2, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
+    join3 = AN.SpatialJoin(join2, master_lakes_fc, join3, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius = '10 meters')
+    join4 = AN.SpatialJoin(join3, master_lakes_fc, join4, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius =  '100 meters')
 
-    # TODO: Add back frequency thing
-    # freq = AN.Frequency(join4, freq, lake_id_field)
+    # Join to the crosswalk to check for legacy links from LAGOS-NE
+    # joinx = DM.JoinField(join4, lake_id_field, master_xwalk, 'lagosne_legacyid', 'lagoslakeid')
 
     # setup for editing lake assignment values
     DM.AddField(join4, 'Auto_Comment', 'TEXT', field_length = 100)
@@ -107,6 +112,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                      'PERMANENT_IDENTIFIER_1', 'GNIS_NAME_1', # stream match
                      MASTER_LAKE_ID + '_1', MASTER_GNIS_NAME +'_12', # 10m match
                      MASTER_LAKE_ID + '_12', MASTER_GNIS_NAME + '_12_13', # 100m match
+                     # MASTER_LAKE_ID + '_12_13', # crosswalk match
                      'Auto_Comment', 'Manual_Review', 'Shared_Words',
                      'Linked_lagoslakeid']
     all_fields = [f.name for f  in arcpy.ListFields(join4)]
@@ -115,7 +121,8 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
     cursor = arcpy.da.UpdateCursor(join4, update_fields)
     arcpy.AddMessage("Calculating link status...")
     for row in cursor:
-        id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, comment, review, words, lagosid = row
+        id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, comment, review, words, lagosid = row # add midx back in
+
         if mid_0 is not None: # if the point is directly in a polygon
             if name and mname_0:
                 words = lagosGIS.list_shared_words(name, mname_0, exclude_lake_words=False)
@@ -150,6 +157,11 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
                         comment = 'Linked by common location'
                         lagosid = mid_100
                         review = 2
+        # legacy ids--NEW IF statement, overrides all except exact location match
+        # if midx is not None and mid_0 is None:
+        #     comment = 'LAGOS-NE legacy link'
+        #     lagosid = midx
+        #     review = 1
         cursor.updateRow((id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, comment, review, words, lagosid))
 
     # # So I haven't been able to get the county logic to work and it hasn't been that important yet, ignore for now
@@ -237,7 +249,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field, lake_name_field, l
 
     # Re-code points more than 100m into the polygon of the lake as no need to check
     DM.MakeFeatureLayer(join5, 'join5_lyr')
-    DM.MakeFeatureLayer(MASTER_LAKES_LINES, 'lake_lines_lyr')
+    DM.MakeFeatureLayer(master_lakes_lines, 'lake_lines_lyr')
     DM.SelectLayerByLocation('join5_lyr', 'INTERSECT', 'lake_lines_lyr', '100 meters', 'NEW_SELECTION', 'INVERT')
     DM.SelectLayerByAttribute('join5_lyr', 'REMOVE_FROM_SELECTION', "Auto_Comment LIKE 'Not linked%'")
     DM.CalculateField('join5_lyr', 'Manual_Review', '-2', 'PYTHON')

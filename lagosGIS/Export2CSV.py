@@ -39,10 +39,9 @@ def describe_arcgis_table_csv(in_table, out_path, field_list = [], rename_fields
             if rename_fields: # this code is the duplicated part that I don't like that much.
                 if 'OBJECTID' in f.name:
                     continue
-                if f.name not in ('ZoneID', 'lagoslakeid'):
-                    short_f_orig = os.path.splitext(os.path.basename(in_table))[0]
-                    short_f = short_f_orig.replace('_QA_ONLY', '')
-                    f.name = '{}_{}'.format(short_f, f.name)
+                short_f_orig = os.path.splitext(os.path.basename(in_table))[0]
+                short_f = short_f_orig.replace('_QA_ONLY', '')
+                f.name = '{}_{}'.format(short_f, f.name).lower()
 
             if f.name in string_lengths:
                 shortest = string_lengths[f.name]
@@ -63,9 +62,9 @@ def rename_variables(file):
         header = reader.fieldnames
 
         #update the header
-        desired_header = ['{}_{}'.format(short_f, name) if name not in ('ZoneID', 'lagoslakeid') else name for name in header]
+        desired_header = ['{}_{}'.format(short_f, name).lower() for name in header]
         update_dict = dict(zip(header, desired_header))
-        filtered_header = [name for name in desired_header if 'OBJECT' not in name]
+        filtered_header = [name for name in desired_header if 'OBJECT' not in name and 'zoneid' not in name]
 
         # write out selected fields with new names
         with tempfile:
@@ -77,13 +76,11 @@ def rename_variables(file):
 
     shutil.move(tempfile.name, file)
 
-def TableToCSV(in_table, out_folder, output_schema = True, export_qa_version = True, field_list = [], new_table_name = ''):
-    if new_table_name:
-        name = new_table_name
-    else:
-        name = os.path.splitext(os.path.basename(in_table))[0]
+def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '', export_qa_version = True, field_list = []):
+    name = os.path.splitext(os.path.basename(in_table))[0]
     out_qa_csv = os.path.join(out_folder, "{}_QA_ONLY.csv".format(name))
     out_csv = os.path.join(out_folder, "{}.csv".format(name))
+
     if field_list:
         fields_qa = field_list
     else:
@@ -158,11 +155,21 @@ def TableToCSV(in_table, out_folder, output_schema = True, export_qa_version = T
         out_schema = os.path.join(out_folder, "{}_schema.csv".format(name))
         out_schema = describe_arcgis_table_csv(in_table, out_schema, field_list)
 
+    if new_table_name:
+        out_qa_csv_rename = os.path.join(out_folder, "{}_QA_ONLY.csv".format(new_table_name))
+        out_csv_rename = os.path.join(out_folder, "{}.csv".format(new_table_name))
+        out_schema_rename = os.path.join(out_folder, "{}_schema.csv".format(new_table_name))
+        os.rename(out_csv, out_csv_rename)
+        os.rename(out_qa_csv, out_qa_csv_rename)
+        os.rename(out_schema, out_schema_rename)
+
+
 def main():
     in_table = arcpy.GetParameterAsText(0)
     out_folder = arcpy.GetParameterAsText(1)
     output_schema = arcpy.GetParameter(2)
-    TableToCSV(in_table, out_folder, output_schema)
+    new_table_name = arcpy.GetParameter(3)
+    TableToCSV(in_table, out_folder, output_schema, new_table_name)
 
 if __name__ == '__main__':
     main()

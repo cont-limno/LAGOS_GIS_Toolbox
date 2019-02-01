@@ -24,7 +24,8 @@ def zonal_attribution_of_raster_data(out_table, is_thematic = False, debug_mode 
         in_value_raster = os.path.join(test_data_gdb, 'NLCD_LandCover_2006')
     else:
         in_value_raster = os.path.join(test_data_gdb, 'Total_Nitrogen_Deposition_2006')
-    lagosGIS.zonal_attribution_of_raster_data(zone_fc, 'ZoneID', in_value_raster,
+    zone_field = arcpy.ListFields(zone_fc, '*zoneid')[0].name
+    lagosGIS.zonal_attribution_of_raster_data(zone_fc, zone_field, in_value_raster,
                                               out_table, is_thematic = is_thematic, debug_mode =  debug_mode)
 # hand-verified to be correct
 # update 2018-05-29, these numbers rely on the old method of using the source raster data grid instead of the

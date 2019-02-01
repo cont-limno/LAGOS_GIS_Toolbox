@@ -121,7 +121,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     cursor = arcpy.da.UpdateCursor(join4, update_fields)
     arcpy.AddMessage("Calculating link status...")
     for row in cursor:
-        id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, midx, comment, review, words, lagosid = row
+        id, name, mid_0, mname_0, stream_id, streamname_0, mid_10, mname_10, mid_100, mname_100, comment, review, words, lagosid = row # add midx back in
 
         if mid_0 is not None: # if the point is directly in a polygon
             if name and mname_0:

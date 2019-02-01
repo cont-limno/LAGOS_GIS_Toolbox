@@ -73,7 +73,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     arcpy.AddMessage("Joining...")
     if state and state.upper() not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
-    arcpy.env.workspace = 'C:/Users/smithn78/Documents/ArcGIS/Default.gdb'
+    arcpy.env.workspace = 'in_memory'
     out_short = os.path.splitext(os.path.basename(out_fc))[0]
     join1 = '{}_1'.format(out_short)
     join2 = '{}_2'.format(out_short)

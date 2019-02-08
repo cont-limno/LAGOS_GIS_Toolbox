@@ -9,6 +9,7 @@ import lagosGIS
 MASTER_LAKES_FC = 'NHDWaterbody_LAGOS'
 MASTER_LAKES_LINES = 'NHDWaterbody_LAGOS_Line'
 MASTER_STREAMS_FC = 'NHDArea_LAGOS'
+MASTER_XWALK = 'LAGOS_Lake_Link_v1_legacy_only'
 
 # Can change but probably don't need to
 MASTER_LAKE_ID = 'lagoslakeid'
@@ -19,6 +20,7 @@ MASTER_STATE_NAME = 'STATE'
 STATES = ("AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","GU","HI","IA","ID", "IL","IN","KS","KY","LA","MA",
           "MD","ME","MH","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","NY", "OH","OK","OR","PA","PR",
           "PW","RI","SC","SD","TN","TX","UT","VA","VI","VT","WA","WI","WV","WY")
+LAGOSNE_STATES = ("CT","IA","IL","IN","MA","ME","MI","MN","MO","NH","NJ","NY", "OH","PA","RI","VT","WI")
 CRS_DICT = {'NAD83':4269,
             'WGS84':4326,
             'NAD27':4267,
@@ -66,10 +68,12 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     master_lakes_fc = os.path.join(master_gdb, MASTER_LAKES_FC)
     master_lakes_lines = os.path.join(master_gdb, MASTER_LAKES_LINES)
     master_streams_fc = os.path.join(master_gdb, MASTER_STREAMS_FC)
+    master_xwalk = os.path.join(master_gdb, MASTER_XWALK)
 
     # setup
     arcpy.AddMessage("Joining...")
-    if state and state.upper() not in STATES:
+    state = state.upper()
+    if state not in STATES:
         raise ValueError('Use the 2-letter state code abbreviation')
     arcpy.env.workspace = 'in_memory'
     out_short = os.path.splitext(os.path.basename(out_fc))[0]
@@ -79,7 +83,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     join3_select = join3 + '_select'
     join4 = '{}_4'.format(out_short)
     join5 = '{}_5'.format(out_short)
-    freq = 'frequency_of_lake_id'
+    joinx = '{}_x'.format(out_short)
 
     county_name_results = arcpy.ListFields(lake_points_fc, '{}*'.format(lake_county_field))[0].name
     if lake_county_field and not lake_county_field in county_name_results:
@@ -88,17 +92,23 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
 
     point_fields = [f.name for f in arcpy.ListFields(lake_points_fc)]
 
-    # If identifier matches a LAGOS lake in the crosswalk, then do these steps
-    # TODO: Finish the crosswalk so you can use this step
+    # update the lake id to a text field if not already
+    lake_id_field_type = arcpy.ListFields(lake_points_fc, lake_id_field)[0].type
+    if lake_id_field_type != 'String':
+        temp_id_field = '{}_t'.format(lake_id_field)
+        arcpy.AddField_management(lake_points_fc, '{}_t'.format(lake_id_field), 'TEXT', '255')
+        expr = '!{}!'.format(lake_id_field)
+        arcpy.CalculateField_management(lake_points_fc, temp_id_field, expr, 'PYTHON')
+        arcpy.DeleteField_management(lake_points_fc, lake_id_field)
+        arcpy.AlterField_management(lake_points_fc, temp_id_field, new_field_name = lake_id_field)
+
+
 
     # Try to make some spatial connections and fulfill some logic to assign a link
     join1 = AN.SpatialJoin(lake_points_fc, master_lakes_fc, join1, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
     join2 = AN.SpatialJoin(join1, master_streams_fc, join2, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT')
     join3 = AN.SpatialJoin(join2, master_lakes_fc, join3, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius = '10 meters')
     join4 = AN.SpatialJoin(join3, master_lakes_fc, join4, 'JOIN_ONE_TO_MANY', 'KEEP_ALL', match_option = 'INTERSECT', search_radius =  '100 meters')
-
-    # TODO: Add back frequency thing
-    # freq = AN.Frequency(join4, freq, lake_id_field)
 
     # setup for editing lake assignment values
     DM.AddField(join4, 'Auto_Comment', 'TEXT', field_length = 100)
@@ -107,6 +117,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     DM.AddField(join4, 'Linked_lagoslakeid', 'LONG')
     DM.AddField(join4, 'GEO_Discovered_Name', 'TEXT', field_length = 255)
     DM.AddField(join4, 'Duplicate_Candidate', 'TEXT', field_length = 1)
+    DM.AddField(join4, 'Is_Legacy_Link', 'TEXT', field_length = 1)
 
     update_fields = [lake_id_field, lake_name_field,  MASTER_LAKE_ID, MASTER_GNIS_NAME, # 0m match
                      'PERMANENT_IDENTIFIER_1', 'GNIS_NAME_1', # stream match
@@ -114,7 +125,6 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
                      MASTER_LAKE_ID + '_12', MASTER_GNIS_NAME + '_12_13', # 100m match
                      'Auto_Comment', 'Manual_Review', 'Shared_Words',
                      'Linked_lagoslakeid']
-    all_fields = [f.name for f  in arcpy.ListFields(join4)]
 
     # use a cursor to go through each point and evaluate its assignment
     cursor = arcpy.da.UpdateCursor(join4, update_fields)
@@ -225,7 +235,40 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     # else:
     #     join5 = join4
     #
-    # # Undo the next line if you ever bring this chunk back.
+
+
+    if state in LAGOSNE_STATES:
+        DM.JoinField(join4, lake_id_field, master_xwalk, 'lagosne_legacyid',
+                     ['lagoslakeid', 'lagos_lakename', 'lagos_state'])
+        update_fields = [lake_id_field, lake_name_field,
+                         MASTER_LAKE_ID + '_12_13', 'lagos_lakename', 'lagos_state', # crosswalk match
+                         'Auto_Comment', 'Manual_Review', 'Shared_Words',
+                         'Linked_lagoslakeid', 'Is_Legacy_Link']
+
+        with arcpy.da.UpdateCursor(join4, update_fields) as uCursor:
+            for uRow in uCursor:
+                id, name, mid_x, mname_x, state_x, comment, review, words, lagosid, legacy_flag = uRow
+                # fields are populated already from links above. Revise only if legacy links
+                if mid_x is not None:
+                    if state == state_x:
+                        legacy_flag = 'Y' # set to Y regardless of whether using legacy comment if state matches
+                    if comment != 'Exact location link':
+                        review = 1
+                        if state != state_x:
+                            review = 3 # downgrade if states mismatch--border lakes OK, random common IDs NOT. Check.
+                        legacy_flag = 'Y'
+                        comment = 'LAGOS-NE legacy link' # only comment non-exact location matches
+                        lagosid = mid_x
+                        if name and mname_x:
+                            words = lagosGIS.list_shared_words(name, mname_x) # update words only if legacy comment
+
+                new_row = id, name, mid_x, mname_x, state_x, comment, review, words, lagosid, legacy_flag
+                uCursor.updateRow(new_row)
+
+
+
+
+        # # Undo the next line if you ever bring this chunk back.
     join5 = join4
 
     # then re-code the no matches as a 3 and copy comments to the editable field
@@ -243,14 +286,16 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     # Re-code points more than 100m into the polygon of the lake as no need to check
     DM.MakeFeatureLayer(join5, 'join5_lyr')
     DM.MakeFeatureLayer(master_lakes_lines, 'lake_lines_lyr')
-    DM.SelectLayerByLocation('join5_lyr', 'INTERSECT', 'lake_lines_lyr', '100 meters', 'NEW_SELECTION', 'INVERT')
-    DM.SelectLayerByAttribute('join5_lyr', 'REMOVE_FROM_SELECTION', "Auto_Comment LIKE 'Not linked%'")
+    DM.SelectLayerByAttribute('join5_lyr', 'NEW_SELECTION', "Auto_Comment = 'Exact location link'")
+    DM.SelectLayerByLocation('join5_lyr', 'INTERSECT', 'lake_lines_lyr', '100 meters', 'SUBSET_SELECTION', 'INVERT')
     DM.CalculateField('join5_lyr', 'Manual_Review', '-2', 'PYTHON')
     DM.Delete('join5_lyr', 'lake_lines_lyr')
 
     # Then make sure to only keep the fields necessary when you write to an output
     copy_fields = point_fields + ['Linked_lagoslakeid', 'Auto_Comment', 'Manual_Review',
-                                  'Shared_Words', 'Comment', 'Duplicate_Candidate', 'GEO_Discovered_Name']
+                                  'Is_Legacy_Link',
+                                  'Shared_Words', 'Comment', 'Duplicate_Candidate',
+                                  'GEO_Discovered_Name']
     copy_fields.remove('Shape')
     copy_fields.remove('OBJECTID')
 

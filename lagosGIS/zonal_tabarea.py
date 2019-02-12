@@ -24,22 +24,17 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
 
         value_field_names = [f.name for f in value_fields]
         cursor_fields = ['AREA'] + value_field_names + pct_fields + ha_fields
-        print cursor_fields
         uCursor = arcpy.da.UpdateCursor(t, cursor_fields)
         for uRow in uCursor:
             # unpacks area + 3 tuples of the right fields for each, no matter how many there are
             vf_i_end = len(value_field_names)+1
-            pf_i_end = vf_i_end + len(pct_fields)+1
-            hf_i_end = pf_i_end + len(ha_fields)+1
-            print uRow
-            print vf_i_end
-            print pf_i_end
-            print hf_i_end
+            pf_i_end = vf_i_end + len(pct_fields)
+
             # pct_values and ha_values are both null at this point but unpack for clarity
-            area, value_values, pct_values, ha_values = uRow[0], uRow[1:vf_i_end], uRow[vf_i_end:pf_i_end], uRow[pf_i_end:hf_i_end]
+            area, value_values, pct_values, ha_values = uRow[0], uRow[1:vf_i_end], uRow[vf_i_end:pf_i_end], uRow[pf_i_end:]
             new_pct_values = [100*vv/area for vv in value_values]
             new_ha_values = [vv/10000 for vv in value_values] # convert square m to ha
-            new_row = (area, value_values, new_pct_values, new_ha_values)
+            new_row = [area] + value_values + new_pct_values + new_ha_values
             uCursor.updateRow(new_row)
 
         for vf in value_field_names:
@@ -96,8 +91,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
         # replaces join to Zonal Stats in previous versions of tool
         # no joining, just calculate the area/count from what's produced by TabulateArea
-        arcpy.AddField_management(temp_entire_table, 'AREA', 'LONG')
-        arcpy.AddField_management(temp_entire_table, 'COUNT', 'LONG')
+        arcpy.AddField_management(temp_entire_table, 'AREA', 'DOUBLE')
+        arcpy.AddField_management(temp_entire_table, 'COUNT', 'DOUBLE')
 
         cursor_fields = ['AREA', 'COUNT']
         value_fields = [f.name for f in arcpy.ListFields(temp_entire_table, 'VALUE*')]
@@ -106,7 +101,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
             for uRow in uCursor:
                 area, count, value_fields = uRow[0], uRow[1], uRow[2:]
                 area = sum(value_fields)
-                count = area/(CELL_SIZE*CELL_SIZE)
+                count = round(area/(CELL_SIZE*CELL_SIZE), 0)
                 new_row = [area, count] + value_fields
                 uCursor.updateRow(new_row)
 
@@ -136,15 +131,16 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     keep_fields = [f.name for f in arcpy.ListFields(temp_entire_table)]
     if zone_field.upper() in keep_fields:
         keep_fields.remove(zone_field.upper())
+        zone_field = zone_field.upper()
     if zone_field in keep_fields:
         keep_fields.remove(zone_field)
 
     # not needed as long we are working only with rasters
     # in order to add vector capabilities back, need to do something with this
     # right now we just can't fill in polygon zones that didn't convert to raster in our system
-    cu.one_in_one_out('zones_VAT', keep_fields, zone_fc, zone_field, out_table)
+    cu.one_in_one_out(temp_entire_table, keep_fields, zone_fc, zone_field, out_table)
 
-    # Convert missing "DataCoverage_pct" values to 100
+    # Convert "DataCoverage_pct" values to 0 for zones with no metrics calculated
     codeblock = """def convert_pct(arg1):
         if arg1 is None:
             return float(0)
@@ -153,7 +149,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     arcpy.CalculateField_management(out_table, 'DataCoverage_pct', 'convert_pct(!DataCoverage_pct!)', 'PYTHON_9.3', codeblock)
 
     # count whether all zones got an output record or not)
-    out_count = int(arcpy.GetCount_management('temp_entire_table').getOutput(0))
+    out_count = int(arcpy.GetCount_management(temp_entire_table).getOutput(0))
     in_count = int(arcpy.GetCount_management(zone_fc).getOutput(0))
     count_diff = in_count - out_count
 

@@ -102,8 +102,9 @@ def one_in_one_out(tool_table, calculated_fields, zone_fc, zone_field, output_ta
     #             continue
 
     # replaces old method, and is faster
-    zone_field_vals = [row[0] for row in arcpy.da.SearchCursor(zone_fc)]
-    editable_fields = [f.name for f in arcpy.ListFields(tool_table) if f.editable].remove(zone_field)
+    zone_field_vals = [row[0] for row in arcpy.da.SearchCursor(zone_fc, zone_field)]
+    editable_fields = [f.name for f in arcpy.ListFields(tool_table) if f.editable]
+    editable_fields.remove(zone_field)
     with arcpy.da.UpdateCursor(tool_table, [zone_field] + editable_fields) as uCursor:
         for row in uCursor:
             zone_value = row[0]
@@ -113,7 +114,7 @@ def one_in_one_out(tool_table, calculated_fields, zone_fc, zone_field, output_ta
         for val in zone_field_vals:
             new_row = val + [None]*len(editable_fields)
             uCursor.updateRow(new_row)
-    output_table = tool_table
+    output_table = arcpy.CopyRows_management(tool_table, output_table)
     return output_table
 
 

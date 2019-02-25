@@ -43,4 +43,8 @@ def lakes_in_zones(out_table):
     polygons_fc = os.path.join(TEST_DATA_GDB, 'Lakes_1ha')
     lagosGIS.lakes_in_zones(zone_fc, 'ZoneID', polygons_fc, out_table)
 
-def aggregate_watersheds_OLD(out_fc):
+def interlake_watersheds_old(out_fc):
+    watersheds = os.path.join(TEST_DATA_GDB, 'Local_Catchments_Original_Methods')
+    nhd_gdb = TEST_DATA_GDB
+    eligible_lakes = os.path.join(TEST_DATA_GDB, 'eligible_lakes')
+    lagosGIS.aggregate_watersheds(watersheds, nhd_gdb, eligible_lakes, out_fc, mode = 'interlake')

@@ -85,7 +85,6 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, eligible_lakes,
             arcpy.Dissolve_management("watersheds", "this_watershed")
             arcpy.AddField_management("this_watershed", 'Permanent_Identifier', 'TEXT', field_length = 255)
             arcpy.CalculateField_management("this_watershed", "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
-            dissolve_fields = arcpy.ListFields('this_watershed')
             arcpy.Erase_analysis('this_watershed', 'this_lake',
                                 'lakeless_watershed')
 
@@ -95,7 +94,7 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, eligible_lakes,
                 cu.lengthen_field("output_fc", 'Permanent_Identifier', 255)
             else:
                 arcpy.Append_management('lakeless_watershed', "output_fc", 'NO_TEST')
-            for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream', 'lakeless_watershed']:
+            for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream', 'lakeless_watershed', 'other_tenha_junctions']:
                 try:
                     arcpy.Delete_management(item)
                 except:

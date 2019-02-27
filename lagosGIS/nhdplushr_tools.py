@@ -51,10 +51,6 @@ def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
 
     return nhd_cat_copy
 
-def trace_one_watershed(lake_id, has_junctions = True):
-    pass
-
-
 def merge_lake_catchments(nhdplus_gdb, output_catchments_fc):
     arcpy.env.workspace = 'in_memory'
     catchments_assigned = assign_catchments_to_lakes(nhdplus_gdb, 'catchments_assigned')
@@ -110,12 +106,64 @@ def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['int
     prog_count = int(DM.GetCount(eligible_lakes_fc).getOutput(0))
     counter = 0
 
-    # skip lakes that have no junctions whatsoever
+    # classify lakes as having junctions or not, so the loop can skip non-network ones quickly
     eligible_lakes_copy = DM.CopyFeatures(eligible_lakes_fc, 'eligible_lakes_copy')
     DM.AddField(eligible_lakes_copy, 'Has_Junctions', 'TEXT', field_length = 1)
     lakes_layer = DM.MakeFeatureLayer(eligible_lakes_copy)
     DM.SelectLayerByLocation(lakes_layer, 'INTERSECT', hydro_net_junctions, search_distance = '1 Meters')
     DM.CalculateField(lakes_layer, 'Has_Junctions', "'Y'", 'PYTHON')
+
+    # define the network trace function (inside the parent function because so many layers referenced)
+    def trace_a_network(id, has_junctions = True):
+        where_clause = """"{0}" = '{1}'""".format("Permanent_Identifier", id)
+        this_lake = DM.MakeFeatureLayer(eligible_lakes_copy, "this_lake",
+                                        where_clause)
+        if not has_junctions:
+            where_clause2 = """"{0}" = '{1}'""".format(watersheds_permid_field, id)
+            DM.SelectLayerByAttribute(watersheds, where_clause=where_clause2)  # sheds = own orig. shed
+        else:
+            DM.SelectLayerByLocation(junctions, "INTERSECT", this_lake, search_distance="1 Meters")  # new selection
+            this_lake_jxns = DM.CopyFeatures(junctions, 'this_lake_jxns')
+            if mode == 'interlake':
+                DM.SelectLayerByLocation('tenha_junctions_lyr', 'ARE_IDENTICAL_TO',
+                                         this_lake_jxns, invert_spatial_relationship='INVERT')
+                DM.CopyFeatures('tenha_junctions_lyr', 'other_tenha_junctions')
+                DM.SelectLayerByLocation('tenha_lakes_lyr', 'INTERSECT', 'other_tenha_junctions',
+                                         search_distance='1 Meters')
+
+                DM.TraceGeometricNetwork(hydro_net, "upstream",
+                                         'this_lake_jxns', "TRACE_UPSTREAM",
+                                         in_barriers='other_tenha_junctions')
+            elif mode == 'cumulative':
+                DM.TraceGeometricNetwork(hydro_net, "upstream",
+                                         'this_lake_jxns', "TRACE_UPSTREAM")
+            DM.SelectLayerByLocation("watersheds", "CONTAINS",
+                                     "upstream/NHDFlowline")
+            DM.SelectLayerByLocation("watersheds", 'CROSSED_BY_THE_OUTLINE_OF',
+                                     'upstream/NHDFLowline', selection_type="ADD_TO_SELECTION")
+            watersheds_count = int(DM.GetCount("watersheds").getOutput(0))
+            if watersheds_count == 0:
+                DM.SelectLayerByLocation('watersheds', 'CONTAINS', 'this_lake')
+
+            # Sometimes when the trace stops at 10-ha lake, selects that shed(s).
+            # Remove sheds intersecting OTHER 10-ha lakes
+            if mode == 'interlake':
+                DM.SelectLayerByLocation("watersheds", "CONTAINS", "tenha_lakes_lyr",
+                                         selection_type="REMOVE_FROM_SELECTION")
+
+        # FOR ALL LAKES: dissolve, erase (each of these tasks must be done one-by-one for each lake)
+        this_watershed = DM.Dissolve("watersheds", "this_watershed")
+        DM.AddField(this_watershed, 'Permanent_Identifier', 'TEXT', field_length=255)
+        DM.CalculateField(this_watershed, "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
+        traced_watershed = arcpy.Erase_analysis(this_watershed, 'this_lake',
+                             'lakeless_watershed')
+        for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream']:
+            try:
+                DM.Delete(item)
+            except:
+                continue
+
+        return traced_watershed
 
     with arcpy.da.SearchCursor(eligible_lakes_copy, ["Permanent_Identifier", "Has_Junctions"]) as cursor:
         for row in cursor:
@@ -123,66 +171,22 @@ def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['int
             if counter % 50 == 0:
                 print("{0} out of {1} lakes completed.".format(counter, prog_count))
             id, has_junctions = row
-            where_clause = """"{0}" = '{1}'""".format("Permanent_Identifier", id)
-            this_lake = DM.MakeFeatureLayer(eligible_lakes_copy, "this_lake",
-                                              where_clause)
-            if not has_junctions:
-                where_clause2 = """"{0}" = '{1}'""".format(watersheds_permid_field, id)
-                DM.SelectLayerByAttribute(watersheds, where_clause = where_clause2) # sheds = own orig. shed
-            else:
-                DM.SelectLayerByLocation(junctions, "INTERSECT", this_lake, search_distance="1 Meters")  # new selection
-                this_lake_jxns = DM.CopyFeatures(junctions, 'this_lake_jxns')
-                if mode == 'interlake':
-                    DM.SelectLayerByLocation('tenha_junctions_lyr', 'ARE_IDENTICAL_TO',
-                                             this_lake_jxns, invert_spatial_relationship = 'INVERT')
-                    DM.CopyFeatures('tenha_junctions_lyr', 'other_tenha_junctions')
-                    DM.SelectLayerByLocation('tenha_lakes_lyr', 'INTERSECT', 'other_tenha_junctions',
-                                                           search_distance='1 Meters')
+            lakeless_watershed = trace_a_network(id, has_junctions)
 
-                    DM.TraceGeometricNetwork(hydro_net, "upstream",
-                                                           'this_lake_jxns', "TRACE_UPSTREAM",
-                                                           in_barriers='other_tenha_junctions')
-                elif mode == 'cumulative':
-                    DM.TraceGeometricNetwork(hydro_net, "upstream",
-                                                           'this_lake_jxns', "TRACE_UPSTREAM")
-                DM.SelectLayerByLocation("watersheds", "CONTAINS",
-                                                       "upstream/NHDFlowline")
-                DM.SelectLayerByLocation("watersheds", 'CROSSED_BY_THE_OUTLINE_OF',
-                                                       'upstream/NHDFLowline', selection_type="ADD_TO_SELECTION")
-                watersheds_count = int(DM.GetCount("watersheds").getOutput(0))
-                if watersheds_count == 0:
-                    DM.SelectLayerByLocation('watersheds', 'CONTAINS', 'this_lake')
-
-                # Sometimes when the trace stops at 10-ha lake, selects that shed(s).
-                # Remove sheds intersecting OTHER 10-ha lakes
-                if mode == 'interlake':
-                    DM.SelectLayerByLocation("watersheds", "CONTAINS", "tenha_lakes_lyr",
-                                                           selection_type="REMOVE_FROM_SELECTION")
-
-            # FOR ALL LAKES: dissolve, erase (each of these tasks must be done one-by-one for each lake)
-            this_watershed = DM.Dissolve("watersheds", "this_watershed")
-            DM.AddField(this_watershed, 'Permanent_Identifier', 'TEXT', field_length=255)
-            DM.CalculateField(this_watershed, "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
-            arcpy.Erase_analysis(this_watershed, 'this_lake',
-                                 'lakeless_watershed')
-
-            if not arcpy.Exists("output_fc"):
-                DM.CopyFeatures('lakeless_watershed', "output_fc")
+            if not arcpy.Exists("merged_fc"):
+                merged_fc = DM.CopyFeatures(lakeless_watershed, 'merged_fc')
                 # to avoid append mismatch due to permanent_identifier
-                cu.lengthen_field("output_fc", 'Permanent_Identifier', 255)
+                DM.AlterField(merged_fc, 'Permanent_Identifier', field_length = 255)
             else:
-                DM.Append('lakeless_watershed', "output_fc", 'NO_TEST')
-            for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream', 'lakeless_watershed']:
-                try:
-                    DM.Delete(item)
-                except:
-                    continue
+                DM.Append(lakeless_watershed, merged_fc, 'NO_TEST')
+            DM.Delete(lakeless_watershed)
 
-    DM.EliminatePolygonPart("output_fc", "output_hole_remove", "AREA", "3.9 Hectares", "0",
+    output_hole_remove = DM.EliminatePolygonPart(merged_fc, "output_hole_remove", "AREA", "3.9 Hectares", "0",
                                           "CONTAINED_ONLY")
-    arcpy.Clip_analysis("output_hole_remove", "hu4", output_fc)
-    DM.Delete('output_fc')
+    output_fc = arcpy.Clip_analysis(output_hole_remove, "hu4", output_fc)
+    DM.Delete(merged_fc)
     arcpy.ResetEnvironments()
+    return output_fc
 
 
 def calculate_waterbody_strahler(nhdplus_gdb, output_table):

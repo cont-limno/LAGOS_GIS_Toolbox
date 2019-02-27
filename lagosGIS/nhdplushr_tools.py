@@ -1,8 +1,8 @@
 import os
 import re
 from arcpy import management as DM
+from arcpy import analysis as AN
 import arcpy
-import csiutils as cu # TODO: eliminate
 
 def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
     # paths
@@ -51,20 +51,32 @@ def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
 
     return nhd_cat_copy
 
+
 def merge_lake_catchments(nhdplus_gdb, output_catchments_fc):
     arcpy.env.workspace = 'in_memory'
+    # nhdwaterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
     catchments_assigned = assign_catchments_to_lakes(nhdplus_gdb, 'catchments_assigned')
 
-    # set NHDPlusID to null if lake ID is populated, so that we can dissolve all lake catchments into one
-    # but keep the distinct flowline segment catchments also
-    with arcpy.da.UpdateCursor(catchments_assigned, ['NHDPlusID', 'Lake_Permanent_Identifier']) as u_cursor:
-        for row in u_cursor:
-            if row[1]:
-                row[0] = None
-            u_cursor.updateRow(row)
+    # dissolve the lake catchments and separate out the stream catchments layer
+    stream_cats = AN.Select(catchments_assigned, 'stream_cats', 'Lake_Permanent_Identifier IS NULL')
+    lake_cats = AN.Select(catchments_assigned, 'lake_cats', 'Lake_Permanent_Identifier IS NOT NULL')
+    dissolved_lake_cats = DM.Dissolve(lake_cats, 'dissolved_lake_cats', ['Lake_Permanent_Identifier'])
+    DM.AddField(dissolved_lake_cats, 'NHDPlusID', 'DOUBLE') # leave as all NULL on purpose
 
-    output_fc = DM.Dissolve(catchments_assigned, output_catchments_fc, 'Lake_Permanent_Identifier')
-    arcpy.Delete_management(catchments_assigned)
+    # # update each lake watershed shape so that it includes the entire lake/cannot extend beyond the lake.
+    # wb_shapes_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhdwaterbody, ['Permanent_Identifier', 'SHAPE@'])}
+    # with arcpy.da.UpdateCursor(dissolved_lake_cats, ['Lake_Permanent_Identifier', 'SHAPE@']) as u_cursor:
+    #     for row in u_cursor:
+    #         id, shape = row
+    #         wb_shape = wb_shapes_dict[id]
+    #         new_shape = shape.union(wb_shape)
+    #         u_cursor.updateRow((id, new_shape))
+    #
+    # # erase all lake catchments from stream catchments so there are no overlaps
+    # output_fc = AN.Update(stream_cats, dissolved_lake_cats, output_catchments_fc)
+    output_fc = DM.Merge([stream_cats, dissolved_lake_cats], output_catchments_fc)
+    DM.AddIndex(output_fc, 'Lake_Permanent_Identifier', 'lake_id_idx')
+    DM.Delete('in_memory')
     return output_fc
 
 def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['interlake', 'network', 'self']):
@@ -141,15 +153,18 @@ def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['int
                                      "upstream/NHDFlowline")
             DM.SelectLayerByLocation("watersheds", 'CROSSED_BY_THE_OUTLINE_OF',
                                      'upstream/NHDFLowline', selection_type="ADD_TO_SELECTION")
-            watersheds_count = int(DM.GetCount("watersheds").getOutput(0))
-            if watersheds_count == 0:
-                DM.SelectLayerByLocation('watersheds', 'CONTAINS', 'this_lake')
 
             # Sometimes when the trace stops at 10-ha lake, selects that shed(s).
             # Remove sheds intersecting OTHER 10-ha lakes
             if mode == 'interlake':
                 DM.SelectLayerByLocation("watersheds", "CONTAINS", "tenha_lakes_lyr",
                                          selection_type="REMOVE_FROM_SELECTION")
+
+            # safeguard against 10-hectare lake removal step above removing aggressively in case of mismatch
+            # and any other event that could have resulted in all portions of the watershed being empty
+            watersheds_count = int(DM.GetCount("watersheds").getOutput(0))
+            if watersheds_count == 0:
+                DM.SelectLayerByLocation('watersheds', 'CONTAINS', 'this_lake')
 
         # FOR ALL LAKES: dissolve, erase (each of these tasks must be done one-by-one for each lake)
         this_watershed = DM.Dissolve("watersheds", "this_watershed")

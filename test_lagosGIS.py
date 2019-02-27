@@ -12,7 +12,9 @@ arcpy.env.overwriteOutput = True
 __all__ = ["lake_connectivity_classification",
            "zonal_attribution_of_raster_data",
            "polygons_in_zones",
-           "lakes_in_zones"]
+           "lakes_in_zones",
+           "interlake_watersheds_old",
+           "interlake_watersheds_new"]
 
 def lake_connectivity_classification(out_feature_class, debug_mode = True):
     lagosGIS.lake_connectivity_classification(TEST_DATA_GDB, out_feature_class, debug_mode)
@@ -43,8 +45,13 @@ def lakes_in_zones(out_table):
     polygons_fc = os.path.join(TEST_DATA_GDB, 'Lakes_1ha')
     lagosGIS.lakes_in_zones(zone_fc, 'ZoneID', polygons_fc, out_table)
 
-def interlake_watersheds_old(out_fc):
+def interlake_watersheds_NE(out_fc):
     watersheds = os.path.join(TEST_DATA_GDB, 'Local_Catchments_Original_Methods')
     nhd_gdb = TEST_DATA_GDB
     eligible_lakes = os.path.join(TEST_DATA_GDB, 'eligible_lakes')
-    lagosGIS.aggregate_watersheds(watersheds, nhd_gdb, eligible_lakes, out_fc, mode = 'interlake')
+    lagosGIS.aggregate_watersheds_NE(watersheds, nhd_gdb, eligible_lakes, out_fc, mode = 'interlake')
+
+def interlake_watersheds_US(out_fc):
+    nhdplus_gdb = TEST_DATA_GDB
+    eligible_lakes = os.path.join(TEST_DATA_GDB, 'eligible_lakes')
+    lagosGIS.aggregate_watersheds_US(nhdplus_gdb, eligible_lakes, out_fc, mode = 'interlake')

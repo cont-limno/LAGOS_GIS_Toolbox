@@ -306,21 +306,23 @@ class NHDPlusNetwork:
                 flowline_id, waterbody_id = row
                 if waterbody_id:
                     self.waterbody_flowline[waterbody_id].append(flowline_id)
+        return self.waterbody_flowline
 
     def set_stop_ids(self, waterbody_stop_ids):
         if not self.waterbody_flowline:
-            raise Exception("Use map_waterbodies_to_flowlines() before you can set stop IDs.")
+            self.map_waterbodies_to_flowlines()
         self.waterbody_stop_ids = waterbody_stop_ids
         flowline_ids_unflat = [self.waterbody_flowline[lake_id] for lake_id in waterbody_stop_ids]
         # flatten before returning
         self.flowline_stop_ids = [id for id_list in flowline_ids_unflat for id in id_list]
 
     def set_start_ids(self, waterbody_start_ids):
+        if not self.waterbody_flowline:
+            self.map_waterbodies_to_flowlines()
         self.waterbody_start_ids = waterbody_start_ids
         flowline_ids_unflat = [self.waterbody_flowline[lake_id] for lake_id in waterbody_start_ids]
         # flatten before returning
         self.flowline_start_ids = [id for id_list in flowline_ids_unflat for id in id_list]
-
 
     def activate_10ha_lake_stops(self):
         self.waterbody_stop_ids = []
@@ -335,27 +337,55 @@ class NHDPlusNetwork:
 
     def trace_up_from_a_flowline(self, flowline_start_id):
         if not self.upstream:
-            raise Exception("Run prepare_upstream() before tracing.")
+            self.prepare_upstream()
         stop_ids_set = set(self.flowline_stop_ids)
+
         # get the next IDs up from the start
         from_ids = self.upstream[flowline_start_id]
         all_from_ids = from_ids[:]
+        all_from_ids.append(flowline_start_id) # include start point in trace
+
         # while there is still network left, iteratively trace up and add on
         while from_ids:
             next_up = [self.upstream[id] for id in from_ids]
+
+            # flatten results
             next_up_flat = list(set([id for id_list in next_up for id in id_list]))
             if stop_ids_set:
                 next_up_flat = [id for id in next_up_flat if id not in stop_ids_set]
-            # flatten results and make the new start
+
+            # seed the new start point
             from_ids = next_up_flat
             all_from_ids.extend(from_ids)
         return all_from_ids
 
+    def trace_up_from_a_waterbody(self, waterbody_start_id):
+        if not self.upstream:
+            self.prepare_upstream()
+        if not self.waterbody_flowline:
+            self.map_waterbodies_to_flowlines()
+        flowline_start_ids = set(self.waterbody_flowline[waterbody_start_id]) # one or more
+        # remove waterbody's own flowlines from stop ids--don't want them to stop themselves
+        self.flowline_stop_ids = [id for id in self.flowline_stop_ids if id not in flowline_start_ids]
 
+        # first identify only the lowest start ids
+        next_up = [self.upstream[id] for id in flowline_start_ids]
+        next_up_flat = {id for id_list in next_up for id in id_list}
+        lowest_flowline_start_ids = flowline_start_ids.difference(next_up_flat) # lakes may have multiple outlets
+        print lowest_flowline_start_ids
 
-    def trace_up_from_starts(self):
-        if self.flowline_start_ids:
-                result = [self.trace_up_from_a_flowline(id) for id in self.flowline_start_ids]
+        # then trace up for all
+        unflat_trace_all = [self.trace_up_from_a_flowline(id) for id in lowest_flowline_start_ids]
+        all_from_ids = list({id for id_list in unflat_trace_all for id in id_list})
+
+        # reset flowline_stop_ids
+        self.flowline_stop_ids = self.flowline_stop_ids.extend(flowline_start_ids)
+        return all_from_ids
+
+    def trace_up_from_waterbody_starts(self):
+        if self.waterbody_start_ids:
+            results = {id:self.trace_up_from_a_waterbody(id) for id in self.waterbody_start_ids}
+            return results
         else:
             raise Exception("Populate start IDs with set_start_ids before calling trace_up_from_starts().")
 

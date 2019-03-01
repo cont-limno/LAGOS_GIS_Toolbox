@@ -338,7 +338,8 @@ class NHDPlusNetwork:
     def trace_up_from_a_flowline(self, flowline_start_id):
         if not self.upstream:
             self.prepare_upstream()
-        stop_ids_set = set(self.flowline_stop_ids)
+        if self.flowline_stop_ids:
+            stop_ids_set = set(self.flowline_stop_ids)
 
         # get the next IDs up from the start
         from_ids = self.upstream[flowline_start_id]
@@ -351,7 +352,7 @@ class NHDPlusNetwork:
 
             # flatten results
             next_up_flat = list(set([id for id_list in next_up for id in id_list]))
-            if stop_ids_set:
+            if self.flowline_stop_ids:
                 next_up_flat = [id for id in next_up_flat if id not in stop_ids_set]
 
             # seed the new start point
@@ -365,21 +366,26 @@ class NHDPlusNetwork:
         if not self.waterbody_flowline:
             self.map_waterbodies_to_flowlines()
         flowline_start_ids = set(self.waterbody_flowline[waterbody_start_id]) # one or more
+
         # remove waterbody's own flowlines from stop ids--don't want them to stop themselves
-        self.flowline_stop_ids = [id for id in self.flowline_stop_ids if id not in flowline_start_ids]
+        if self.flowline_stop_ids:
+            self.flowline_stop_ids = [id for id in self.flowline_stop_ids if id not in flowline_start_ids]
+            reset_stops = True
+        else:
+            reset_stops = False # use in case all stop ids are erased
 
         # first identify only the lowest start ids
         next_up = [self.upstream[id] for id in flowline_start_ids]
         next_up_flat = {id for id_list in next_up for id in id_list}
         lowest_flowline_start_ids = flowline_start_ids.difference(next_up_flat) # lakes may have multiple outlets
-        print lowest_flowline_start_ids
 
         # then trace up for all
         unflat_trace_all = [self.trace_up_from_a_flowline(id) for id in lowest_flowline_start_ids]
         all_from_ids = list({id for id_list in unflat_trace_all for id in id_list})
 
         # reset flowline_stop_ids
-        self.flowline_stop_ids = self.flowline_stop_ids.extend(flowline_start_ids)
+        if reset_stops:
+            self.flowline_stop_ids = self.flowline_stop_ids.extend(flowline_start_ids)
         return all_from_ids
 
     def trace_up_from_waterbody_starts(self):

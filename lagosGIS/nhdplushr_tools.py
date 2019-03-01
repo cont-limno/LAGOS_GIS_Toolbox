@@ -3,6 +3,9 @@ import re
 from arcpy import management as DM
 from arcpy import analysis as AN
 import arcpy
+import lagosGIS
+from datetime import datetime
+from collections import defaultdict
 
 def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
     # paths
@@ -12,17 +15,20 @@ def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
 
     # copy to output and prep
     nhd_cat_copy = DM.CopyFeatures(nhd_cat, output_fc)
-    DM.AddField(nhd_cat_copy, 'Lake_Permanent_Identifier', field_type = 'TEXT', field_length = 40)
+    DM.AddField(nhd_cat_copy, 'Lake_PermID', field_type = 'TEXT', field_length = 40)
+    DM.AddField(nhd_cat_copy, 'Flowline_PermID', field_type = 'TEXT', field_length = 40)
 
     # build dictionaries for the joins
     nhd_flowline_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
+                                                                   ['NHDPlusID', 'Permanent_Identifier'])}
+    nhd_wbarea_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
                                                                    ['NHDPlusID', 'WBArea_Permanent_Identifier'])}
     nhd_wb_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_wb, ['NHDPlusID', 'Permanent_Identifier'])}
     valid_wb_ids = set(nhd_wb_dict.values())
     # some WBArea_... values come from NHDArea polygons, not NHDWaterbody. Filter dictionary for valid only.
-    flowline_wb_dict = {nhdplusid:nhd_flowline_dict[nhdplusid] for nhdplusid, wb_permid in nhd_flowline_dict.items() if wb_permid in valid_wb_ids}
+    flowline_wb_dict = {nhdplusid:nhd_wbarea_dict[nhdplusid] for nhdplusid, wb_permid in nhd_wbarea_dict.items() if wb_permid in valid_wb_ids}
 
-    with arcpy.da.UpdateCursor(nhd_cat_copy, ['NHDPlusID', 'Lake_Permanent_Identifier']) as nhd_cat_copy_cursor:
+    with arcpy.da.UpdateCursor(nhd_cat_copy, ['NHDPlusID', 'Lake_PermID', 'Flowline_PermID']) as nhd_cat_copy_cursor:
 
         # use UpdateCursor to "join" to get waterbody ids
         for u_row in nhd_cat_copy_cursor:
@@ -46,7 +52,7 @@ def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
                 lake_permid = lake_permid_sink
 
             # write the update
-            new_row = (nhdplusid, lake_permid)
+            new_row = (nhdplusid, lake_permid, nhd_flowline_dict[nhdplusid])
             nhd_cat_copy_cursor.updateRow(new_row)
 
     return nhd_cat_copy
@@ -79,49 +85,51 @@ def merge_lake_catchments(nhdplus_gdb, output_catchments_fc):
     DM.Delete('in_memory')
     return output_fc
 
-def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['interlake', 'network', 'self']):
+def aggregate_watersheds(watersheds_fc, nhdplus_gdb, eligible_lakes_fc, output_fc,
+                         mode = ['interlake', 'network', 'self'], watersheds_permid_field = 'Lake_Permanent_Identifier'):
     """Creates a feature class with all the aggregated upstream watersheds for all
     eligible lakes in this subregion."""
-
+    print(str(datetime.now())) #TODO: Remove
     arcpy.env.workspace = 'in_memory'
-
     # names
     huc4_code = re.search('\d{4}', os.path.basename(nhdplus_gdb)).group()
     # for some reason, you actually need to specify the feature dataset here unlike usually
     hydro_net_junctions = os.path.join(nhdplus_gdb, 'Hydrography', 'HYDRO_NET_Junctions')
     hydro_net = os.path.join(nhdplus_gdb, 'Hydrography', 'HYDRO_NET')
-    watersheds_fc = os.path.join(nhdplus_gdb, 'Local_Catchments_Original_Methods') # TODO: Change to NHDCatchment
-    watersheds_permid_field = 'Permanent_Identifier'
 
     # get this hu4
-    wbd_hu4 = os.path.join(nhdplus_gdb, "WBD_HU4")
+    wbd_hu4 = os.path.join(nhdplus_gdb, "WBDHU4")
     field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
     whereClause4 = """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhdplus_gdb, field_name), huc4_code)
     hu4 = arcpy.Select_analysis(wbd_hu4, "hu4", whereClause4)
 
     # make layers for upcoming spatial selections
     # and fcs in memory
-    watersheds_fc = DM.CopyFeatures(watersheds_fc, 'watersheds_fc')
-    eligible_lakes_fc = DM.CopyFeatures(eligible_lakes_fc, 'eligible_lakes_fc')
     junctions = DM.MakeFeatureLayer(hydro_net_junctions, "junctions")
     watersheds = DM.MakeFeatureLayer(watersheds_fc, 'watersheds')
+    eligible_lakes_copy = lagosGIS.select_fields(eligible_lakes_fc, 'in_memory/eligible_lakes_copy',
+                                                 ['Permanent_Identifier', 'AreaSqKm'])
+
+    # intersect eligible_lakes and catchments for this NHD gdb (eligible_lakes can have much larger extent)
+    # any lake id that doesn't intersect/inner join will be DROPPED and will not get a watershed traced
+    cat_permids = set([row[0] for row in arcpy.da.SearchCursor(watersheds_fc, watersheds_permid_field)])
+    with arcpy.da.UpdateCursor(eligible_lakes_copy, ['Permanent_Identifier']) as u_cursor:
+        for row in u_cursor:
+            if row[0] not in cat_permids:
+                u_cursor.deleteRow()
 
     # ten ha lakes and junctions
     if mode == 'interlake':
-        tenha_where_clause = """"AreaSqKm" >= .1"""
-        arcpy.Select_analysis(eligible_lakes_fc, 'tenha_lakes', tenha_where_clause)
+        tenha_where_clause = """"AreaSqKm" >= .1""" # compatible with both LAGOS layer or original NHD
+        arcpy.Select_analysis(eligible_lakes_copy, 'tenha_lakes', tenha_where_clause)
         DM.MakeFeatureLayer('tenha_lakes', 'tenha_lakes_lyr')
         DM.SelectLayerByLocation('junctions', 'INTERSECT', 'tenha_lakes', search_distance="1 Meters")
         DM.CopyFeatures('junctions', 'tenha_junctions')
         DM.MakeFeatureLayer('tenha_junctions', 'tenha_junctions_lyr')
-    # for each lake, calculate its interlake watershed in the upcoming block
-    prog_count = int(DM.GetCount(eligible_lakes_fc).getOutput(0))
-    counter = 0
 
     # classify lakes as having junctions or not, so the loop can skip non-network ones quickly
-    eligible_lakes_copy = DM.CopyFeatures(eligible_lakes_fc, 'eligible_lakes_copy')
     DM.AddField(eligible_lakes_copy, 'Has_Junctions', 'TEXT', field_length = 1)
-    lakes_layer = DM.MakeFeatureLayer(eligible_lakes_copy)
+    lakes_layer = DM.MakeFeatureLayer(eligible_lakes_copy, 'lakes_layer')
     DM.SelectLayerByLocation(lakes_layer, 'INTERSECT', hydro_net_junctions, search_distance = '1 Meters')
     DM.CalculateField(lakes_layer, 'Has_Junctions', "'Y'", 'PYTHON')
 
@@ -167,9 +175,9 @@ def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['int
                 DM.SelectLayerByLocation('watersheds', 'CONTAINS', 'this_lake')
 
         # FOR ALL LAKES: dissolve, erase (each of these tasks must be done one-by-one for each lake)
-        this_watershed = DM.Dissolve("watersheds", "this_watershed")
-        DM.AddField(this_watershed, 'Permanent_Identifier', 'TEXT', field_length=255)
-        DM.CalculateField(this_watershed, "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
+        this_watershed = DM.Dissolve("watersheds", "this_watershed") # watersheds has selection on
+        DM.AddField(this_watershed, watersheds_permid_field, 'TEXT', field_length=255)
+        DM.CalculateField(this_watershed, watersheds_permid_field, """'{}'""".format(id), "PYTHON")
         traced_watershed = arcpy.Erase_analysis(this_watershed, 'this_lake',
                              'lakeless_watershed')
         for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream']:
@@ -180,25 +188,34 @@ def aggregate_watersheds(nhdplus_gdb, eligible_lakes_fc, output_fc, mode = ['int
 
         return traced_watershed
 
+    print(str(datetime.now())) #TODO: Remove
+    # for each lake, calculate its interlake watershed in the upcoming block
+    prog_count = int(DM.GetCount(eligible_lakes_copy).getOutput(0))
+    counter = 0
     with arcpy.da.SearchCursor(eligible_lakes_copy, ["Permanent_Identifier", "Has_Junctions"]) as cursor:
         for row in cursor:
             counter += 1
-            if counter % 50 == 0:
+            print(counter)# TODO: Remove
+
+            if counter % 100 == 0:
                 print("{0} out of {1} lakes completed.".format(counter, prog_count))
+
             id, has_junctions = row
+            print(id) # TODO: Remove
+            print(str(datetime.now()))  # TODO: Remove
             lakeless_watershed = trace_a_network(id, has_junctions)
 
             if not arcpy.Exists("merged_fc"):
                 merged_fc = DM.CopyFeatures(lakeless_watershed, 'merged_fc')
                 # to avoid append mismatch due to permanent_identifier
-                DM.AlterField(merged_fc, 'Permanent_Identifier', field_length = 255)
+                DM.AlterField(merged_fc, watersheds_permid_field, field_length = 255)
             else:
                 DM.Append(lakeless_watershed, merged_fc, 'NO_TEST')
             DM.Delete(lakeless_watershed)
 
     output_hole_remove = DM.EliminatePolygonPart(merged_fc, "output_hole_remove", "AREA", "3.9 Hectares", "0",
                                           "CONTAINED_ONLY")
-    output_fc = arcpy.Clip_analysis(output_hole_remove, "hu4", output_fc)
+    output_fc = arcpy.Clip_analysis(output_hole_remove, hu4, output_fc)
     DM.Delete(merged_fc)
     arcpy.ResetEnvironments()
     return output_fc
@@ -252,4 +269,124 @@ def calculate_waterbody_strahler(nhdplus_gdb, output_table):
     del out_rows
 
 
+class NHDPlusNetwork:
+    def __init__(self, nhdplus_gdb):
+        self.gdb = nhdplus_gdb
+        self.waterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
+        self.flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
+        self.flow = os.path.join(nhdplus_gdb, 'NHDPlusFlow')
+        self.waterbody_start_ids = []
+        self.flowline_start_ids = []
+        self.flowline_stop_ids = []
+        self.waterbody_stop_ids = []
+        self.upstream = defaultdict(list)
+        self.flowline_waterbody = defaultdict(list)
+        self.waterbody_flowline = defaultdict(list)
 
+    def prepare_upstream(self):
+        """Read the file GDB flow table and collapse into a flow dictionary."""
+        with arcpy.da.SearchCursor(self.flow, ['FromPermID', 'ToPermID']) as cursor:
+            for row in cursor:
+                from_id, to_id = row
+                if from_id == '0':
+                    self.upstream[to_id] = []
+                else:
+                    self.upstream[to_id].append(from_id)
+
+    def map_flowlines_to_waterbodies(self):
+        with arcpy.da.SearchCursor(self.flowline, ['Permanent_Identifier', 'WBArea_Permanent_Identifier']) as cursor:
+            for row in cursor:
+                flowline_id, waterbody_id = row
+                if waterbody_id:
+                    self.flowline_waterbody[flowline_id].append(waterbody_id)
+
+    def map_waterbodies_to_flowlines(self):
+        with arcpy.da.SearchCursor(self.flowline, ['Permanent_Identifier', 'WBArea_Permanent_Identifier']) as cursor:
+            for row in cursor:
+                flowline_id, waterbody_id = row
+                if waterbody_id:
+                    self.waterbody_flowline[waterbody_id].append(flowline_id)
+
+    def set_stop_ids(self, waterbody_stop_ids):
+        if not self.waterbody_flowline:
+            raise Exception("Use map_waterbodies_to_flowlines() before you can set stop IDs.")
+        self.waterbody_stop_ids = waterbody_stop_ids
+        flowline_ids_unflat = [self.waterbody_flowline[lake_id] for lake_id in waterbody_stop_ids]
+        # flatten before returning
+        self.flowline_stop_ids = [id for id_list in flowline_ids_unflat for id in id_list]
+
+    def set_start_ids(self, waterbody_start_ids):
+        self.waterbody_start_ids = waterbody_start_ids
+        flowline_ids_unflat = [self.waterbody_flowline[lake_id] for lake_id in waterbody_start_ids]
+        # flatten before returning
+        self.flowline_start_ids = [id for id_list in flowline_ids_unflat for id in id_list]
+
+
+    def activate_10ha_lake_stops(self):
+        self.waterbody_stop_ids = []
+        lagos_fcode_list = lagosGIS.LAGOS_FCODE_LIST
+        with arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'AreaSqKm', 'FCode']) as cursor:
+            for row in cursor:
+                id, area, fcode = row
+                if area >= 0.1 and fcode in lagos_fcode_list:
+                    self.waterbody_stop_ids.append(id)
+        # and set the flowlines too
+        self.set_stop_ids(self.waterbody_stop_ids)
+
+    def trace_up_from_a_flowline(self, flowline_start_id):
+        if not self.upstream:
+            raise Exception("Run prepare_upstream() before tracing.")
+        stop_ids_set = set(self.flowline_stop_ids)
+        # get the next IDs up from the start
+        from_ids = self.upstream[flowline_start_id]
+        all_from_ids = from_ids[:]
+        # while there is still network left, iteratively trace up and add on
+        while from_ids:
+            next_up = [self.upstream[id] for id in from_ids]
+            next_up_flat = list(set([id for id_list in next_up for id in id_list]))
+            if stop_ids_set:
+                next_up_flat = [id for id in next_up_flat if id not in stop_ids_set]
+            # flatten results and make the new start
+            from_ids = next_up_flat
+            all_from_ids.extend(from_ids)
+        return all_from_ids
+
+
+
+    def trace_up_from_starts(self):
+        if self.flowline_start_ids:
+                result = [self.trace_up_from_a_flowline(id) for id in self.flowline_start_ids]
+        else:
+            raise Exception("Populate start IDs with set_start_ids before calling trace_up_from_starts().")
+
+
+
+
+
+
+# def calc_upstream_dict(flow_table):
+#     """Read the file GDB flow table and collapse into a flow dictionary."""
+#     upstream = defaultdict(list)
+#     with arcpy.da.SearchCursor(flow_table, ['FromPermID', 'ToPermID']) as cursor:
+#         for row in cursor:
+#             from_id, to_id = row
+#             if from_id == '0':
+#                 upstream[to_id] = []
+#             else:
+#                 upstream[to_id].append(from_id)
+#     return upstream
+#
+#
+# def trace_up_from_flowline(upstream_dict, flowline_to_id, filter_id_list):
+#     """Trace upstream from a Permanent_Identifier, returning only the upstream IDs in the filter list (such as a list
+#     of eligible lake IDs) if one is provided."""
+#     filter_id_set = set(filter_id_list)
+#     from_ids = upstream_dict[flowline_to_id]
+#     new_from_ids = from_ids[:]
+#     while from_ids:
+#         next_up = [upstream_dict[id] for id in from_ids]
+#         from_ids = list(set([id for id_list in next_up for id in id_list]))
+#         new_from_ids.extend(from_ids)
+#     if filter_id_set:
+#         new_from_ids = [id for id in new_from_ids if id in filter_id_set]
+#     return new_from_ids

@@ -274,7 +274,12 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     # then re-code the no matches as a 3 and copy comments to the editable field
     # compress the joined lake ids into one field
     # having two fields lets us keep track of how many of the auto matches are bad
-    DM.AddField(join5, 'Comment', 'TEXT', field_length=100)
+    if arcpy.ListFields(join5, 'Comment'):
+        comment_field_name = 'Comment_LAGOS'
+    else:
+        comment_field_Name = 'Comment'
+
+    DM.AddField(join5, comment_field_name, 'TEXT', field_length=100)
     with arcpy.da.UpdateCursor(join5, ['Manual_Review', 'Auto_Comment', 'Comment']) as cursor:
         for flag, ac, comment in cursor:
             if flag is None:

@@ -277,7 +277,7 @@ def georeference_lakes(lake_points_fc, out_fc, lake_id_field,
     if arcpy.ListFields(join5, 'Comment'):
         comment_field_name = 'Comment_LAGOS'
     else:
-        comment_field_Name = 'Comment'
+        comment_field_name = 'Comment'
 
     DM.AddField(join5, comment_field_name, 'TEXT', field_length=100)
     with arcpy.da.UpdateCursor(join5, ['Manual_Review', 'Auto_Comment', 'Comment']) as cursor:

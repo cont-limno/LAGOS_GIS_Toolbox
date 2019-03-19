@@ -104,6 +104,7 @@ def calculate_waterbody_strahler(nhdplus_gdb, output_table):
     :param output_table: The output table containing lake identifiers and the calculated field "lake_higheststrahler"
 
     :return: ArcGIS Result object for output_table
+
     """
     nhd_wb = os.path.join(nhdplus_gdb, 'NHDWaterbody')
     nhd_flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
@@ -162,6 +163,7 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
     :param nhdplus_waterbody_fc: NHDWaterbody feature class from an NHDPlus HR geodatabase, containing IDs to transfer
     :param eligible_lakes_fc: A lake/waterbody dataset you want to modify by transferring NHDPlusIDs to a new field.
     :return: ArcGIS Result object for eligible_lakes_fc
+
     """
     # add field first time
     if not arcpy.ListFields(eligible_lakes_fc, 'NHDPlusID'):
@@ -193,6 +195,7 @@ def update_grid_codes(nhdplus_gdb, output_table):
     :param output_table: A new table that contains the contents of NHDPlusNHDPlusIDGrideCode,
     plus new rows for waterbodies
     :return: ArcGIS Result object for output_table
+
     """
     # setup
     vpuid = nhdplus_gdb[-16:-12]
@@ -230,6 +233,7 @@ def add_lake_seeds(nhdplus_catseed_raster, gridcode_table, eligible_lakes_fc, ou
     :param str nhdplus_waterbody_fc: (Optional) If NHDPlusID is not already included in eligible_lakes_fc, specify
     an NHDPlus HR NHDWaterbody feature class to transfer NHDPlusID from
     :return: ArcGIS Result object for output_raster
+
     """
     # not much of a test, if the field exists but isn't populated, this tool will run with no IDs populated
     if not arcpy.ListFields(eligible_lakes_fc, 'NHDPlusID'):
@@ -275,6 +279,7 @@ def lagos_watershed(flowdir_raster, catseed_raster, gridcode_table, output_fc):
     :param gridcode_table: Modified NHDPlusID-GridCode mapping table, the result of nhdplustools_hr.update_grid_codes()
     :param output_fc: Output feature class for the watersheds
     :return: ArcGIS Result object for output_fc
+
     """
     # establish environments
     arcpy.CheckOutExtension('Spatial')
@@ -306,21 +311,55 @@ def lagos_watershed(flowdir_raster, catseed_raster, gridcode_table, output_fc):
 
 
 class NHDNetwork:
-    def __init__(self, nhdplus_gdb, plus=True):
-        self.gdb = nhdplus_gdb
-        self.plus = plus
+
+    """
+
+    Class for assessing network connectivity within an NHD HR or NHDPlus HR geodatabase.
+
+    :param str nhdplus_gdb: An NHD or NHDPlus HR geodatabase containing the network information.
+    :param bool is_plus: Whether the geodatabase is NHDPlus (True) or NHD (False).
+
+    Attributes
+    ----------
+    :ivar gdb: NHD or NHDPlus geodatabase assigned to the instance
+    :ivar str flow: Path for NHDPlusFLow or NHDFlow table
+    :ivar str catchmetn: Path for NHDPlusCatchment feature class
+    :ivar str sink: Path for NHDPlusSink feature class
+    :ivar str waterbody: Path for NHDWaterbody feature class
+    :ivar str flowline: Path for NHDFLowline feature class
+    :ivar list waterbody_start_ids: List of Permanent_Identifiers for waterbodies set as network tracing start locations
+    :ivar dict nhdpid_flowline: Dictionary with key = Flowline NHDPlusID, value = Flowline Permanent_Identifier, created
+    from NHDFLowline feature class
+    :ivar dict flowline_waterbody: Dictionary with key = Flowline Permanent_Identifier, value = (associated) waterbody
+    Permanent_Identifier, created from NHDFlowline feature class
+    :ivar dict waterbody_flowline: Dictionary with key = Waterbody Permanent_Identifier, value = list of(associated)
+    flowline Permanent_Identifiers, created from NHDFlowline feature class
+    :ivar dict waterbody_nhdpid: Dictionary with key = Waterbody Permanent_Identifier, value = Waterbody NHDPlusID,
+    created from NHDWaterbody feature class
+    :ivar dict nhdpid_waterbody: Dictionary with key = Waterbody NHDPlusID, value = Waterbody Permanent_Identifier,
+    created from NHDWaterbody feature class
+
+    """
+
+    def __init__(self, nhd_gdb, is_plus=True):
+        self.gdb = nhd_gdb
+        self.plus = is_plus
+
         if self.plus:
             self.from_column = 'FromPermID'
             self.to_column = 'ToPermID'
-            self.flow = os.path.join(nhdplus_gdb, 'NHDPlusFlow')
+            self.flow = os.path.join(self.gdb, 'NHDPlusFlow')
         else:
             self.from_column = 'From_Permanent_Identifier'
             self.to_column = 'To_Permanent_Identifier'
-            self.flow = os.path.join(nhdplus_gdb, 'NHDFlow')
-            self.catchment = os.path.join(nhdplus_gdb, 'NHDPlusCatchment')
-            self.sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
-        self.waterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
-        self.flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
+            self.flow = os.path.join(self.gdb 'NHDFlow')
+            self.catchment = os.path.join(self.gdb, 'NHDPlusCatchment')
+            self.sink = os.path.join(self.gdb, 'NHDPlusSink')
+
+        self.waterbody = os.path.join(self.gdb, 'NHDWaterbody')
+        self.flowline = os.path.join(self.gdb, 'NHDFlowline')
+
+        # empty until used
         self.waterbody_start_ids = []
         self.flowline_start_ids = []
         self.flowline_stop_ids = []
@@ -334,7 +373,7 @@ class NHDNetwork:
 
 
     def prepare_upstream(self):
-        """Read the file GDB flow table and collapse into a flow dictionary."""
+        """Read the geodatabase flow table and collapse into a flow dictionary."""
         with arcpy.da.SearchCursor(self.flow, [self.from_column, self.to_column]) as cursor:
             for row in cursor:
                 from_id, to_id = row
@@ -344,21 +383,25 @@ class NHDNetwork:
                     self.upstream[to_id].append(from_id)
 
     def map_nhdpid_to_flowlines(self):
+        """Construct the nhdpid_flowline identifier mapping dictionary."""
         self.nhdpid_flowline = {r[0]:r[1]
                          for r in arcpy.da.SearchCursor(self.flowline, ['NHDPlusID', 'Permanent_Identifier'])}
 
     def map_waterbody_to_nhdpids(self):
+        """Construct the waterbody_nhdpid and nhdpid_waterbody identifier mapping dictionaries."""
         self.waterbody_nhdpid = {r[0]:r[1]
                          for r in arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'NHDPlusID'])}
         self.nhdpid_waterbody = {v:k for k, v in self.waterbody_nhdpid.items()}
 
     def map_flowlines_to_waterbodies(self):
+        """Construct the flowline_waterbody identifier mapping dictionary."""
         self.flowline_waterbody = {r[0]:r[1]
                                    for r in arcpy.da.SearchCursor(self.flowline,
                                                              ['Permanent_Identifier', 'WBArea_Permanent_Identifier'])
                                                              if r[1]}
 
     def map_waterbodies_to_flowlines(self):
+        """Construct the waterbody_flowline identifier mapping dictionary."""
         with arcpy.da.SearchCursor(self.flowline, ['Permanent_Identifier', 'WBArea_Permanent_Identifier']) as cursor:
             for row in cursor:
                 flowline_id, waterbody_id = row
@@ -366,6 +409,15 @@ class NHDNetwork:
                     self.waterbody_flowline[waterbody_id].append(flowline_id)
 
     def set_stop_ids(self, waterbody_stop_ids):
+        """
+        Activate network elements (waterbody and flowline) to be used as barriers for upstream tracing.
+
+        Flow cannot proceed through barriers, therefore the highest points in the traced network will be below the
+        barrier elements.
+
+        :param list waterbody_stop_ids: List of waterbody Permanent_Identifiers to act as barriers.
+
+        """
         if not self.waterbody_flowline:
             self.map_waterbodies_to_flowlines()
         self.waterbody_stop_ids = waterbody_stop_ids
@@ -374,6 +426,15 @@ class NHDNetwork:
         self.flowline_stop_ids = [id for id_list in flowline_ids_unflat for id in id_list]
 
     def set_start_ids(self, waterbody_start_ids):
+        """
+        Activate network elements (waterbody and flowline) to be used as destinations for flow.
+
+        Tracing proceeds upstream from "start" locations.
+
+        :param list waterbody_start_ids: List of waterbody Permanent_Identifiers to act as trace destinations (or tracing
+        start locations).
+
+        """
         if not self.waterbody_flowline:
             self.map_waterbodies_to_flowlines()
         self.waterbody_start_ids = waterbody_start_ids
@@ -382,6 +443,7 @@ class NHDNetwork:
         self.flowline_start_ids = [id for id_list in flowline_ids_unflat for id in id_list]
 
     def activate_10ha_lake_stops(self):
+        """Activate flow barriers at all lakes (as defined by LAGOS) greater than 10 hectares in size."""
         self.waterbody_stop_ids = []
         lagos_fcode_list = lagosGIS.LAGOS_FCODE_LIST
         with arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'AreaSqKm', 'FCode']) as cursor:
@@ -393,10 +455,23 @@ class NHDNetwork:
         self.set_stop_ids(self.waterbody_stop_ids)
 
     def deactivate_stops(self):
+        """Deactivate all network barriers (flow proceeds unimpeded through entire network)."""
         self.waterbody_stop_ids = []
         self.flowline_stop_ids = []
 
     def trace_up_from_a_flowline(self, flowline_start_id, include_wb_permids = True):
+        """
+        Trace a network upstream of the input flowline and return the traced network identifiers in a list.
+
+        Barriers currently activated on the network will be respected by the trace.
+
+        :param str flowline_start_id: Flowline Permanent_Identifier of flow destination (upstream trace start point).
+        :param bool include_wb_permids: Whether to include waterbody Permanent_Identifiers in the trace. When False,
+        only flowline Permanent_Identifiers will be returned.
+        :return: List of Permanent_Identifier values for flowlines and/or waterbodies in the upstream network trace,
+        which includes the input flow destination
+
+        """
         if not self.upstream:
             self.prepare_upstream()
         if self.flowline_stop_ids:
@@ -427,7 +502,23 @@ class NHDNetwork:
             all_from_ids.extend(wb_permids)
         return all_from_ids
 
-    def trace_up_from_a_waterbody(self, waterbody_start_id, include_wb_permids = True):
+    def trace_up_from_a_waterbody(self, waterbody_start_id):
+        """
+        Trace a network upstream of the input waterbody and return the traced network identifiers in a list.
+
+        The lowest flowline segments within the input waterbody will be identified and used to initiate the trace (in
+        other words, traces will be found upstream of all waterbody outlets.
+
+        Barriers currently activated on the network will be respected by the trace. The input waterbody will not
+        act as a barrier for its own traced network.
+
+        :param waterbody_start_id: Waterbody Permanent_Identifier of flow destination (upstream trace start point).
+        :return: List of Permanent_Identifier values for flowlines and waterbodies in the upstream network trace,
+        which includes the input waterbody
+
+        """
+
+        # set up the network if necessary
         if not self.upstream:
             self.prepare_upstream()
         if not self.waterbody_flowline:
@@ -449,8 +540,8 @@ class NHDNetwork:
         next_up_flat = {id for id_list in next_up for id in id_list}
         lowest_flowline_start_ids = flowline_start_ids.difference(next_up_flat)  # lakes may have multiple outlets
 
-        # then trace up for all
-        unflat_trace_all = [self.trace_up_from_a_flowline(id, include_wb_permids) for id in lowest_flowline_start_ids]
+        # then trace up for all and flatten result
+        unflat_trace_all = [self.trace_up_from_a_flowline(id, True) for id in lowest_flowline_start_ids]
         all_from_ids = list({id for id_list in unflat_trace_all for id in id_list})
 
         # reset flowline_stop_ids
@@ -461,6 +552,16 @@ class NHDNetwork:
         return all_from_ids
 
     def trace_up_from_waterbody_starts(self):
+        """
+        Trace up from all waterbody start locations currently set on the NHDNetwork instance.
+
+        Barriers currently activated on the network will be respected by the trace. The input waterbodies will not
+        act as a barrier for their own traced networks, but will act as barriers for other traces.
+
+        :return Dictionary of traces with key = waterbody Permanent_Identifier, value = list of waterbody and flowline
+        Permanent_Identifiers in the traced network.
+        :rtype dict
+        """
         if self.waterbody_start_ids:
             results = {id: self.trace_up_from_a_waterbody(id) for id in self.waterbody_start_ids}
             return results

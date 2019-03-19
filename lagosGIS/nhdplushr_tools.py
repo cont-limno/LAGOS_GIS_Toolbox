@@ -95,6 +95,16 @@ def merge_lake_catchments(nhdplus_gdb, output_catchments_fc):
 
 
 def calculate_waterbody_strahler(nhdplus_gdb, output_table):
+    """Output a table with a new field describing the Strahler stream order for each waterbody in the input GDB.
+
+    The waterbody's Strahler order will be defined as the highest Strahler order for an NHDFlowline artificial
+    path associated with that waterbody.
+
+    :param nhdplus_gdb: The NHDPlus HR geodatabase to calculate Strahler values for
+    :param output_table: The output table containing lake identifiers and the calculated field "lake_higheststrahler"
+
+    :return: ArcGIS Result object for output_table
+    """
     nhd_wb = os.path.join(nhdplus_gdb, 'NHDWaterbody')
     nhd_flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
     nhd_vaa = os.path.join(nhdplus_gdb, 'NHDPlusFlowlineVAA')
@@ -115,6 +125,7 @@ def calculate_waterbody_strahler(nhdplus_gdb, output_table):
     DM.AddField(output_table, 'Lake_Permanent_Identifier', 'TEXT', field_length=40)
     DM.AddField(output_table, 'NHDPlusID', 'DOUBLE')
     DM.AddField(output_table, 'lake_higheststrahler', 'SHORT')
+    # TODO: Eliminate lowest strahler order field, unnecessary
     DM.AddField(output_table, 'lake_loweststrahler', 'SHORT')
 
     # set up cursor
@@ -141,8 +152,17 @@ def calculate_waterbody_strahler(nhdplus_gdb, output_table):
 
     del out_rows
 
+    return output_table
+
 
 def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
+    """
+    Transfer waterbody NHDPlusID values from NHDPlus HR geodatabase to another lake/waterbody feature class.
+
+    :param nhdplus_waterbody_fc: NHDWaterbody feature class from an NHDPlus HR geodatabase, containing IDs to transfer
+    :param eligible_lakes_fc: A lake/waterbody dataset you want to modify by transferring NHDPlusIDs to a new field.
+    :return: ArcGIS Result object for eligible_lakes_fc
+    """
     # add field first time
     if not arcpy.ListFields(eligible_lakes_fc, 'NHDPlusID'):
         DM.AddField(eligible_lakes_fc, 'NHDPlusID', 'DOUBLE')
@@ -159,25 +179,58 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
                 nhdpid = wbplus_permid_nhdpid[permid]
             u_cursor.updateRow((permid, nhdpid))
 
+    return eligible_lakes_fc
+
+
 def update_grid_codes(nhdplus_gdb, output_table):
-    """Adds NHDWaterbody features to the existing NHDPlusNHDPlusIDGridCode table and saves the result as a new table.
-    The features added will be slightly more than those that have watersheds created (more inclusive filter)."""
+    """Add NHDWaterbody features to the existing NHDPlusNHDPlusIDGridCode table and save the result as a new table.
+
+    Only lakes over 0.009 sq. km. in area that match the LAGOS lake filter will be added.The features added will be
+    slightly more than those that have watersheds created (more inclusive filter) to allow for inadequate precision
+    found in the AreaSqKm field.
+
+    :param nhdplus_gdb: The NHDPlus HR geodatabase containing the NHDPlusNHDPlusIDGridCode table to be updated
+    :param output_table: A new table that contains the contents of NHDPlusNHDPlusIDGrideCode,
+    plus new rows for waterbodies
+    :return: ArcGIS Result object for output_table
+    """
+    # setup
     vpuid = nhdplus_gdb[-16:-12]
     nhdplus_waterbody_fc = os.path.join(nhdplus_gdb, 'NHDWaterbody')
     nhdpid_grid = os.path.join(nhdplus_gdb, 'NHDPlusNHDPlusIDGridCode')
     eligible_clause = 'AreaSqKm > 0.009 AND FCode IN {}'.format(lagosGIS.LAGOS_FCODE_LIST)
+
+    # get IDs to be added
     nhdpids = [r[0] for r in arcpy.da.SearchCursor(nhdplus_waterbody_fc, ['NHDPlusID'], eligible_clause)]
+
     # start with the next highest grid code
     gridcode = max([r[0] for r in arcpy.da.SearchCursor(nhdpid_grid, 'GridCode')]) + 1
     output_table = DM.CopyRows(nhdpid_grid, output_table)
     i_cursor = arcpy.da.InsertCursor(output_table, ['NHDPlusID', 'SourceFC', 'GridCode', 'VPUID'])
+
+    # insert new rows with new grid codes
     for nhdpid in nhdpids:
         new_row = (nhdpid, 'NHDWaterbody', gridcode, vpuid)
         i_cursor.insertRow(new_row)
         gridcode += 1
     del i_cursor
 
+    return output_table
+
+
 def add_lake_seeds(nhdplus_catseed_raster, gridcode_table, eligible_lakes_fc, output_raster, nhdplus_waterbody_fc = ''):
+    """
+    Modify NHDPlus HR "catseed" raster to include lake-based pour points (seeds) for all lakes in need of watersheds.
+
+    :param str nhdplus_catseed_raster: NHDPlus HR "catseed" TIFF raster for the HU4 needing watersheds created.
+    :param str gridcode_table: NHDPlusID-GridCode mapping table (must contain lake seeds) that is the result of
+    nhdplushr_tools.update_grid_codes()
+    :param str eligible_lakes_fc: Lake feature class containing the lake polygons that will be used as pour points.
+    :param str output_raster: Output pour points/seed raster for use in delineating watersheds.
+    :param str nhdplus_waterbody_fc: (Optional) If NHDPlusID is not already included in eligible_lakes_fc, specify
+    an NHDPlus HR NHDWaterbody feature class to transfer NHDPlusID from
+    :return: ArcGIS Result object for output_raster
+    """
     # not much of a test, if the field exists but isn't populated, this tool will run with no IDs populated
     if not arcpy.ListFields(eligible_lakes_fc, 'NHDPlusID'):
         try:
@@ -215,9 +268,20 @@ def add_lake_seeds(nhdplus_catseed_raster, gridcode_table, eligible_lakes_fc, ou
 
 
 def lagos_watershed(flowdir_raster, catseed_raster, gridcode_table, output_fc):
+    """
+    Delineate watersheds and label them with GridCode, NHDPlusID, SourceFC, and VPUID for the water feature.
+    :param flowdir_raster: NHDPlus HR "fdr" TIFF raster for the HU4 needing watersheds delineated.
+    :param catseed_raster: Pour points raster, the result of nhdplustools_hr.add_lake_seeds()
+    :param gridcode_table: Modified NHDPlusID-GridCode mapping table, the result of nhdplustools_hr.update_grid_codes()
+    :param output_fc: Output feature class for the watersheds
+    :return: ArcGIS Result object for output_fc
+    """
+    # establish environments
     arcpy.CheckOutExtension('Spatial')
     arcpy.env.workspace = 'in_memory'
     arcpy.env.parallelProcessingFactor = '75%'
+
+    # delineate watersheds with ArcGIS Watershed tool, then convert to one polygon per watershed
     arcpy.AddMessage("Delineating watersheds...")
     sheds = arcpy.sa.Watershed(flowdir_raster, catseed_raster, 'Value')
     arcpy.AddMessage("Watersheds complete.")
@@ -225,7 +289,7 @@ def lagos_watershed(flowdir_raster, catseed_raster, gridcode_table, output_fc):
     DM.AlterField(sheds_poly, 'gridcode', 'GridCode', clear_field_alias=True)
     output_fc = DM.Dissolve(sheds_poly, output_fc, 'GridCode')
 
-    # "Join"
+    # "Join" to the other identifiers via GridCode
     gridcode_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(gridcode_table,
                                                                  ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID'])}
     DM.AddField(output_fc, 'NHDPlusID', 'DOUBLE')
@@ -235,6 +299,10 @@ def lagos_watershed(flowdir_raster, catseed_raster, gridcode_table, output_fc):
         for row in u_cursor:
             new_row = (row[0],) + gridcode_dict[row[0]]
             u_cursor.updateRow(new_row)
+
+     # TODO: Add Permanent_Identifier and lagoslakeid so that we can publish these, as-is
+
+    return output_fc
 
 
 class NHDNetwork:
@@ -324,7 +392,7 @@ class NHDNetwork:
         # and set the flowlines too
         self.set_stop_ids(self.waterbody_stop_ids)
 
-    def deactivate_10ha_lake_stops(self):
+    def deactivate_stops(self):
         self.waterbody_stop_ids = []
         self.flowline_stop_ids = []
 
@@ -459,7 +527,7 @@ def aggregate_watersheds(watersheds_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         tenha_start_ids = nhd_network.waterbody_stop_ids
         print "tenha start ids length: {}".format(len(tenha_start_ids))
         nhd_network.set_start_ids(tenha_start_ids)
-        nhd_network.deactivate_10ha_lake_stops()
+        nhd_network.deactivate_stops()
         tenha_traces_no_stops = nhd_network.trace_up_from_waterbody_starts() # with no stops!
         nhd_network.set_start_ids(matching_ids)
         traces_no_stops = nhd_network.trace_up_from_waterbody_starts()
@@ -501,7 +569,8 @@ def aggregate_watersheds(watersheds_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     # 7) Avoid processing
     arcpy.env.overwriteOutput = True
     for lake_id in matching_ids:
-        print(lake_id) # TODO: Remove
+        # TODO: Remove
+        print(lake_id)
         counter +=1
         if counter > 200:
             break

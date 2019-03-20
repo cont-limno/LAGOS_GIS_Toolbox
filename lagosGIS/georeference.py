@@ -24,7 +24,8 @@ LAGOSNE_STATES = ("CT","IA","IL","IN","MA","ME","MI","MN","MO","NH","NJ","NY", "
 CRS_DICT = {'NAD83':4269,
             'WGS84':4326,
             'NAD27':4267,
-            'NAD_1983_StatePlane_Washington_North_FIPS_4601_Feet':102748
+            'NAD_1983_StatePlane_Washington_North_FIPS_4601_Feet':102748,
+            'NAD_1983_HARN_UTM_Zone_15N': 3745,
             }
 
 

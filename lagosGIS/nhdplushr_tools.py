@@ -434,6 +434,18 @@ class NHDNetwork:
                 if waterbody_id:
                     self.waterbody_flowline[waterbody_id].append(flowline_id)
 
+    # in NHDPlus HR, inlets are NOT in this gdb's NHDFlowline (but are in Flow table)
+    def identify_inlets(self):
+        if not self.upstream:
+            self.prepare_upstream()
+        if not self.nhdpid_flowline:
+            self.map_nhdpid_to_flowlines()
+
+        to = set(self.upstream.keys())
+        from_all = {f for from_list in self.upstream.values() for f in from_list}
+        inlets = list(set(from_all).difference(set(to)))
+        return inlets
+
     def set_stop_ids(self, waterbody_stop_ids):
         """
         Activate network elements (waterbody and flowline) to be used as barriers for upstream tracing.

@@ -584,8 +584,11 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
     sinks_to_remove = tuple([r[0] for r in arcpy.da.SearchCursor(sink, ['GridCode'], "PurpCode = 'SC'")])
     arcpy.CheckOutExtension('Spatial')
-    nobadsinks = arcpy.sa.SetNull(combined, combined, 'VALUE in {}'.format(sinks_to_remove))
-    nobadsinks.save(output_raster)
+    if sinks_to_remove:
+        nobadsinks = arcpy.sa.SetNull(combined, combined, 'VALUE in {}'.format(sinks_to_remove))
+        nobadsinks.save(output_raster)
+    else:
+        DM.CopyRaster(combined, output_raster)
     arcpy.CheckInExtension('Spatial')
 
     return output_raster

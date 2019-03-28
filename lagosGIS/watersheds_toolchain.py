@@ -131,7 +131,7 @@ class Paths:
             sp.call(gdal_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
 
 
-def run(huc4, last_tool='network_watersheds', wait = False):
+def run(huc4, last_tool='accumulate', wait = False):
     paths = Paths(huc4)
 
     if last_tool:
@@ -245,13 +245,13 @@ log_file = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds\wat
 for huc4 in run_list:
     p = Paths(huc4)
     try:
-        run(p.huc4, last_tool = 'update_grid_codes')
-        p.log(log_file)
+        last_tool = 'accumulate'
+        run(p.huc4, last_tool)
+        p.log(log_file, '{}: SUCCESS'.format(last_tool))
         p.photograph()
     except Exception as e:
         p.log(log_file, repr(e))
         print(e)
-        raise
         continue
 
 # TODO: Update mosaic feature

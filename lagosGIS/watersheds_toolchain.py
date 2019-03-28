@@ -138,8 +138,7 @@ def run(huc4, last_tool='network_watersheds', wait = False):
         stop_index = TOOL_ORDER.index(last_tool)
     # Check that we have the data, otherwise log only the HUC4 (empty line) and skip
     if not paths.exist():
-        # TODO: Write only the HU4 number to the log file an
-        pass
+        raise Exception("NHDPlus HR paths do not exist on local machine.")
 
     if not path.exists(paths.out_dir):
         os.mkdir(paths.out_dir)

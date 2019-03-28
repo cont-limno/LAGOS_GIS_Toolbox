@@ -52,6 +52,7 @@ def interlake_watersheds_NE(out_fc):
     lagosGIS.aggregate_watersheds_NE(watersheds, nhd_gdb, eligible_lakes, out_fc, mode = 'interlake')
 
 def interlake_watersheds_US(out_fc):
-    nhdplus_gdb = TEST_DATA_GDB
-    eligible_lakes = os.path.join(TEST_DATA_GDB, 'eligible_lakes')
+    # watersheds = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\QAQC\New_Watershed_Methods\Test.gdb\lake_and_flowline_catchments_feb27'
+    nhdplus_gdb = r'D:\Not_ContLimno\NHDPlus HR\NHDPlus_H_0205_GDB.gdb'
+    eligible_lakes = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\LAGOS_US_GIS_Data_v0.5.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
     lagosGIS.aggregate_watersheds_US(nhdplus_gdb, eligible_lakes, out_fc, mode = 'interlake')

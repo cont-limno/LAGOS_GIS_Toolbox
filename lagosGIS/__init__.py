@@ -24,8 +24,9 @@ from lake_from_to import lake_from_to
 from polygons_in_zones import polygons_in_zones
 from lakes_in_zones2 import lakes_in_zones
 from interlake2 import aggregate_watersheds as aggregate_watersheds_NE
-from nhdplushr_tools import aggregate_watersheds as aggregate_watersheds_US
+# from nhdplushr_tools import aggregate_watersheds2 as aggregate_watersheds_US
 
+LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
     fc_count = len(feature_class_or_table_list)
     all_exist_test = all(arcpy.Exists(fct) for fct in feature_class_or_table_list)
@@ -109,7 +110,11 @@ def select_fields(feature_class_or_table, output, field_list, convert_to_table =
     :return: ArcGIS Result object.
     '''
     input_type = arcpy.Describe(feature_class_or_table).dataType
-    out_workspace = os.path.dirname(output)
+    dir_name = os.path.dirname(output)
+    if dir_name:
+        out_workspace = dir_name
+    else:
+        out_workspace = arcpy.env.workspace
     out_basename = os.path.basename(output)
 
     field_mapping = arcpy.FieldMappings()

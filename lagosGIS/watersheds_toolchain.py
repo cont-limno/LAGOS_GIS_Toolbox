@@ -1,11 +1,10 @@
-from datetime import datetime
+from datetime import datetime as dt
 from os import path
 import os
 import subprocess as sp
 from time import sleep
 from zipfile import ZipFile
 import arcpy
-from PIL import Image, ImageEnhance
 import nhdplushr_tools as nt
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'fix_hydrodem', 'fel', 'fdr',
@@ -94,7 +93,7 @@ class Paths:
 
         if not path.exists(self.catseed):
             sevenz_cmd = '{} e {} -o{} catseed.* fdr.* hydrodem* -r'.format(SEVENZ, self.rasters_zip, self.rasters_dir)
-            sz_result = sp.call(sevenz_cmd)
+            sz_result = sp.call(sevenz_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
             if sz_result > 0:
                 print("Problem with 7-zip. Error code {}".format(sz_result.returncode))
 
@@ -129,7 +128,7 @@ class Paths:
             gdal_cmd = 'gdal_translate -a_nodata {} -of JPEG -co worldfile=yes -b 1 -b 1 -b 1 -scale {} {} 0 255 -outsize {}% {}% {} {}'.\
                 format(values[2], values[0], values[1], values[3], values[4], tif, jpg)
             print gdal_cmd
-            sp.call(gdal_cmd, )
+            sp.call(gdal_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
 
 
 def run(huc4, last_tool='network_watersheds', wait = False):
@@ -147,10 +146,10 @@ def run(huc4, last_tool='network_watersheds', wait = False):
     if not path.exists(paths.out_gdb):
         arcpy.CreateFileGDB_management(path.dirname(paths.out_gdb), path.basename(paths.out_gdb))
 
-    start_time = datetime.now()
+    start_time = dt.now()
 
     if not path.exists(paths.catseed) and not path.exists(paths.gdb):
-        arcpy.AddMessage('Unzipping started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Unzipping started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         paths.unzip()
 
     # If the tool output doesn't exist yet, and the job control agrees it should be run, try running.
@@ -159,45 +158,45 @@ def run(huc4, last_tool='network_watersheds', wait = False):
     tool_count = 0
     # add_waterbody_nhdpid
     if not arcpy.Exists(paths.gridcode) and stop_index >= 0:
-        arcpy.AddMessage('Adding NHDPlusIDs to waterbodies started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Adding NHDPlusIDs to waterbodies started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.add_waterbody_nhdpid(paths.waterbody, LAGOS_LAKES)
         tool_count +=1
 
 
     # update_grid_codes
     if not arcpy.Exists(paths.gridcode) and stop_index >= 0:
-        arcpy.AddMessage('Updating grid codes started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Updating grid codes started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.update_grid_codes(paths.gdb, paths.gridcode)
         tool_count += 1
 
     # add_lake_seeds
     if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 1:
-        arcpy.AddMessage('Adding lake seeds started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Adding lake seeds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.add_lake_seeds(paths.catseed, paths.gdb, paths.gridcode, LAGOS_LAKES, paths.lagos_catseed)
         tool_count += 1
 
     # fix_hydrodem
     if not arcpy.Exists(paths.lagos_burn) and stop_index >= 2:
-        arcpy.AddMessage('Fixing hydrodem burn started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Fixing hydrodem burn started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.fix_hydrodem(paths.hydrodem, paths.lagos_catseed, paths.lagos_burn)
         tool_count += 1
 
     # fill
     if not arcpy.Exists(paths.lagos_fel) and stop_index >= 3:
-        pit_start = datetime.now()
+        pit_start = dt.now()
         arcpy.AddMessage(
-            'Pit Remove started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            'Pit Remove started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)
         sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
         tool_count += 1
-        pit_diff = datetime.now() - pit_start
+        pit_diff = dt.now() - pit_start
         arcpy.AddMessage('Pit Remove finished in {} seconds'.format(pit_diff.seconds))
 
 
     # fdr
     if not arcpy.Exists(paths.lagos_fdr) and stop_index >= 4:
         arcpy.CheckOutExtension('Spatial')
-        arcpy.AddMessage('Flow direction started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         flow_dir = arcpy.sa.FlowDirection(paths.lagos_fel)
         # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
         # TODO: For non-hr, clip to HU4 instead
@@ -208,7 +207,7 @@ def run(huc4, last_tool='network_watersheds', wait = False):
 
     # delineate_catchments
     if not arcpy.Exists(paths.local_catchments) and stop_index >= 5:
-        arcpy.AddMessage('Delineating catchments started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.AddMessage('Delineating catchments started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gridcode, paths.local_catchments)
         tool_count += 1
 
@@ -223,11 +222,11 @@ def run(huc4, last_tool='network_watersheds', wait = False):
             while not cat_exists:
                 sleep(10)
         arcpy.AddMessage(
-            'Accumulating watersheds started at {}...'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            'Accumulating watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.sheds_base, 'both')
         tool_count += 1
 
-    time_diff = datetime.now() - start_time
+    time_diff = dt.now() - start_time
     print('Completed {} tools for {} in {} minutes'.format(tool_count, huc4, time_diff.seconds/60))
 
 
@@ -247,10 +246,13 @@ log_file = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds\wat
 for huc4 in run_list:
     p = Paths(huc4)
     try:
-        run(p.huc4, last_tool = 'delineate_watersheds')
+        run(p.huc4, last_tool = 'update_grid_codes')
         p.log(log_file)
+        p.photograph()
     except Exception as e:
         p.log(log_file, repr(e))
+        print(e)
+        raise
         continue
 
 # TODO: Update mosaic feature

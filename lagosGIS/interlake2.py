@@ -2,7 +2,7 @@ import os, re, shutil
 import arcpy
 import csiutils as cu
 
-def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
+def aggregate_watersheds(watersheds_fc, nhd_gdb, eligible_lakes,
                             output_fc, mode = ['interlake', 'cumulative']):
     """Creates a feature class with all the aggregated upstream watersheds for all
     eligible lakes (>4ha and certain FCodes) in this subregion."""
@@ -25,7 +25,7 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
     arcpy.MakeFeatureLayer_management(hydro_net_junctions, "junctions")
     arcpy.MakeFeatureLayer_management(watersheds_fc, 'watersheds')
 
-    all_lakes = os.path.join(pour_dir, 'pourpoints.gdb', 'eligible_lakes')
+    all_lakes = eligible_lakes
     arcpy.MakeFeatureLayer_management(all_lakes, "all_lakes_lyr")
 ##    arcpy.SelectLayerByLocation_management("all_lakes_lyr", "INTERSECT", "hu8")
     arcpy.CopyFeatures_management("all_lakes_lyr", 'eligible_lakes')
@@ -85,7 +85,6 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
             arcpy.Dissolve_management("watersheds", "this_watershed")
             arcpy.AddField_management("this_watershed", 'Permanent_Identifier', 'TEXT', field_length = 255)
             arcpy.CalculateField_management("this_watershed", "Permanent_Identifier", """'{}'""".format(id), "PYTHON")
-            dissolve_fields = arcpy.ListFields('this_watershed')
             arcpy.Erase_analysis('this_watershed', 'this_lake',
                                 'lakeless_watershed')
 
@@ -95,7 +94,7 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, pour_dir,
                 cu.lengthen_field("output_fc", 'Permanent_Identifier', 255)
             else:
                 arcpy.Append_management('lakeless_watershed', "output_fc", 'NO_TEST')
-            for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream', 'lakeless_watershed']:
+            for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream', 'lakeless_watershed', 'other_tenha_junctions']:
                 try:
                     arcpy.Delete_management(item)
                 except:

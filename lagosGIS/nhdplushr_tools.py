@@ -629,6 +629,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     sheds_poly = arcpy.RasterToPolygon_conversion(sheds, 'sheds_poly', 'NO_SIMPLIFY', 'Value')
     DM.AlterField(sheds_poly, 'gridcode', 'GridCode', clear_field_alias=True)
     output_fc = DM.Dissolve(sheds_poly, output_fc, 'GridCode')
+    arcpy.AddMessage("Watersheds converted to vector.")
 
 
     # "Join" to the other identifiers via GridCode
@@ -637,10 +638,8 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     DM.AddField(output_fc, 'NHDPlusID', 'DOUBLE')
     DM.AddField(output_fc, 'SourceFC', 'TEXT', field_length=20)
     DM.AddField(output_fc, 'VPUID', 'TEXT', field_length=8)
-    with arcpy.da.UpdateCursor(output_fc, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID']) as u_cursor:
-        for row in u_cursor:
-            new_row = (row[0],) + gridcode_dict[row[0]]
-            u_cursor.updateRow(new_row)
+    DM.AddField(output_fc, 'Permanent_Identifier', 'TEXT', field_length = 40)
+    DM.AddField(output_fc, 'On_Main_Network', 'TEXT', field_length = 1)
 
     # add permids to watersheds
     nhd_network = NHDNetwork(nhdplus_gdb)
@@ -650,23 +649,23 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         nhd_network.map_waterbody_to_nhdpids()
     on_network = nhd_network.trace_up_from_hu4_outlets()
 
-    DM.AddField(output_fc, 'Permanent_Identifier', 'TEXT', field_length = 40)
-    DM.AddField(output_fc, 'On_Main_Network', 'TEXT', field_length = 1)
-
-    with arcpy.da.UpdateCursor(output_fc, ['NHDPlusID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
+    with arcpy.da.UpdateCursor(output_fc, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
         for row in u_cursor:
-            nhdpid, permid, onmain = row
+            gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
+            nhdpid = gridcode_dict[gridcode][0]
+            sourcefc = gridcode_dict[gridcode][1]
+            vpuid = gridcode_dict[gridcode][2]
+            onmain = 'Y' if permid in on_network else 'N'
+
+            #permids
             if nhdpid in nhd_network.nhdpid_flowline:
                 permid = nhd_network.nhdpid_flowline[nhdpid]
             elif nhdpid in nhd_network.nhdpid_waterbody:
                 permid = nhd_network.nhdpid_waterbody[nhdpid]
             else:
                 permid = None # sinks, no permanent identifiers, can't be traced, which is fine.
-            if permid in on_network:
-                onmain = 'Y'
-            else:
-                onmain = 'N'
-            u_cursor.updateRow((nhdpid, permid, onmain))
+
+            u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
     return output_fc
 
@@ -808,6 +807,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     # 6) Deletions in the loop waste time (1/3 second per loop) and overwriting causes no problems.
     # 7) Avoid processing
     arcpy.env.overwriteOutput = True
+    arcpy.SetLogHistory(False)
     for lake_id in matching_ids:
         # Loop Step 2: Determine if the lake is on the network. If not, skip accumulation.
         trace_permids = traces[lake_id]
@@ -830,28 +830,17 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             # Loop Step 3: If lake has upstream connectivity, dissolve catchments and eliminate holes.
             # Calculate some metrics of the change.
             this_watershed_holes = DM.Dissolve(selected_watersheds, 'this_watershed_holes')  # sheds has selection
-            DM.AddField(this_watershed_holes, 'Permanent_Identifier', 'TEXT', field_length=40)
-            DM.AddField(this_watershed_holes, 'Sink_Count', 'LONG')
-            DM.AddField(this_watershed_holes, 'Sink_Area', 'DOUBLE')
-            DM.AddField(this_watershed_holes, 'Partial_Watershed', 'TEXT', field_length = 1)
 
-            # calculations of the fields just added, area is only a placeholder
-            with arcpy.da.UpdateCursor(this_watershed_holes, ['Permanent_Identifier', 'Sink_Count', 'Sink_Area',
-                                                              'Partial_Watershed', 'SHAPE@']) as u_cursor:
+            # calculate new fields
+            DM.AddField(this_watershed_holes, 'Permanent_Identifier', 'TEXT', field_length=40)
+            DM.AddField(this_watershed_holes, 'includeshu4inlet', 'TEXT', field_length=1)
+            with arcpy.da.UpdateCursor(this_watershed_holes, ['Permanent_Identifier', 'includeshu4inlet']) as u_cursor:
                 for row in u_cursor:
-                    permid, count, sink_area, partial, shape = row
-                    permid = lake_id
-                    count = shape.boundary().partCount - shape.partCount
                     # if inlets are in the trace, the watershed is only partial
-                    if partial_test[this_lake_id]:
-                        partial = 'Y'
-                    else:
-                        partial = 'N'
-                    sink_area = shape.area # temp value, will subtract later
-                    u_cursor.updateRow((permid, count, sink_area, partial, shape))
+                    partial = 'Y' if partial_test[lake_id] else 'N'
+                    u_cursor.updateRow((lake_id, partial))
 
             no_holes = DM.EliminatePolygonPart(this_watershed_holes, 'no_holes', 'PERCENT', part_area_percent='99.999')
-            DM.CalculateField(no_holes, 'Sink_Area', '(!shape.area!-!Sink_Area!)/10000', 'PYTHON') # subtract / ha
 
             # Loop Step 4: Erase the lake from its own shed
             lakeless_watershed = arcpy.Erase_analysis(no_holes, this_lake, 'lakeless_watershed')
@@ -893,6 +882,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
 
     arcpy.env.overwriteOutput = False
 
+
     # Step 5: For all isolated lakes, select the correct catchments and erase focal lakes from their own sheds
     # in one operation (to save time in loop above)
     arcpy.AddMessage("Batch processing remaining lakes...")
@@ -915,11 +905,10 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
                                                                            for id in tenha_start_ids]))
         tenha_watersheds = AN.Select(watersheds_simple, 'tenha_watersheds', tenha_local_query)
         union = AN.Union([merged_fc, tenha_watersheds], 'union')
-        sink_drop = AN.Select(union, 'sink_drop', "Permanent_Identifier = Permanent_Identifier_1 OR Permanent_Identifier_1 = ''")
+        sink_drop = AN.Select(union, 'sink_drop',
+                              "Permanent_Identifier = Permanent_Identifier_1 OR Permanent_Identifier_1 = ''")
         dissolve_fields = ['Permanent_Identifier',
-                           'Sink_Count',
-                           'Sink_Area',
-                           'Partial_Watershed']
+                           'includeshu4inlet']
         sink_drop_dissolved = DM.Dissolve(sink_drop, 'sink_drop_dissolved', dissolve_fields)
         merged_fc = sink_drop_dissolved
         for item in [tenha_watersheds, union, sink_drop]:
@@ -930,42 +919,46 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         result_fcs.append(merged_fc_both_network)
 
         # calculate the iws = network flag: Y if areas are equal, N if not equal.
-        DM.AddField(merged_fc, 'Equals_Network_Watershed', 'TEXT', field_length=1)
+        DM.AddField(merged_fc, 'equalsnetwork', 'TEXT', field_length=1)
         network_areas = {r[0]:r[1] for r in arcpy.da.SearchCursor(
             merged_fc_both_network, ['Permanent_Identifier', 'SHAPE@area'])}
         with arcpy.da.UpdateCursor(merged_fc, ['Permanent_Identifier',
-                                               'SHAPE@area', 'Equals_Network_Watershed']) as u_cursor:
+                                               'SHAPE@area', 'equalsnetwork']) as u_cursor:
             for row in u_cursor:
                 permid, area, flag = row
-                if abs(network_areas[permid] - area) < .5: # if areas are equal
-                    flag = 'Y'
-                else:
-                    flag = 'N'
+                flag = 'Y' if abs(network_areas[permid] - area) < .5 else 'N'
+                u_cursor.updateRow((permid, area, flag))
+        DM.AddField(merged_fc_both_network, 'equalsiws', 'TEXT', field_length=1)
+        iws_areas = {r[0]:r[1] for r in arcpy.da.SearchCursor(
+            merged_fc, ['Permanent_Identifier', 'SHAPE@area'])}
+        with arcpy.da.UpdateCursor(merged_fc_both_network, ['Permanent_Identifier',
+                                               'SHAPE@area', 'equalsiws']) as u_cursor:
+            for row in u_cursor:
+                permid, area, flag = row
+                flag = 'Y' if abs(iws_areas[permid] - area) < .5 else 'N'
                 u_cursor.updateRow((permid, area, flag))
 
     # Fill in all the missing flag values
     for fc in result_fcs:
-        with arcpy.da.UpdateCursor(fc, ['Permanent_Identifier', 'Sink_Count',
-                                        'Sink_Area', 'Partial_Watershed']) as u_cursor:
+        with arcpy.da.UpdateCursor(fc, ['includeshu4inlet']) as u_cursor:
             for row in u_cursor:
-                permid, count, area, partial = row
-                if not count:
-                    count = 0
-                    area = 0
-                if not partial:
-                    partial = 'N'
-                u_cursor.updateRow((permid, count, area, partial))
+                if not row[0]:
+                    row[0] = 'N'
+                u_cursor.updateRow(row)
         DM.DeleteField(fc, 'ORIG_FID')
 
     # Clean up results a bit and output. Eliminate slivers smaller than NHD raster cell, clip to HU4, output
+    arcpy.SetLogHistory(True)
 
     refined1 = DM.EliminatePolygonPart(merged_fc, 'refined1', 'AREA', part_area='99', part_option='ANY')
     result1 = AN.Clip(refined1, hu4, output_fc)
+    DM.DeleteField(result1, 'ORIG_FID')
     if mode == 'both':
         refined2 = DM.EliminatePolygonPart(merged_fc_both_network, 'refined2', 'AREA',
                                            part_area='99', part_option='ANY')
         result1 = DM.Rename(output_fc, output_fc + '_interlake')
         result2 = AN.Clip(merged_fc_both_network, hu4, output_fc + '_network')
+        DM.DeleteField(result2, 'ORIG_FID')
         for item in [merged_fc_both_network, refined2]:
             DM.Delete(item)
 

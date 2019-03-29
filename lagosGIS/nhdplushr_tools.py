@@ -647,6 +647,11 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         nhd_network.map_nhdpid_to_flowlines()
     if not nhd_network.nhdpid_waterbody:
         nhd_network.map_waterbody_to_nhdpids()
+    nhdpid_combined = defaultdict(list)
+    for d in (nhd_network.nhdpid_flowline, nhd_network.nhdpid_waterbody):
+        for k, v in d.iteritems():
+            nhdpid_combined[k] = v
+
     on_network = nhd_network.trace_up_from_hu4_outlets()
 
     with arcpy.da.UpdateCursor(output_fc, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
@@ -656,15 +661,8 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
             sourcefc = gridcode_dict[gridcode][1]
             vpuid = gridcode_dict[gridcode][2]
             onmain = 'Y' if permid in on_network else 'N'
-
-            #permids
-            if nhdpid in nhd_network.nhdpid_flowline:
-                permid = nhd_network.nhdpid_flowline[nhdpid]
-            elif nhdpid in nhd_network.nhdpid_waterbody:
-                permid = nhd_network.nhdpid_waterbody[nhdpid]
-            else:
-                permid = None # sinks, no permanent identifiers, can't be traced, which is fine.
-
+            # permid: if no permid, some kind of sink, None is fine
+            permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
             u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
     return output_fc

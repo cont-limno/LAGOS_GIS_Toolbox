@@ -604,6 +604,8 @@ def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
     result = arcpy.sa.Con((dem_null == 1) & (lagos_null == 1), replacement, hydrodem_raster)
     result.save(out_raster)
     arcpy.CheckInExtension('Spatial')
+    arcpy.env.overwriteOutput = False
+
 
 
 def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_table, output_fc):
@@ -628,18 +630,18 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     arcpy.AddMessage("Watersheds complete.")
     sheds_poly = arcpy.RasterToPolygon_conversion(sheds, 'sheds_poly', 'NO_SIMPLIFY', 'Value')
     DM.AlterField(sheds_poly, 'gridcode', 'GridCode', clear_field_alias=True)
-    output_fc = DM.Dissolve(sheds_poly, output_fc, 'GridCode')
+    dissolved = DM.Dissolve(sheds_poly, 'dissolved', 'GridCode')
     arcpy.AddMessage("Watersheds converted to vector.")
 
 
     # "Join" to the other identifiers via GridCode
     gridcode_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(gridcode_table,
                                                                  ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID'])}
-    DM.AddField(output_fc, 'NHDPlusID', 'DOUBLE')
-    DM.AddField(output_fc, 'SourceFC', 'TEXT', field_length=20)
-    DM.AddField(output_fc, 'VPUID', 'TEXT', field_length=8)
-    DM.AddField(output_fc, 'Permanent_Identifier', 'TEXT', field_length = 40)
-    DM.AddField(output_fc, 'On_Main_Network', 'TEXT', field_length = 1)
+    DM.AddField(dissolved, 'NHDPlusID', 'DOUBLE')
+    DM.AddField(dissolved, 'SourceFC', 'TEXT', field_length=20)
+    DM.AddField(dissolved, 'VPUID', 'TEXT', field_length=8)
+    DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length = 40)
+    DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length = 1)
 
     # add permids to watersheds
     nhd_network = NHDNetwork(nhdplus_gdb)
@@ -652,19 +654,18 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         for k, v in d.iteritems():
             nhdpid_combined[k] = v
 
-    on_network = nhd_network.trace_up_from_hu4_outlets()
+    on_network = set(nhd_network.trace_up_from_hu4_outlets())
 
-    with arcpy.da.UpdateCursor(output_fc, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
+    with arcpy.da.UpdateCursor(dissolved, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
         for row in u_cursor:
             gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
-            nhdpid = gridcode_dict[gridcode][0]
-            sourcefc = gridcode_dict[gridcode][1]
-            vpuid = gridcode_dict[gridcode][2]
+            nhdpid, sourcefc, vpuid = gridcode_dict[gridcode]
             onmain = 'Y' if permid in on_network else 'N'
             # permid: if no permid, some kind of sink, None is fine
             permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
             u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
+    output_fc = DM.CopyFeatures(dissolved, output_fc)
     return output_fc
 
 
@@ -719,27 +720,9 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     waterbody_lyr = DM.MakeFeatureLayer(waterbody_holeless)
 
     # have to send watersheds to a temp gdb so we can use an index
-    if not nhd_network.nhdpid_flowline:
-        nhd_network.map_nhdpid_to_flowlines()
-    if not nhd_network.nhdpid_waterbody:
-        nhd_network.map_waterbody_to_nhdpids()
-    watersheds_fc_copy = DM.CopyFeatures(catchments_fc, 'watersheds_fc_copy')
-    DM.AddField(watersheds_fc_copy, 'Permanent_Identifier', 'TEXT', field_length = 40)
-    # add permids to watersheds
-    with arcpy.da.UpdateCursor(watersheds_fc_copy, ['NHDPlusID', 'Permanent_Identifier']) as u_cursor:
-        for row in u_cursor:
-            nhdpid, permid = row
-            if nhdpid in nhd_network.nhdpid_flowline:
-                permid = nhd_network.nhdpid_flowline[nhdpid]
-            elif nhdpid in nhd_network.nhdpid_waterbody:
-                permid = nhd_network.nhdpid_waterbody[nhdpid]
-            else:
-                permid = None # sinks, no permanent identifiers, can't be traced, which is fine.
-            u_cursor.updateRow((nhdpid, permid))
-
     # dropping extra watersheds fields speeds up dissolve 6X, which we NEED
     temp_gdb_watersheds_path = os.path.join(temp_gdb, 'watersheds_simple')
-    watersheds_simple = lagosGIS.select_fields(watersheds_fc_copy, temp_gdb_watersheds_path, ['Permanent_Identifier'])
+    watersheds_simple = lagosGIS.select_fields(catchments_fc, temp_gdb_watersheds_path, ['Permanent_Identifier'])
     DM.AddIndex(watersheds_simple, 'Permanent_Identifier', 'permid_idx')
     watersheds_lyr = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr')
 

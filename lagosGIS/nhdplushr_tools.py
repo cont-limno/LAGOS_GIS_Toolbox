@@ -791,41 +791,11 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     # erased from interlake watersheds for other (focal) lakes later. If network, do nothing.
     if mode in ('interlake', 'both'):
         # get list of 10ha+ lakes and get their NETWORK traces
-        nhd_network.activate_10ha_lake_stops() # get the stop ids
-        tenha_start_ids = nhd_network.waterbody_stop_ids
-        nhd_network.set_start_ids(tenha_start_ids)
-        nhd_network.deactivate_stops()
-        tenha_traces_no_stops = nhd_network.trace_up_from_waterbody_starts() # with no stops!
-
-        # get network traces for all lakes in order to identify "contained" 10ha+ lake subnetworks in step 4
-        nhd_network.set_start_ids(matching_ids)
-        traces_no_stops = nhd_network.trace_up_from_waterbody_starts()
-
+        minus_traces = nhd_network.trace_10ha_subnetworks()
 
     # Step 3: run the desired traces according to the mode. trace[id] = list of all flowline IDS in trace
     nhd_network.set_start_ids(matching_ids)
     traces = nhd_network.trace_up_from_waterbody_starts()
-
-    # Step 4: If interlake, identify the 10ha+ lake subnetworks to be erased from the dissolved (holeless) interlake
-    # watershed, which are the intersection of this lake's full network trace and any upstream 10ha+ lake traces
-    if mode in ('interlake', 'both'):
-        minus_traces = dict()
-        for k, v in traces_no_stops.items():
-            this_lake_id = k
-            full_network = set(v) # still missing sinks
-            # determine if this lake is upstream of any
-            reset_kv = []
-            if k in tenha_traces_no_stops:
-                reset_kv = tenha_traces_no_stops[k]
-                del tenha_traces_no_stops[k] # take this lake's network out temporarily
-            # if this lake id in the trace, then the dict entry is for a downstream lake. keep only upstream.
-            upstream_tenha_subnets = [v1 for k1, v1 in tenha_traces_no_stops.items() if this_lake_id not in v1]
-            upstream_subnet_ids = {id for id_list in upstream_tenha_subnets for id in id_list}
-            if reset_kv:
-                tenha_traces_no_stops[k] = reset_kv # restore this lake's network to the dict
-
-            # to be erased: subnetworks
-            minus_traces[k] = full_network.intersection(upstream_subnet_ids)
 
     # Identify inlets
     inlets = set(nhd_network.identify_inlets())
@@ -866,14 +836,12 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             # Loop Step 3: If lake has upstream connectivity, dissolve catchments and eliminate holes.
             # Calculate some metrics of the change.
             this_watershed_holes = DM.Dissolve(selected_watersheds, 'this_watershed_holes')  # sheds has selection
-
-            # calculate new fields
-            DM.AddField(this_watershed_holes, 'Permanent_Identifier', 'TEXT', field_length=40)
-            DM.CalculateField(this_watershed_holes, 'Permanent_Identifier', lake_id, 'PYTHON')
             no_holes = DM.EliminatePolygonPart(this_watershed_holes, 'no_holes', 'PERCENT', part_area_percent='99.999')
 
             # Loop Step 4: Erase the lake from its own shed
             lakeless_watershed = arcpy.Erase_analysis(no_holes, this_lake, 'lakeless_watershed')
+            DM.AddField(this_watershed_holes, 'Permanent_Identifier', 'TEXT', field_length=40)
+            DM.CalculateField(this_watershed_holes, 'Permanent_Identifier', lake_id, 'PYTHON')
 
             # Loop Step 5: If interlake and there are things to erase, erase upstream 10ha+ lake subnetworks
             # (after dissolving them to remove holes). This erasing pattern allows us to remove other sinks only.
@@ -973,7 +941,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             DM.Delete(item)
 
     # Delete work: first fcs to free up temp_gdb, then temp_gdb
-    for item in [hu4, waterbody_holeless, watersheds_simple, watersheds_fc_copy, watersheds_lyr, merged_fc]:
+    for item in [hu4, waterbody_holeless, watersheds_simple, watersheds_lyr, merged_fc]:
         DM.Delete(item)
 
     DM.Delete(temp_gdb)

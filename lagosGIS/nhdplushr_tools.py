@@ -134,19 +134,6 @@ class NHDNetwork:
         self.inlets = inlets
         return inlets
 
-    def identify_outlets(self):
-        """Identify inlets: flowlines that flow in but have no upstream flowline in this gdb."""
-        if not self.upstream:
-            self.prepare_upstream()
-
-        to_ids = set(self.upstream.keys()).difference({'0'})
-        from_all = {f for from_list in self.upstream.values() for f in from_list}
-        downstream_inlets = list(set(to_ids).difference(set(from_all)))
-        outlets_unflat = [v for k, v in self.upstream.items() if k in downstream_inlets]
-        outlets = [o for o_list in outlets_unflat for o in o_list]
-        self.outlets = outlets
-        return outlets
-
     def set_stop_ids(self, waterbody_stop_ids):
         """
         Activate network elements (waterbody and flowline) to be used as barriers for upstream tracing.
@@ -244,6 +231,32 @@ class NHDNetwork:
             all_from_ids.extend(wb_permids)
         return all_from_ids
 
+    def identify_outlets(self):
+        """Identify inlets: flowlines that flow in but have no upstream flowline in this gdb."""
+        if not self.upstream:
+            self.prepare_upstream()
+
+        to_ids = set(self.upstream.keys()).difference({'0'})
+        from_all = {f for from_list in self.upstream.values() for f in from_list}
+        downstream_inlets = list(set(to_ids).difference(set(from_all)))
+        outlets_unflat = [v for k, v in self.upstream.items() if k in downstream_inlets]
+        outlets = [o for o_list in outlets_unflat for o in o_list]
+
+        # for subregions with frontal or closed drainage, take the largest network's outlet
+        if not outlets:
+            print("Secondary outlet determination being used due to frontal or closed drainage for the subregion.")
+            to_ids = set(self.upstream.keys())
+            next_up = [self.upstream[id] for id in to_ids]
+            next_up_flat = {id for id_list in next_up for id in id_list}
+            lowest_to_ids = list(to_ids.difference(next_up_flat))
+            if lowest_to_ids == ['0']:
+                lowest_to_ids = self.upstream['0']
+            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id)) for id in lowest_to_ids}
+            max_net_size = max(distinct_net_sizes.values())
+            outlets = [id for id, n in distinct_net_sizes.items() if n == max_net_size]
+        self.outlets = outlets
+        return outlets
+
     def trace_up_from_a_waterbody(self, waterbody_start_id):
         """
         Trace a network upstream of the input waterbody and return the traced network identifiers in a list.
@@ -330,6 +343,7 @@ class NHDNetwork:
         tenha_traces_no_stops = self.trace_up_from_waterbody_starts()
         if exclude_isolated:
             tenha_traces_no_stops = {k:v for k, v in tenha_traces_no_stops.items() if v}
+        # reset start ids to whatever they were before method invoked
         self.set_start_ids(initial_start_ids)
 
         subnetworks = dict()
@@ -346,6 +360,7 @@ class NHDNetwork:
                 tenha_traces_no_stops[lake_id] = reset
             # get the subnetwork traces that overlap this lake's full network only
             subnetworks[lake_id] = list({id for id_list in eligible_tenha_subnets for id in id_list})
+
 
         return subnetworks
 
@@ -725,7 +740,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
 
 def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_fc,
-                         mode = ['interlake', 'network', 'both']):
+                         mode = ['interlake', 'network']):
     """
     Accumulate upstream watersheds for all eligible lakes in this subregion and save result as a feature class.
 
@@ -789,17 +804,14 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
 
     # Step 2: If interlake, get traces for all 10ha+ lakes, so they can be identified and
     # erased from interlake watersheds for other (focal) lakes later. If network, do nothing.
-    if mode in ('interlake', 'both'):
+    nhd_network.set_start_ids(matching_ids)
+    if mode == 'interlake':
         # get list of 10ha+ lakes and get their NETWORK traces
         minus_traces = nhd_network.trace_10ha_subnetworks()
+        nhd_network.activate_10ha_lake_stops()
 
     # Step 3: run the desired traces according to the mode. trace[id] = list of all flowline IDS in trace
-    nhd_network.set_start_ids(matching_ids)
     traces = nhd_network.trace_up_from_waterbody_starts()
-
-    # Identify inlets
-    inlets = set(nhd_network.identify_inlets())
-    partial_test = {k:set(v).intersection(inlets) for k,v in traces.items()}
 
     arcpy.AddMessage("Accumulating watersheds according to traces...")
     counter = 0
@@ -840,14 +852,14 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
 
             # Loop Step 4: Erase the lake from its own shed
             lakeless_watershed = arcpy.Erase_analysis(no_holes, this_lake, 'lakeless_watershed')
-            DM.AddField(this_watershed_holes, 'Permanent_Identifier', 'TEXT', field_length=40)
-            DM.CalculateField(this_watershed_holes, 'Permanent_Identifier', lake_id, 'PYTHON')
+            DM.AddField(lakeless_watershed, 'Permanent_Identifier', 'TEXT', field_length=40)
+            DM.CalculateField(lakeless_watershed, 'Permanent_Identifier', """'{}'""".format(lake_id), 'PYTHON')
 
             # Loop Step 5: If interlake and there are things to erase, erase upstream 10ha+ lake subnetworks
             # (after dissolving them to remove holes). This erasing pattern allows us to remove other sinks only.
-            if mode in ('interlake', 'both') and minus_traces[lake_id]:
+            if mode == 'interlake' and minus_traces[lake_id]:
 
-                #select matching watersheds
+                # select matching watersheds (note: will include isolated, default when exclude_isolated=False above)
                 tenha_subnetworks_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                  for id in minus_traces[lake_id]]))
                 other_tenha = AN.Select(watersheds_lyr, 'other_tenha', tenha_subnetworks_query)
@@ -857,7 +869,6 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
                 other_tenha_holeless = DM.EliminatePolygonPart(other_tenha_dissolved, 'other_tenha_holeless', 'PERCENT',
                                                                part_area_percent='99.999')
                 this_watershed = arcpy.Erase_analysis(lakeless_watershed, other_tenha_holeless, 'this_watershed')
-
             else:
                 this_watershed = lakeless_watershed
 
@@ -869,17 +880,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             else:
                 DM.Append(this_watershed, merged_fc, 'NO_TEST')
 
-            if mode == 'both':
-                # then lakeless_watershed contains the network shed
-                if not arcpy.Exists('merged_fc_both_network'):
-                    merged_fc_both_network = DM.CopyFeatures(lakeless_watershed, 'merged_fc_both_network')
-                    # to avoid append mismatch due to permanent_identifier
-                    DM.AlterField(merged_fc_both_network, 'Permanent_Identifier', field_length=40)
-                else:
-                    DM.Append(lakeless_watershed, merged_fc_both_network)
-
     arcpy.env.overwriteOutput = False
-
 
     # Step 5: For all isolated lakes, select the correct catchments and erase focal lakes from their own sheds
     # in one operation (to save time in loop above)
@@ -891,65 +892,48 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
                                                                                  for id in single_catchment_ids]))
         these_watersheds = AN.Select(watersheds_simple, 'these_watersheds', watersheds_query)
         lakeless_watersheds = AN.Erase(these_watersheds, these_lakes, 'lakeless_watersheds')
-
         DM.Append(lakeless_watersheds, merged_fc, 'NO_TEST')
-        if mode == 'both':
-            DM.Append(lakeless_watersheds, merged_fc_both_network, 'NO_TEST')
 
-    if mode in ('interlake', 'both'):
-        # Remove isolated 10 ha sinks--union and select out any where permids unequal (holes). Dissolve back to one.
-        # Roundabout way of saying erase 10ha catchments from me EXCEPT my own catchment.
-        tenha_local_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
-                                                                           for id in tenha_start_ids]))
-        tenha_watersheds = AN.Select(watersheds_simple, 'tenha_watersheds', tenha_local_query)
-        union = AN.Union([merged_fc, tenha_watersheds], 'union')
-        sink_drop = AN.Select(union, 'sink_drop',
-                              "Permanent_Identifier = Permanent_Identifier_1 OR Permanent_Identifier_1 = ''")
-        dissolve_fields = ['Permanent_Identifier',
-                           'includeshu4inlet']
-        sink_drop_dissolved = DM.Dissolve(sink_drop, 'sink_drop_dissolved', dissolve_fields)
-        merged_fc = sink_drop_dissolved
-        for item in [tenha_watersheds, union, sink_drop]:
-            DM.Delete(item)
+    # if mode == 'interlake':
+    #     # Remove isolated 10 ha sinks--union and select out any where permids unequal (holes). Dissolve back to one.
+    #     # Roundabout way of saying erase 10ha catchments from me EXCEPT my own catchment.
+    #     nhd_network.activate_10ha_lake_stops()
+    #     tenha_ids = nhd_network.waterbody_stop_ids
+    #     tenha_local_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
+    #                                                                        for id in tenha_ids]))
+    #     tenha_watersheds = AN.Select(watersheds_simple, 'tenha_watersheds', tenha_local_query)
+    #     union = AN.Union([merged_fc, tenha_watersheds], 'union')
+    #     sink_drop = AN.Select(union, 'sink_drop',
+    #                           "Permanent_Identifier = Permanent_Identifier_1 OR Permanent_Identifier_1 = ''")
+    #     dissolve_fields = ['Permanent_Identifier',
+    #                        'includeshu4inlet']
+    #     sink_drop_dissolved = DM.Dissolve(sink_drop, 'sink_drop_dissolved', dissolve_fields)
+    #     merged_fc = sink_drop_dissolved
+    #     for item in [tenha_watersheds, union, sink_drop]:
+    #         DM.Delete(item)
 
-    result_fcs = [merged_fc]
-    if mode == 'both':
-        result_fcs.append(merged_fc_both_network)
-
-    # Fill in all the missing flag values
-    for fc in result_fcs:
-        with arcpy.da.UpdateCursor(fc, ['Permanent_Identifier', 'includeshu4inlet']) as u_cursor:
-            for row in u_cursor:
-                permid, inflag = row
-                inflag = 'Y' if partial_test[permid] else 'N'
-                u_cursor.updateRow((permid, inflag))
-        DM.DeleteField(fc, 'ORIG_FID')
+    # Identify inlets and whether watershed extends to include one
+    inlets = set(nhd_network.identify_inlets())
+    partial_test = {k:set(v).intersection(inlets) for k,v in traces.items()}
+    DM.AddField(merged_fc, 'includeshu4inlet', 'TEXT', field_length=1)
+    with arcpy.da.UpdateCursor(merged_fc, ['Permanent_Identifier', 'includeshu4inlet']) as u_cursor:
+        for row in u_cursor:
+            permid, inflag = row
+            inflag = 'Y' if partial_test[permid] else 'N'
+            u_cursor.updateRow((permid, inflag))
 
     # Clean up results a bit and output. Eliminate slivers smaller than NHD raster cell, clip to HU4, output
     arcpy.SetLogHistory(True)
-
-    refined1 = DM.EliminatePolygonPart(merged_fc, 'refined1', 'AREA', part_area='99', part_option='ANY')
-    result1 = AN.Clip(refined1, hu4, output_fc)
-    DM.DeleteField(result1, 'ORIG_FID')
-    if mode == 'both':
-        refined2 = DM.EliminatePolygonPart(merged_fc_both_network, 'refined2', 'AREA',
-                                           part_area='99', part_option='ANY')
-        result1 = DM.Rename(output_fc, output_fc + '_interlake')
-        result2 = AN.Clip(merged_fc_both_network, hu4, output_fc + '_network')
-        DM.DeleteField(result2, 'ORIG_FID')
-        for item in [merged_fc_both_network, refined2]:
-            DM.Delete(item)
+    refined = DM.EliminatePolygonPart(merged_fc, 'refined1', 'AREA', part_area='99', part_option='ANY')
+    result = AN.Clip(refined, hu4, output_fc)
+    DM.DeleteField(result, 'ORIG_FID')
 
     # Delete work: first fcs to free up temp_gdb, then temp_gdb
     for item in [hu4, waterbody_holeless, watersheds_simple, watersheds_lyr, merged_fc]:
         DM.Delete(item)
-
     DM.Delete(temp_gdb)
 
-    if mode == 'both':
-        return (result1, result2)
-    else:
-        return result1
+    return result
 
 def watershed_equality(interlake_watershed_fc, network_watershed_fc):
     """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""

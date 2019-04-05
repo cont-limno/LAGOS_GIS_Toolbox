@@ -204,6 +204,8 @@ class NHDNetwork:
 
         Barriers currently activated on the network will be respected by the trace.
 
+        A trace includes its own starting flowline.
+
         :param str flowline_start_id: Flowline Permanent_Identifier of flow destination (upstream trace start point).
         :param bool include_wb_permids: Whether to include waterbody Permanent_Identifiers in the trace. When False,
         only flowline Permanent_Identifiers will be returned.
@@ -236,6 +238,7 @@ class NHDNetwork:
         if include_wb_permids:
             if not self.flowline_waterbody:
                 self.map_flowlines_to_waterbodies()
+            # get the waterbody ids for all flowlines in trace (including start) and add to results
             wb_permids_set = {self.flowline_waterbody[id] for id in all_from_ids if id in self.flowline_waterbody}
             wb_permids = list(wb_permids_set.difference(set(self.waterbody_stop_ids))) # if stops present, remove
             all_from_ids.extend(wb_permids)
@@ -246,7 +249,8 @@ class NHDNetwork:
         Trace a network upstream of the input waterbody and return the traced network identifiers in a list.
 
         The lowest flowline segments within the input waterbody will be identified and used to initiate the trace (in
-        other words, traces will be found upstream of all waterbody outlets.
+        other words, traces will be found upstream of all waterbody outlets. Waterbodies with no flowline segments
+        have an empty trace (are not in their own trace).
 
         Barriers currently activated on the network will be respected by the trace. The input waterbody will not
         act as a barrier for its own traced network.
@@ -307,12 +311,58 @@ class NHDNetwork:
         else:
             raise Exception("Populate start IDs with set_start_ids before calling trace_up_from_starts().")
 
+    def trace_10ha_subnetworks(self, exclude_isolated=False):
+        """
+        Identify the upstream subnetworks of lakes > 10ha for each focal lake in the network's start population.
+        :param exclude_isolated: Default False. Whether to exclude isolated lakes (in or out of the focal lake's
+        watershed) in the subnetworks for each focal lake.
+        :return: Dictionary with key = focal lake id, value = list of subnetwork catchment/flowline/waterbody ids
+        """
+        if not self.waterbody_start_ids:
+            raise Exception("Populate start IDs with set_start_ids before calling trace_up_from_starts().")
+
+        # get all 10ha+ full networks
+        initial_start_ids = self.waterbody_start_ids
+        self.activate_10ha_lake_stops()
+        tenha_ids = self.waterbody_stop_ids
+        self.set_start_ids(tenha_ids)
+        self.deactivate_stops()
+        tenha_traces_no_stops = self.trace_up_from_waterbody_starts()
+        if exclude_isolated:
+            tenha_traces_no_stops = {k:v for k, v in tenha_traces_no_stops.items() if v}
+        self.set_start_ids(initial_start_ids)
+
+        subnetworks = dict()
+        for lake_id in self.waterbody_start_ids:
+            reset = []
+            if lake_id in tenha_traces_no_stops:
+                reset = tenha_traces_no_stops[lake_id]
+                # temp remove this lake's own network if it's 10ha+
+                del tenha_traces_no_stops[lake_id]
+
+            # if this lake id in the trace, then the dict entry is for a downstream lake. discard.
+            eligible_tenha_subnets = [v for k, v in tenha_traces_no_stops.items() if lake_id not in v]
+            if reset:
+                tenha_traces_no_stops[lake_id] = reset
+            # get the subnetwork traces that overlap this lake's full network only
+            subnetworks[lake_id] = list({id for id_list in eligible_tenha_subnets for id in id_list})
+
+        return subnetworks
+
     def trace_up_from_hu4_outlets(self):
         if not self.outlets:
-            outlets = self.identify_outlets()
+            self.identify_outlets()
         results_unflat = [self.trace_up_from_a_flowline(id) for id in self.outlets]
         results = list({id for id_list in results_unflat for id in id_list})
         return results
+
+    def save_trace_catchments(self, trace, output_fc):
+        """Select traced features from NHDFlowline and save to output."""
+        query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
+                                                        for id in trace]))
+        output_fc = DM.Select(self.flowline, output_fc, query)
+        return output_fc
+
 
 
 def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
@@ -596,6 +646,8 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
 def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
     """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them."""
     arcpy.env.workspace = 'in_memory'
+    # per suggestion by Price here https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
+    arcpy.env.scratchWorkspace = os.path.dirname(os.path.dirname(os.path.dirname(lagos_catseed_raster)))
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension('Spatial')
     dem_null = arcpy.sa.IsNull(hydrodem_raster)
@@ -612,7 +664,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     """
     Delineate local catchments and label them with GridCode, NHDPlusID, SourceFC, and VPUID for the water feature.
 
-    :param flowdir_raster: NHDPlus HR "fdr" TIFF raster for the HU4 needing local catchments delineated.
+    :param flowdir_raster: LAGOS "fdr" TIFF raster for the HU4 needing local catchments delineated.
     :param catseed_raster: Pour points raster, the result of nhdplustools_hr.add_lake_seeds()
     :param nhdplus_gdb: NHDPlus HR geodatabase for the subregion needing local catchments delineated.
     :param gridcode_table: Modified NHDPlusID-GridCode mapping table, the result of nhdplustools_hr.update_grid_codes()
@@ -623,6 +675,8 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     # establish environments
     arcpy.CheckOutExtension('Spatial')
     arcpy.env.workspace = 'in_memory'
+    arcpy.env.snapRaster = flowdir_raster
+
 
     # delineate watersheds with ArcGIS Watershed tool, then convert to one polygon per watershed
     arcpy.AddMessage("Delineating watersheds...")
@@ -659,10 +713,11 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     with arcpy.da.UpdateCursor(dissolved, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
         for row in u_cursor:
             gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
-            nhdpid, sourcefc, vpuid = gridcode_dict[gridcode]
+            if gridcode != 0:
+                nhdpid, sourcefc, vpuid = gridcode_dict[gridcode]
+            permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
             onmain = 'Y' if permid in on_network else 'N'
             # permid: if no permid, some kind of sink, None is fine
-            permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
             u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
     output_fc = DM.CopyFeatures(dissolved, output_fc)
@@ -953,3 +1008,5 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         return (result1, result2)
     else:
         return result1
+
+

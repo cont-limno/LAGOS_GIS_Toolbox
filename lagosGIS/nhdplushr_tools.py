@@ -869,13 +869,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
 
             # calculate new fields
             DM.AddField(this_watershed_holes, 'Permanent_Identifier', 'TEXT', field_length=40)
-            DM.AddField(this_watershed_holes, 'includeshu4inlet', 'TEXT', field_length=1)
-            with arcpy.da.UpdateCursor(this_watershed_holes, ['Permanent_Identifier', 'includeshu4inlet']) as u_cursor:
-                for row in u_cursor:
-                    # if inlets are in the trace, the watershed is only partial
-                    partial = 'Y' if partial_test[lake_id] else 'N'
-                    u_cursor.updateRow((lake_id, partial))
-
+            DM.CalculateField(this_watershed_holes, 'Permanent_Identifier', lake_id, 'PYTHON')
             no_holes = DM.EliminatePolygonPart(this_watershed_holes, 'no_holes', 'PERCENT', part_area_percent='99.999')
 
             # Loop Step 4: Erase the lake from its own shed
@@ -954,33 +948,13 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     if mode == 'both':
         result_fcs.append(merged_fc_both_network)
 
-        # calculate the iws = network flag: Y if areas are equal, N if not equal.
-        DM.AddField(merged_fc, 'equalsnetwork', 'TEXT', field_length=1)
-        network_areas = {r[0]:r[1] for r in arcpy.da.SearchCursor(
-            merged_fc_both_network, ['Permanent_Identifier', 'SHAPE@area'])}
-        with arcpy.da.UpdateCursor(merged_fc, ['Permanent_Identifier',
-                                               'SHAPE@area', 'equalsnetwork']) as u_cursor:
-            for row in u_cursor:
-                permid, area, flag = row
-                flag = 'Y' if abs(network_areas[permid] - area) < .5 else 'N'
-                u_cursor.updateRow((permid, area, flag))
-        DM.AddField(merged_fc_both_network, 'equalsiws', 'TEXT', field_length=1)
-        iws_areas = {r[0]:r[1] for r in arcpy.da.SearchCursor(
-            merged_fc, ['Permanent_Identifier', 'SHAPE@area'])}
-        with arcpy.da.UpdateCursor(merged_fc_both_network, ['Permanent_Identifier',
-                                               'SHAPE@area', 'equalsiws']) as u_cursor:
-            for row in u_cursor:
-                permid, area, flag = row
-                flag = 'Y' if abs(iws_areas[permid] - area) < .5 else 'N'
-                u_cursor.updateRow((permid, area, flag))
-
     # Fill in all the missing flag values
     for fc in result_fcs:
-        with arcpy.da.UpdateCursor(fc, ['includeshu4inlet']) as u_cursor:
+        with arcpy.da.UpdateCursor(fc, ['Permanent_Identifier', 'includeshu4inlet']) as u_cursor:
             for row in u_cursor:
-                if not row[0]:
-                    row[0] = 'N'
-                u_cursor.updateRow(row)
+                permid, inflag = row
+                inflag = 'Y' if partial_test[permid] else 'N'
+                u_cursor.updateRow((permid, inflag))
         DM.DeleteField(fc, 'ORIG_FID')
 
     # Clean up results a bit and output. Eliminate slivers smaller than NHD raster cell, clip to HU4, output
@@ -1009,4 +983,21 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     else:
         return result1
 
-
+def watershed_equality(interlake_watershed_fc, network_watershed_fc):
+    """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""
+    DM.AddField(interlake_watershed_fc, 'equalsnetwork', 'TEXT', field_length=1)
+    DM.AddField(network_watershed_fc, 'equalsiws', 'TEXT', field_length=1)
+    iws_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(interlake_watershed_fc, 'Permanent_Identifier', 'SHAPE@area')}
+    net_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(network_watershed_fc, 'Permanent_Identifier', 'SHAPE@area')}
+    with arcpy.da.UpdateCursor(interlake_watershed_fc, ['Permanent_Identifier','equalsnetwork']) as u_cursor:
+        for row in u_cursor:
+            permid, flag = row
+            area_is_diff = abs(iws_area[permid] - net_area[permid]) < 0.5
+            flag = 'N' if area_is_diff else 'Y'
+            u_cursor.updateRow((permid, flag))
+    with arcpy.da.UpdateCursor(network_watershed_fc, ['Permanent_Identifier','equalsiws']) as u_cursor:
+        for row in u_cursor:
+            permid, flag = row
+            area_is_diff = abs(iws_area[permid] - net_area[permid]) < 0.5
+            flag = 'N' if area_is_diff else 'Y'
+            u_cursor.updateRow((permid, flag))

@@ -929,7 +929,10 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     DM.DeleteField(result, 'ORIG_FID')
 
     # Delete work: first fcs to free up temp_gdb, then temp_gdb
-    for item in [hu4, waterbody_holeless, watersheds_simple, watersheds_lyr, merged_fc]:
+    for item in [hu4, waterbody_mem, waterbody_holeless, waterbody_lyr,
+                 watersheds_simple, watersheds_lyr,
+                 these_lakes, these_watersheds, lakeless_watersheds,
+                 merged_fc, refined]:
         DM.Delete(item)
     DM.Delete(temp_gdb)
 

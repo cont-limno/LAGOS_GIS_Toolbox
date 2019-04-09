@@ -8,7 +8,7 @@ import arcpy
 import nhdplushr_tools as nt
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'fix_hydrodem', 'fel', 'fdr',
-              'delineate_catchments', 'accumulate')
+              'delineate_catchments', 'interlake', 'network')
 # Locations of main directories (unique to machine)
 
 # this is the result of the lakes_in_the_us/doit.py
@@ -280,7 +280,6 @@ def make_run_list(master_HU4):
 
 if __name__ == '__main__':
     run_list = make_run_list(HU4)
-
     log_file = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds\watersheds_log.csv"
     for huc4 in run_list:
         p = Paths(huc4)
@@ -294,14 +293,13 @@ if __name__ == '__main__':
         except Exception as e:
             p.log(log_file, repr(e))
             print(e)
-            raise
         finally:
             arcpy.Delete_management('in_memory')
 
 # TODO: Update mosaic feature
 def update_mosaic(mosaic):
     mosaic_short = path.basename(mosaic)
-    arcpy.AddRastersToMosaicDataset_management(mosaic, 'Raster Dataset', r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\QAQC\Watersheds',
+    arcpy.AddRastersToMosaicDataset_management(mosaic, 'Raster Dataset', r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\QAQC\Watersheds\Watersheds_COPY',
                                                filter='*{}*jpg'.format(mosaic_short),
                                                update_overviews='UPDATE_OVERVIEWS',
                                                sub_folder='SUBFOLDERS',

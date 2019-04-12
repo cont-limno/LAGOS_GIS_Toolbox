@@ -140,7 +140,7 @@ class Paths:
                 sp.call(gdal_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
 
 
-def run(huc4, last_tool='accumulate', wait = False):
+def run(huc4, last_tool='network', wait = False):
     paths = Paths(huc4)
     arcpy.AddMessage("Starting subregion {}...".format(paths.huc4))
     if last_tool:

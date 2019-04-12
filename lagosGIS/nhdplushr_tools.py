@@ -789,12 +789,20 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     whereClause4 = """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhdplus_gdb, field_name), huc4_code)
     hu4 = arcpy.Select_analysis(wbd_hu4, "hu4", whereClause4)
 
+    # Step 1: Intersect eligible_lakes and lakes for this NHD gdb (eligible_lakes can have much larger spatial extent).
+    # Any lake id that doesn't intersect/inner join will be DROPPED and will not get a watershed traced
+    nhd_network = NHDNetwork(nhdplus_gdb)
+    gdb_wb_permids = {row[0] for row in arcpy.da.SearchCursor(nhd_network.waterbody, 'Permanent_Identifier') if row[0]}
+    eligible_lake_ids = {row[0] for row in arcpy.da.SearchCursor(eligible_lakes_fc, 'Permanent_Identifier')}
+    matching_ids = list(gdb_wb_permids.intersection(eligible_lake_ids))
+
     #-----Use temp GDB to create both waterbodies and watersheds copies that are INDEXED then accessed as layer
     #-----Dropping extra fields speeds up dissolve greatly
     # waterbodies copy
-    nhd_network = NHDNetwork(nhdplus_gdb)
+
     temp_waterbodies = os.path.join(temp_gdb, 'waterbody_holeless')
-    waterbody_mem = DM.CopyFeatures(nhd_network.waterbody, 'waterbody_mem') # KEEP!!: move all fields left of "Shape"
+    subregion_wb_query ='Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id) for id in matching_ids]))
+    waterbody_mem = AN.Select(nhd_network.waterbody, 'waterbody_mem', subregion_wb_query)
     waterbody_holeless = DM.EliminatePolygonPart(waterbody_mem, temp_waterbodies,
                                                  'PERCENT', part_area_percent = '99')
     DM.AddIndex(waterbody_holeless, 'Permanent_Identifier', 'permid_idx')
@@ -806,11 +814,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     DM.AddIndex(watersheds_simple, 'Permanent_Identifier', 'permid_idx')
     watersheds_lyr = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr')
 
-    # Step 1: Intersect eligible_lakes and lakes for this NHD gdb (eligible_lakes can have much larger spatial extent).
-    # Any lake id that doesn't intersect/inner join will be DROPPED and will not get a watershed traced
-    gdb_wb_permids = {row[0] for row in arcpy.da.SearchCursor(nhd_network.waterbody, 'Permanent_Identifier') if row[0]}
-    eligible_lake_ids = {row[0] for row in arcpy.da.SearchCursor(eligible_lakes_fc, 'Permanent_Identifier')}
-    matching_ids = list(gdb_wb_permids.intersection(eligible_lake_ids))
+
 
     # Step 2: If interlake, get traces for all 10ha+ lakes, so they can be erased while other sinks are dissolved in.
     #  If network, do nothing.
@@ -915,7 +919,22 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         lakeless_watersheds = AN.Erase(these_watersheds, these_lakes, 'lakeless_watersheds')
         DM.Append(lakeless_watersheds, merged_fc, 'NO_TEST')
 
-    # Step 5: Identify inlets and flag whether each watershed extends to include one.
+    # Step 5: Fix in-island lakes, if any are present in the subregion. (140 lakes in U.S., in 53 subregions)
+    out_count = int(DM.GetCount(merged_fc).getOutput(0))
+    if out_count < len(matching_ids):
+        # erase original lakes from filled ones = island polygons
+        islands = AN.Erase(waterbody_holeless, waterbody_mem, 'islands')
+        islands_holeless = DM.EliminatePolygonPart(islands, 'islands_holeless', 'PERCENT', part_area_percent='99')
+        islands_lyr = DM.MakeFeatureLayer(islands_holeless, 'islands_lyr')
+        # select those filled lakes that are entirely within the island polygons and process their sheds.
+        DM.SelectLayerByLocation(waterbody_lyr, 'COMPLETELY_WITHIN', islands_lyr)
+        DM.SelectLayerByLocation(watersheds_lyr, 'INTERSECT', waterbody_lyr)
+        island_sheds = AN.Erase(watersheds_lyr, waterbody_lyr, 'island_sheds') # SELECTION ON both
+        DM.Append(island_sheds, merged_fc, 'NO_TEST')
+        for item in [islands, islands_lyr, island_sheds]:
+            DM.Delete(item)
+
+    # Step 6: Identify inlets and flag whether each watershed extends to include one.
     inlets = set(nhd_network.identify_inlets())
     partial_test = {k:set(v).intersection(inlets) for k,v in traces.items()}
     DM.AddField(merged_fc, 'includeshu4inlet', 'TEXT', field_length=1)
@@ -925,7 +944,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             inflag = 'Y' if partial_test[permid] else 'N'
             u_cursor.updateRow((permid, inflag))
 
-    # Step 6: Clean up results a bit and output results: eliminate slivers smaller than NHD raster cell, clip to HU4
+    # Step 7: Clean up results a bit and output results: eliminate slivers smaller than NHD raster cell, clip to HU4
     arcpy.SetLogHistory(True)
     refined = DM.EliminatePolygonPart(merged_fc, 'refined1', 'AREA', part_area='99', part_option='ANY')
     result = AN.Clip(refined, hu4, output_fc)

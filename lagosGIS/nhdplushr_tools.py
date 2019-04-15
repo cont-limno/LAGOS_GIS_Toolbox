@@ -918,6 +918,8 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         these_watersheds = AN.Select(watersheds_simple, 'these_watersheds', watersheds_query)
         lakeless_watersheds = AN.Erase(these_watersheds, these_lakes, 'lakeless_watersheds')
         DM.Append(lakeless_watersheds, merged_fc, 'NO_TEST')
+        for item in [these_lakes, these_watersheds, lakeless_watersheds]:
+            DM.Delete(item)
 
     # Step 5: Fix in-island lakes, if any are present in the subregion. (140 lakes in U.S., in 53 subregions)
     out_count = int(DM.GetCount(merged_fc).getOutput(0))
@@ -931,7 +933,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         DM.SelectLayerByLocation(watersheds_lyr, 'INTERSECT', waterbody_lyr)
         island_sheds = AN.Erase(watersheds_lyr, waterbody_lyr, 'island_sheds') # SELECTION ON both
         DM.Append(island_sheds, merged_fc, 'NO_TEST')
-        for item in [islands, islands_lyr, island_sheds]:
+        for item in [islands, islands_holeless, islands_lyr, island_sheds]:
             DM.Delete(item)
 
     # Step 6: Identify inlets and flag whether each watershed extends to include one.
@@ -953,7 +955,6 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
     for item in [hu4, waterbody_mem, waterbody_holeless, waterbody_lyr,
                  watersheds_simple, watersheds_lyr,
-                 these_lakes, these_watersheds, lakeless_watersheds,
                  merged_fc, refined]:
         DM.Delete(item)
     DM.Delete(temp_gdb)

@@ -659,10 +659,11 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     # in regions with no error: no change, correctly indicated closed lakes would be removed but we have overwritten
     # them with our own lake poly seeds anyway.
     sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
-    sinks_to_remove = tuple([r[0] for r in arcpy.da.SearchCursor(sink, ['GridCode'], "PurpCode = 'SC'")])
+    sinks_to_remove = [r[0] for r in arcpy.da.SearchCursor(sink, ['GridCode'], "PurpCode = 'SC'")]
     arcpy.CheckOutExtension('Spatial')
     if sinks_to_remove:
-        nobadsinks = arcpy.sa.SetNull(combined, combined, 'VALUE in {}'.format(sinks_to_remove))
+        nobadsinks = arcpy.sa.SetNull(combined, combined, 'VALUE in ({})'.format(','.join(['{}'.format(id)
+                                                                                         for id in sinks_to_remove])))
         nobadsinks.save(output_raster)
     else:
         DM.CopyRaster(combined, output_raster)

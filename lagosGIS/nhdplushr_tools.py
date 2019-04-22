@@ -21,7 +21,7 @@ class NHDNetwork:
     ----------
     :ivar gdb: NHD or NHDPlus geodatabase assigned to the instance
     :ivar str flow: Path for NHDPlusFLow or NHDFlow table
-    :ivar str catchmetn: Path for NHDPlusCatchment feature class
+    :ivar str catchment: Path for NHDPlusCatchment feature class
     :ivar str sink: Path for NHDPlusSink feature class
     :ivar str waterbody: Path for NHDWaterbody feature class
     :ivar str flowline: Path for NHDFLowline feature class
@@ -243,6 +243,8 @@ class NHDNetwork:
         outlets = [o for o_list in outlets_unflat for o in o_list]
 
         # for subregions with frontal or closed drainage, take the largest network's outlet
+        # plus take any outlets with a network at least 1/2 the size of the main one in case there are multiple
+        # or in other words, the largest sink possible is 1/3 the hu4 size (by stream segment count)
         if not outlets:
             print("Secondary outlet determination being used due to frontal or closed drainage for the subregion.")
             to_ids = set(self.upstream.keys())
@@ -253,7 +255,7 @@ class NHDNetwork:
                 lowest_to_ids = self.upstream['0']
             distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id)) for id in lowest_to_ids}
             max_net_size = max(distinct_net_sizes.values())
-            outlets = [id for id, n in distinct_net_sizes.items() if n == max_net_size]
+            outlets = [id for id, n in distinct_net_sizes.items() if n >= .1 * max_net_size]
         self.outlets = outlets
         return outlets
 
@@ -932,6 +934,8 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         # select those filled lakes that are entirely within the island polygons and process their sheds.
         DM.SelectLayerByLocation(waterbody_lyr, 'COMPLETELY_WITHIN', islands_lyr)
         DM.SelectLayerByLocation(watersheds_lyr, 'INTERSECT', waterbody_lyr)
+        # get waterbody catchments only (no island stream catchments
+        DM.SelectLayerByAttribute(watersheds_lyr, 'SUBSET_SELECTION', watersheds_query)
         island_sheds = AN.Erase(watersheds_lyr, waterbody_lyr, 'island_sheds') # SELECTION ON both
         DM.Append(island_sheds, merged_fc, 'NO_TEST')
         for item in [islands, islands_holeless, islands_lyr, island_sheds]:
@@ -939,7 +943,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
 
     # Step 6: Identify inlets and flag whether each watershed extends to include one.
     inlets = set(nhd_network.identify_inlets())
-    partial_test = {k:set(v).intersection(inlets) for k,v in traces.items()}
+    partial_test = {k: set(v).intersection(inlets) for k, v in traces.items()}
     DM.AddField(merged_fc, 'includeshu4inlet', 'TEXT', field_length=1)
     with arcpy.da.UpdateCursor(merged_fc, ['Permanent_Identifier', 'includeshu4inlet']) as u_cursor:
         for row in u_cursor:
@@ -961,30 +965,38 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     DM.Delete(temp_gdb)
 
     # TODO: Delete after confirming none missing
-    final_count = int(DM.GetCount(output_fc).getOutput(0))
+    final_count = int(DM.GetCount(result).getOutput(0))
     if final_count < len(matching_ids):
-        arcpy.AddWarning("The following lakes do not have watersheds in the output:")
+
         output_ids = {r[0] for r in arcpy.da.SearchCursor(output_fc, 'Permanent_Identifier')}
-        missing = set(matching_ids).difference(output_ids)
-        for m in missing:
-            print m
+        missing = list(set(matching_ids).difference(output_ids))
+        arcpy.AddWarning("The following lakes do not have watersheds in the output: {}".format('\n'.join(missing)))
     return result
 
 def watershed_equality(interlake_watershed_fc, network_watershed_fc):
     """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""
     DM.AddField(interlake_watershed_fc, 'equalsnetwork', 'TEXT', field_length=1)
     DM.AddField(network_watershed_fc, 'equalsiws', 'TEXT', field_length=1)
-    iws_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(interlake_watershed_fc, 'Permanent_Identifier', 'SHAPE@area')}
-    net_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(network_watershed_fc, 'Permanent_Identifier', 'SHAPE@area')}
+    iws_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(interlake_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
+    net_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(network_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
     with arcpy.da.UpdateCursor(interlake_watershed_fc, ['Permanent_Identifier','equalsnetwork']) as u_cursor:
         for row in u_cursor:
             permid, flag = row
-            area_is_diff = abs(iws_area[permid] - net_area[permid]) < 0.5
+            area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 0.5
             flag = 'N' if area_is_diff else 'Y'
             u_cursor.updateRow((permid, flag))
     with arcpy.da.UpdateCursor(network_watershed_fc, ['Permanent_Identifier','equalsiws']) as u_cursor:
         for row in u_cursor:
             permid, flag = row
-            area_is_diff = abs(iws_area[permid] - net_area[permid]) < 0.5
+            area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 0.5
             flag = 'N' if area_is_diff else 'Y'
             u_cursor.updateRow((permid, flag))
+
+def compactness(interlake_watershed_fc, network_watershed_fc):
+    for fc in [interlake_watershed_fc, network_watershed_fc]:
+        DM.AddField(fc, 'isoperimetric', 'DOUBLE')
+        with arcpy.da.UpdateCursor(fc, ['Compactness', 'SHAPE@']) as u_cursor:
+            for row in u_cursor:
+                c, shape = row
+                c = (4 * 3.14159 * shape.area)/(shape.length**2)
+                u_cursor.updateRow((c, shape))

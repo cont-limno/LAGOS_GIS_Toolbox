@@ -40,7 +40,7 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
     for raster in rasters_list:
         out_name = os.path.join(walled_dir,
                     os.path.basename(raster).replace('fel.tif', '_wfel.tif'))
-        cu.multi_msg('Creating output {0}'.format(out_name))
+        arcpy.AddMessage('Creating output {0}'.format(out_name))
         env.extent = raster
         elevObject = Raster(raster)
         walled_ned = Con(IsNull(wallsObject), elevObject,
@@ -52,6 +52,8 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
         arcpy.Delete_management(item)
     arcpy.ResetEnvironments()
     arcpy.CheckInExtension("Spatial")
+
+    return out_name
 
 def main():
     nhd_gdb = arcpy.GetParameterAsText(0) # NHD Subregion file geodatabase

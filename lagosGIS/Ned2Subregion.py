@@ -211,6 +211,8 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
     for raster in mosaic_rasters:
         arcpy.Delete_management(raster)
 
+    return out_mosaic
+
 
 # END OF DEF mosaic
 

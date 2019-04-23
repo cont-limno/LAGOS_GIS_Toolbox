@@ -41,6 +41,7 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     arcpy.CheckInExtension("Spatial")
     cu.multi_msg("Burn process completed")
     arcpy.ResetEnvironments()
+    return burnt_out
 
 def main():
     subregion_ned = arcpy.GetParameterAsText(0)

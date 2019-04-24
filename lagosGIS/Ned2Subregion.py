@@ -31,7 +31,7 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     env.workspace = 'in_memory'
 
     #####################################################################
-    cu.multi_msg("1) Creating Directory Structure and Copying NHD Geodatabase")
+    arcpy.AddMessage("1) Creating Directory Structure and Copying NHD Geodatabase")
     #####################################################################
     #finds the 4-digit huc code in the filename
     huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
@@ -43,7 +43,7 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     arcpy.Copy_management(nhd_gdb,nhd_gdb_copy)
 
     ####################################################################
-    cu.multi_msg("2) Getting WBD Poly For Subregion and Buffering by 5000m...")
+    arcpy.AddMessage("2) Getting WBD Poly For Subregion and Buffering by 5000m...")
     #####################################################################
 
     #select only this subregion from the wbd layer in the nhd_gdb (bordering
@@ -57,12 +57,12 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     arcpy.Buffer_analysis("wbd_poly", "wbd_buf", "5000 meters")
 
     #####################################################################
-    cu.multi_msg("3) Clipping NED Tile polys from Buffered NHD Subregion From WBD...")
+    arcpy.AddMessage("3) Clipping NED Tile polys from Buffered NHD Subregion From WBD...")
     #####################################################################
     arcpy.Clip_analysis(ned_footprints_fc, "wbd_buf", "ned_clip")
 
     #####################################################################
-    cu.multi_msg("4) Getting File_ID of clipped NED footprint polys and copying NED data to output location")
+    arcpy.AddMessage("4) Getting File_ID of clipped NED footprint polys and copying NED data to output location")
     #####################################################################
     missing_NED_list = []
     with arcpy.da.SearchCursor("ned_clip", ["FILE_ID"]) as cursor:
@@ -81,13 +81,13 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
                 ned_source = os.path.join(ned_dir, file_id)
                 ned_destination = os.path.join(out_subdir,  file_id)
                 if not os.path.exists(ned_source):
-                    cu.multi_msg("ERROR: Tile %s does not exist in the specified location" % file_id)
+                    arcpy.AddMessage("ERROR: Tile %s does not exist in the specified location" % file_id)
                     missing_NED_list.append(file_id)
                 else:
                     if not os.path.exists(ned_destination):
                         shutil.copytree(ned_source, ned_destination)
                     else:
-                        cu.multi_msg("Output folder for this NED tile already exists.")
+                        arcpy.AddMessage("Output folder for this NED tile already exists.")
     if missing_NED_list:
         warning_text = "WARNING: NED tiles did not exist for the following: %s" % ','.join(missing_NED_list)
         arcpy.AddWarning(warning_text)
@@ -99,9 +99,14 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
 def unzip_ned(file_id, ned_dir, out_dir):
                 # clunky but this works in USA: zipped files sometimes called
                 # something like n36w87 instead of n36w087 so try all 3
-                filename_variants = [os.path.join(ned_dir, f) for f in [file_id + ".zip",
-                file_id[0:4] + file_id[5:] + ".zip",
-                file_id[0] + file_id[2:] + ".zip"]]
+                # plus two filename patterns
+                tag_variants = [file_id, file_id[0:4] + file_id[5:], file_id[0:4] + file_id[5:]]
+                pattern_variants = ['{}.zip', 'USGS_NED_13_{}_IMG.zip']
+                filename_variants = []
+                for t in tag_variants:
+                    for p in pattern_variants:
+                        f = os.path.join(ned_dir, p.format(t))
+                        filename_variants.append(f)
                 filename_to_use = ''
                 for f in filename_variants:
                     if not os.path.exists(f):
@@ -110,18 +115,18 @@ def unzip_ned(file_id, ned_dir, out_dir):
                         filename_to_use = f
 
                 if filename_to_use:
-                    cu.multi_msg("Unzipping file %s" % filename_to_use)
+                    arcpy.AddMessage("Unzipping file %s" % filename_to_use)
                     zf = zipfile.ZipFile(filename_to_use)
                     zf.extractall(out_dir)
                     return True
                 else:
-                    cu.multi_msg("ERROR: A tile for %s does not exist in the specified location" % file_id)
+                    arcpy.AddMessage("ERROR: A tile for %s does not exist in the specified location" % file_id)
                     return False
 
 
 ####################################################################################################################################################
 # Mosiac NED tiles and clip to subregion.
-def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialReference(102039)) :
+def mosaic(in_workspace, nhd_gdb, out_dir, available_ram = 4, projection = arcpy.SpatialReference(102039)) :
 
     # Set up environments
     env.terrainMemoryUsage = True
@@ -131,25 +136,21 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
 
     env.workspace = in_workspace
     huc4_code = re.search('\d{4}', os.path.basename(in_workspace)).group()
-    nhd_gdb = arcpy.ListWorkspaces()[0]
 
     # Select the right HUC4 from WBD_HU4 and make it it's own layer.
     wbd_hu4 = os.path.join(nhd_gdb, "WBD_HU4")
     if not arcpy.Exists(wbd_hu4):
         wbd_hu4 = os.path.join(nhd_gdb, "WBDHU4")
-    arcpy.AddMessage(wbd_hu4)
-    arcpy.AddMessage(arcpy.Exists(wbd_hu4))
     field_name = (arcpy.ListFields(wbd_hu4, "HU*4"))[0].name
     whereClause =  """{0} = '{1}'""".format(arcpy.AddFieldDelimiters(nhd_gdb, field_name), huc4_code)
     arcpy.MakeFeatureLayer_management(wbd_hu4, "Subregion", whereClause)
 
     # Apply a 5000 meter buffer around subregion
-    subregion_buffer = os.path.join(nhd_gdb, "Subregion_Buffered_5000m")
+    subregion_buffer = "in_memory/Subregion_Buffered_5000m"
     arcpy.Buffer_analysis("Subregion", subregion_buffer, "5000 meters")
-    cu.multi_msg("Buffered subregion.")
+    arcpy.AddMessage("Buffered subregion.")
 
     # Walk through the folder with NEDs to make a list of rasters
-    in_workspace = r'D:\Continental_Limnology\Data_Working\Test_Watersheds\NHD0503'
     mosaic_rasters = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(in_workspace, datatype="RasterDataset"):
         for filename in filenames:
@@ -159,7 +160,7 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
                 mosaic_rasters.append(name)
 
 
-    cu.multi_msg("Found NED rasters.")
+    arcpy.AddMessage("Found NED rasters.")
 
     # Update environments
     env.extent = subregion_buffer
@@ -171,7 +172,7 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
                     " experience problems during the execution of this tool, " +
                     "try running it again with a lower value " +
                     "entered for 'Available RAM'.")
-        cu.multi_msg(memory_msg)
+        arcpy.AddMessage(memory_msg)
 
     else:
         env.workspace = out_dir
@@ -184,12 +185,12 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
     # Mosaic, then project
     # Cannot do this in one step using MosaicToNewRaster's projection parameter
     # because you cannot set the cell size correctly
-    cu.multi_msg("Creating initial mosaic. This may take a while...")
+    arcpy.AddMessage("Creating initial mosaic. This may take a while...")
 
     arcpy.MosaicToNewRaster_management(mosaic_rasters, env.workspace,
     mosaic_unproj, "", "32_BIT_FLOAT", "", "1", "LAST")
 
-    cu.multi_msg("Projecting mosaic...")
+    arcpy.AddMessage("Projecting mosaic...")
 
     arcpy.ProjectRaster_management(mosaic_unproj, mosaic_proj,
     projection, "BILINEAR", "10")
@@ -197,7 +198,7 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
     #final mosaic environs
     env.pyramids = "PYRAMIDS -1 SKIP_FIRST" # need to check outputs efficiently
     env.outputCoordinateSystem = projection
-    cu.multi_msg("Clipping final mosaic...")
+    arcpy.AddMessage("Clipping final mosaic...")
 
     out_mosaic = os.path.join(out_dir, "NED13_%s.tif" % huc4_code)
     arcpy.Clip_management(mosaic_proj, '', out_mosaic, subregion_buffer,
@@ -206,7 +207,7 @@ def mosaic(in_workspace, out_dir, available_ram = 4, projection = arcpy.SpatialR
     # Clean up
     for item in [mosaic_unproj, mosaic_proj]:
         arcpy.Delete_management(item)
-    cu.multi_msg("Mosaicked NED tiles and clipped to HUC4 extent.")
+    arcpy.AddMessage("Mosaicked NED tiles and clipped to HUC4 extent.")
 
     for raster in mosaic_rasters:
         arcpy.Delete_management(raster)

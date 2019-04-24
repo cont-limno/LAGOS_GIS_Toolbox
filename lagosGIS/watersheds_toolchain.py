@@ -19,6 +19,8 @@ HU4 = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\Spatial
 NHDPLUS_ZIPPED_DIR = 'F:\Continental_Limnology\Data_Downloaded\NHDPlus_High_Resolution\Zipped'
 NHDPLUS_UNZIPPED_DIR = 'F:\Continental_Limnology\Data_Downloaded\NHDPlus_High_Resolution\Unzipped_Original'
 
+NHD_UNZIPPED_DIR = 'D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Unzipped_Original'
+
 # a directory wherever you want to store the outputs
 # each subregion will have its own geodatabase created and saved
 OUTPUTS_PARENT_DIR = 'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds'
@@ -42,16 +44,21 @@ class Paths:
     def __init__(self, huc4, hr=True):
         self.huc4 = huc4
         self.hr = hr
-        self.gdb_zip = path.join(NHDPLUS_ZIPPED_DIR, 'NHDPLUS_H_{}_HU4_GDB.zip'.format(huc4))
-        self.rasters_zip = path.join(NHDPLUS_ZIPPED_DIR, 'NHDPLUS_H_{}_HU4_RASTER.7z'.format(huc4))
+        if self.hr:
+            self.gdb_zip = path.join(NHDPLUS_ZIPPED_DIR, 'NHDPLUS_H_{}_HU4_GDB.zip'.format(huc4))
+            self.rasters_zip = path.join(NHDPLUS_ZIPPED_DIR, 'NHDPLUS_H_{}_HU4_RASTER.7z'.format(huc4))
+        else:
+            self.gdb = path.join(NHD_UNZIPPED_DIR, 'NHD_H_{}_GDB.gdb'.format(huc4))
 
         # NHD items that don't exist at start
-        self.gdb = path.join(NHDPLUS_UNZIPPED_DIR, 'NHDPLUS_H_{}_HU4_GDB.gdb'.format(huc4))
-        self.rasters_dir = path.join(NHDPLUS_UNZIPPED_DIR, 'HRNHDPlusRasters{}'.format(huc4))
+        if self.hr:
+            self.gdb = path.join(NHDPLUS_UNZIPPED_DIR, 'NHDPLUS_H_{}_HU4_GDB.gdb'.format(huc4))
+            self.rasters_dir = path.join(NHDPLUS_UNZIPPED_DIR, 'HRNHDPlusRasters{}'.format(huc4))
+            self.hydrodem = path.join(self.rasters_dir, 'hydrodem.tif')
+            self.catseed = path.join(self.rasters_dir, 'catseed.tif')
+            self.fdr = path.join(self.rasters_dir, 'fdr.tif')
         self.waterbody = path.join(self.gdb, 'NHDWaterbody')
-        self.hydrodem = path.join(self.rasters_dir, 'hydrodem.tif')
-        self.catseed = path.join(self.rasters_dir, 'catseed.tif')
-        self.fdr = path.join(self.rasters_dir, 'fdr.tif')
+
 
         # output items that don't exist at start
         self.out_dir = path.join(OUTPUTS_PARENT_DIR, 'watersheds_{}'.format(huc4))
@@ -238,7 +245,7 @@ def run(huc4, last_tool='network', wait = False):
             while not cat_exists:
                 sleep(10)
         arcpy.AddMessage(
-            'Accumulating watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+            'Interlake watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
         tool_count += 1
 
@@ -252,7 +259,7 @@ def run(huc4, last_tool='network', wait = False):
             while not cat_exists:
                 sleep(10)
         arcpy.AddMessage(
-            'Accumulating watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+            'Network watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
         tool_count += 1
 
@@ -281,10 +288,10 @@ def make_run_list(master_HU4):
 if __name__ == '__main__':
     run_list = make_run_list(HU4)
     log_file = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds\watersheds_log.csv"
-    for huc4 in run_list:
+    for huc4 in run_list[36:]:
         p = Paths(huc4)
         try:
-            last_tool = 'delineate_catchments'
+            last_tool = 'network'
             tool_count = run(p.huc4, last_tool)
             if tool_count > 0:
                 p.log(log_file, '{}: SUCCESS'.format(last_tool))
@@ -318,7 +325,7 @@ def completed_list(search_string):
     return results
 
 def patch_on_network_flag():
-    """Patch implemented on Apr 5 for ~55 datasets where bug had flag falsely set to 'N' due to PermID error."""
+    """Patch implemented on Apr 17 to allow more outlets per subregion, if several large networks appear."""
     cats = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(OUTPUTS_PARENT_DIR, 'FeatureClass'):
         for fn in filenames:
@@ -326,10 +333,6 @@ def patch_on_network_flag():
                 cats.append(os.path.join(dirpath, fn))
     for cat in cats:
         huc4 = cat[-4:]
-        #TODO: Remove
-        if huc4 not in ('0105', '0301', '0304', '0306', '0308', '0310', '0311', '0312', '0313', '0316', '0317',
-                        '0901', '0902', '1602'):
-            continue
         print(huc4)
         p = Paths(huc4)
         nhd_network = nt.NHDNetwork(p.gdb)
@@ -339,3 +342,45 @@ def patch_on_network_flag():
                 permid, onmain = row
                 onmain = 'Y' if permid in on_network else 'N'
                 u_cursor.updateRow((permid, onmain))
+
+
+def run_alternate(huc4, last_tool='network', wait=False):
+    import Ned2Subregion as mosaic
+    import burn_streams.burn_streams as burn_streams
+    import WallsHU8.wall as add_walls
+    NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
+    NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'
+
+    paths = Paths(huc4)
+    arcpy.AddMessage("Starting subregion {}...".format(paths.huc4))
+    if last_tool:
+        stop_index = TOOL_ORDER.index(last_tool)
+    # Check that we have the data, otherwise skip
+    if not paths.exist():
+        raise Exception("NHDPlus HR paths do not exist on local machine.")
+
+    if not path.exists(paths.out_dir):
+        os.mkdir(paths.out_dir)
+    if not path.exists(paths.out_gdb):
+        arcpy.CreateFileGDB_management(path.dirname(paths.out_gdb), path.basename(paths.out_gdb))
+
+    start_time = dt.now()
+
+    # Mosaic DEMS to subregion
+    work_dir = mosaic.stage_files(paths.gdb, NED_DIR, NED_FOOTPRINT, paths.out_dir, is_zipped=True)
+    ned = mosaic.mosaic(work_dir, work_dir, available_ram=48)
+
+    # Create hydrodem
+    burn_temp = burn_streams(ned, paths.gdb, paths.lagos_burn) #TODO: Modify tool to protect lakes from fill
+    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)
+    print pitremove_cmd
+    sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
+    walled = add_walls(paths.gdb, [paths.lagos_fel], paths.out_dir) #TODO: Modify to HU12 walls
+    #TODO: Delete old fel and rename wfel to fel, have to import shutil?
+
+    # Create catseed
+
+    # Create fdr
+
+
+

@@ -9,6 +9,9 @@ import nhdplushr_tools as nt
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'fix_hydrodem', 'fel', 'fdr',
               'delineate_catchments', 'interlake', 'network')
+
+ALT_TOOL_ORDER = ('mosaic_dem', 'burn_dem', 'make_hydrodem', 'make_catseed', 'fdr',
+                  'delineate_catchments', 'interlake', 'network')
 # Locations of main directories (unique to machine)
 
 # this is the result of the lakes_in_the_us/doit.py
@@ -72,6 +75,9 @@ class Paths:
         self.sheds_base = path.join(self.out_gdb, 'lagos_watersheds_{}'.format(huc4))
         self.iws_sheds = path.join(self.out_gdb, 'lagos_watersheds_{}_interlake'.format(huc4))
         self.network_sheds = path.join(self.out_gdb, 'lagos_watersheds_{}_network'.format(huc4))
+
+        # alternate workflow only
+        self.dem = path.join(self.out_dir, 'NED13_{}.tif'.format(huc4))
 
     def exist(self):
         """Check whether NHDPlus data available locally in order to proceed."""
@@ -346,18 +352,17 @@ def patch_on_network_flag():
 
 def run_alternate(huc4, last_tool='network', wait=False):
     import Ned2Subregion as mosaic
-    import burn_streams.burn_streams as burn_streams
-    import WallsHU8.wall as add_walls
+    from burn_streams import burn_streams
+    from WallsHU8 import wall as add_walls
+    from GenerateSeeds import select_pour_points as make_catseed
+
     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
     NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'
 
     paths = Paths(huc4)
     arcpy.AddMessage("Starting subregion {}...".format(paths.huc4))
     if last_tool:
-        stop_index = TOOL_ORDER.index(last_tool)
-    # Check that we have the data, otherwise skip
-    if not paths.exist():
-        raise Exception("NHDPlus HR paths do not exist on local machine.")
+        stop_index = ALT_TOOL_ORDER.index(last_tool)
 
     if not path.exists(paths.out_dir):
         os.mkdir(paths.out_dir)
@@ -365,22 +370,88 @@ def run_alternate(huc4, last_tool='network', wait=False):
         arcpy.CreateFileGDB_management(path.dirname(paths.out_gdb), path.basename(paths.out_gdb))
 
     start_time = dt.now()
+    tool_count = 0
+    # If the tool output doesn't exist yet, and the job control agrees it should be run, try running.
+    # If the tool fails, continue after logging the error to the CSV.
 
     # Mosaic DEMS to subregion
-    work_dir = mosaic.stage_files(paths.gdb, NED_DIR, NED_FOOTPRINT, paths.out_dir, is_zipped=True)
-    ned = mosaic.mosaic(work_dir, work_dir, available_ram=48)
+    if not arcpy.Exists(paths.dem) and stop_index >= 0:
+        arcpy.AddMessage('Mosaicking DEMs started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        work_dir = mosaic.stage_files(paths.gdb, NED_DIR, NED_FOOTPRINT, paths.out_dir, is_zipped=True)
+        ned = mosaic.mosaic(work_dir, work_dir, available_ram=48) # path on disk = self.dem = 'NED13_####.tif'
+        tool_count += 1
 
-    # Create hydrodem
-    burn_temp = burn_streams(ned, paths.gdb, paths.lagos_burn) #TODO: Modify tool to protect lakes from fill
-    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)
-    print pitremove_cmd
-    sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
-    walled = add_walls(paths.gdb, [paths.lagos_fel], paths.out_dir) #TODO: Modify to HU12 walls
-    #TODO: Delete old fel and rename wfel to fel, have to import shutil?
+    # Create hydrodem burn
+    if not arcpy.Exists(paths.lagos_burn) and stop_index >= 1:
+        arcpy.AddMessage('Burning DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        burn_temp = burn_streams(ned, paths.gdb, paths.lagos_burn) #TODO: Modify tool to protect lakes from fill
+        tool_count += 1
+
+    # Fill and wall hydrodem
+    if not arcpy.Exists(paths.lagos_fel) and stop_index >= 2:
+        arcpy.AddMessage('Filling DEM and adding walls started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)
+        sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
+        walled = add_walls(paths.gdb, [paths.lagos_fel], paths.out_dir) #TODO: Modify to HU12 walls
+        # rename "wfel" output of add_walls to "fel", didn't need to save intermediate.
+        walled_path = paths.lagos_fel.replace('fel', 'wfel')
+        os.remove(paths.lagos_fel)
+        os.rename(walled_path, walled_path.replace('wfel', 'fel'))
+        tool_count += 1
 
     # Create catseed
+    paths.lagos_catseed = path.join(paths.out_dir, 'pour_points.tif')  # TODO: Update names
+    if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 3:
+        arcpy.AddMessage('Identifying pour points started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        make_catseed(paths.gdb, paths.lagos_fel, paths.out_dir)
+        tool_count += 1
 
     # Create fdr
+    if not arcpy.Exists(paths.lagos_fdr) and stop_index >= 4:
+        arcpy.CheckOutExtension('Spatial')
+        arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        flow_dir = arcpy.sa.FlowDirection(paths.lagos_fel)
+        # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
+        wbdhu4 = path.join(paths.gdb, 'WBDHU4')
+        hu4 = arcpy.Select_analysis(wbdhu4, 'in_memory/hu4', 'HUC4 = {}'.format(huc4))
+        arcpy.env.snapRaster = flow_dir
+        arcpy.Clip_management(flow_dir, hu4, paths.fdr)
+        arcpy.CheckInExtension('Spatial')
+        arcpy.Delete_management('in_memory/hu4')
+        tool_count += 1
+
+    # delineate_catchments
+    if not arcpy.Exists(paths.local_catchments) and stop_index >= 5:
+        arcpy.AddMessage('Delineating catchments started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gdb, paths.gridcode, paths.local_catchments)
+        tool_count += 1
 
 
+    # interlake watersheds
+    if not arcpy.Exists(paths.iws_sheds) and stop_index >= 6:
+
+        # wait for predecessor to exist
+        # useful to split this step into 2nd process. in_memory objects won't interfere, should be safe
+        if wait:
+            cat_exists = arcpy.Exists(paths.local_catchments)
+            while not cat_exists:
+                sleep(10)
+        arcpy.AddMessage(
+            'Interlake watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
+        tool_count += 1
+
+    # network watersheds
+    if not arcpy.Exists(paths.network_sheds) and stop_index >= 7:
+
+        # wait for predecessor to exist
+        # useful to split this step into 2nd process. in_memory objects won't interfere, should be safe
+        if wait:
+            cat_exists = arcpy.Exists(paths.local_catchments)
+            while not cat_exists:
+                sleep(10)
+        arcpy.AddMessage(
+            'Network watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
+        tool_count += 1
 

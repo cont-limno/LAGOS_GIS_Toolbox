@@ -21,14 +21,8 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
     arcpy.CheckOutExtension("Spatial")
 
     # HU8 layer
-    huc8_fc = os.path.join(nhd_gdb, "WBD_HU8")
+    huc8_fc = os.path.join(nhd_gdb, "WBDHU8")
     arcpy.MakeFeatureLayer_management(huc8_fc, "huc8_layer")
-
-    # create output folder with HUC4 in the name
-    huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
-    walled_dir = os.path.join(outfolder, 'walled' + huc4_code)
-    if not os.path.exists(walled_dir):
-        os.mkdir(walled_dir)
 
     # make the walls raster
     arcpy.PolygonToLine_management(huc8_fc, 'wall_lines')
@@ -38,8 +32,9 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
     wallsObject = Raster('wall_raster')
 
     for raster in rasters_list:
-        out_name = os.path.join(walled_dir,
-                    os.path.basename(raster).replace('fel.tif', '_wfel.tif'))
+        print(raster)
+        out_name = os.path.join(raster.replace('fel.tif', 'wfel.tif'))
+        print(out_name)
         arcpy.AddMessage('Creating output {0}'.format(out_name))
         env.extent = raster
         elevObject = Raster(raster)

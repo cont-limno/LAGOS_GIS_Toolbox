@@ -154,7 +154,6 @@ def mosaic(in_workspace, nhd_gdb, out_dir, available_ram = 4, projection = arcpy
     mosaic_rasters = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(in_workspace, datatype="RasterDataset"):
         for filename in filenames:
-            print(filename)
             if not '.jpg' in filename:
                 name = os.path.join(dirpath, filename)
                 mosaic_rasters.append(name)

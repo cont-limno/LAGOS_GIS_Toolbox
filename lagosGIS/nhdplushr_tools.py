@@ -571,7 +571,7 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
 
 
 def update_grid_codes(nhdplus_gdb, output_table):
-    """ and save the result as a new table.
+    """Add lakes to gridcode table and save the result as a new table.
 
     Only lakes over 0.009 sq. km. in area that match the LAGOS lake filter will be added.The features added will be
     slightly more than those that have watersheds created (more inclusive filter) to allow for inadequate precision
@@ -882,21 +882,25 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
                 DM.SelectLayerByAttribute(watersheds_lyr, 'NEW_SELECTION', tenha_subnetworks_query)
                 DM.SelectLayerByLocation(watersheds_lyr, 'INTERSECT', lakeless_watershed,
                                          selection_type='SUBSET_SELECTION')
+                erase_count = int(DM.GetCount(watersheds_lyr).getOutput(0))
+                if erase_count == 0:
+                    this_watershed = lakeless_watershed
+                    DM.SelectLayerByAttribute(watersheds_lyr, 'CLEAR_SELECTION')
+                else:
+                    # Loop Step 5b: Make a single, hole-free polygon for each subnetwork.
+                    other_tenha_dissolved = DM.Dissolve(watersheds_lyr, 'other_tenha_dissolved')
+                    DM.SelectLayerByAttribute(watersheds_lyr, 'CLEAR_SELECTION')
+                    other_tenha_holeless = DM.EliminatePolygonPart(other_tenha_dissolved, 'other_tenha_holeless', 'PERCENT',
+                                                                   part_area_percent='99.999')
 
-                # Loop Step 5b: Make a single, hole-free polygon for each subnetwork.
-                other_tenha_dissolved = DM.Dissolve(watersheds_lyr, 'other_tenha_dissolved')
-                DM.SelectLayerByAttribute(watersheds_lyr, 'CLEAR_SELECTION')
-                other_tenha_holeless = DM.EliminatePolygonPart(other_tenha_dissolved, 'other_tenha_holeless', 'PERCENT',
-                                                               part_area_percent='99.999')
+                    # Loop Step 5c: Erase the subnetworks.
+                    this_watershed = arcpy.Erase_analysis(lakeless_watershed, other_tenha_holeless, 'this_watershed')
 
-                # Loop Step 5c: Erase the subnetworks.
-                this_watershed = arcpy.Erase_analysis(lakeless_watershed, other_tenha_holeless, 'this_watershed')
-
-                # *handles a rare situation where a catchment entirely surrounded by isolated 10ha lakes can be
-                # erased by its own shed.
-                if int(DM.GetCount(this_watershed).getOutput(0)) == 0:
-                    safe_erase = arcpy.Erase_analysis(other_tenha_holeless, this_watershed_holes, 'safe_erase')
-                    this_watershed = arcpy.Erase_analysis(lakeless_watershed, safe_erase, 'this_watershed')
+                    # *handles a rare situation where a catchment entirely surrounded by isolated 10ha lakes can be
+                    # erased by its own shed.
+                    if int(DM.GetCount(this_watershed).getOutput(0)) == 0:
+                        safe_erase = arcpy.Erase_analysis(other_tenha_holeless, this_watershed_holes, 'safe_erase')
+                        this_watershed = arcpy.Erase_analysis(lakeless_watershed, safe_erase, 'this_watershed')
             else:
                 this_watershed = lakeless_watershed
 
@@ -958,8 +962,8 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     DM.DeleteField(result, 'ORIG_FID')
 
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
-    for item in [hu4, waterbody_mem, waterbody_holeless, waterbody_lyr,
-                 watersheds_simple, watersheds_lyr,
+    for item in [waterbody_lyr, watersheds_lyr,
+                 hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
                  merged_fc, refined]:
         DM.Delete(item)
     DM.Delete(temp_gdb)

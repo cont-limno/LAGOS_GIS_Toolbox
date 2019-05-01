@@ -21,13 +21,13 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
     arcpy.CheckOutExtension("Spatial")
 
     # HU8 layer
-    huc8_fc = os.path.join(nhd_gdb, "WBDHU8")
-    arcpy.MakeFeatureLayer_management(huc8_fc, "huc8_layer")
+    huc12_fc = os.path.join(nhd_gdb, "WBDHU12")
+    arcpy.MakeFeatureLayer_management(huc12_fc, "huc12_layer")
 
     # make the walls raster
-    arcpy.PolygonToLine_management(huc8_fc, 'wall_lines')
+    arcpy.PolygonToLine_management(huc12_fc, 'wall_lines')
     arcpy.AddField_management('wall_lines', "height", "DOUBLE")
-    arcpy.CalculateField_management('wall_lines', "height", '500', "PYTHON")
+    arcpy.CalculateField_management('wall_lines', "height", '500000', "PYTHON")
     arcpy.FeatureToRaster_conversion('wall_lines', "height", 'wall_raster')
     wallsObject = Raster('wall_raster')
 

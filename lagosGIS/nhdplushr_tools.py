@@ -39,9 +39,9 @@ class NHDNetwork:
 
     """
 
-    def __init__(self, nhd_gdb, is_plus=True):
+    def __init__(self, nhd_gdb):
         self.gdb = nhd_gdb
-        self.plus = is_plus
+        self.plus = True if arcpy.Exists(os.path.join(self.gdb, 'NHDPlus')) else False
 
         if self.plus:
             self.from_column = 'FromPermID'
@@ -706,6 +706,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     arcpy.CheckOutExtension('Spatial')
     arcpy.env.workspace = 'in_memory'
     arcpy.env.snapRaster = flowdir_raster
+    nhd_network = NHDNetwork(nhdplus_gdb)
 
 
     # delineate watersheds with ArcGIS Watershed tool, then convert to one polygon per watershed
@@ -719,24 +720,27 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
 
     # "Join" to the other identifiers via GridCode
-    gridcode_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(gridcode_table,
-                                                                 ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID'])}
+    update_fields = ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID']
+    if not nhd_network.plus:
+        update_fields.append('Permanent_Identifier')
+    gridcode_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(gridcode_table, update_fields)}
     DM.AddField(dissolved, 'NHDPlusID', 'DOUBLE')
     DM.AddField(dissolved, 'SourceFC', 'TEXT', field_length=20)
     DM.AddField(dissolved, 'VPUID', 'TEXT', field_length=8)
     DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length = 40)
     DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length = 1)
 
-    # add permids to watersheds
-    nhd_network = NHDNetwork(nhdplus_gdb)
-    if not nhd_network.nhdpid_flowline:
-        nhd_network.map_nhdpid_to_flowlines()
-    if not nhd_network.nhdpid_waterbody:
-        nhd_network.map_waterbody_to_nhdpids()
-    nhdpid_combined = defaultdict(list)
-    for d in (nhd_network.nhdpid_flowline, nhd_network.nhdpid_waterbody):
-        for k, v in d.iteritems():
-            nhdpid_combined[k] = v
+    # add permids to watersheds for NHDPlus
+
+    if nhd_network.plus:
+        if not nhd_network.nhdpid_flowline:
+            nhd_network.map_nhdpid_to_flowlines()
+        if not nhd_network.nhdpid_waterbody:
+            nhd_network.map_waterbody_to_nhdpids()
+        nhdpid_combined = defaultdict(list)
+        for d in (nhd_network.nhdpid_flowline, nhd_network.nhdpid_waterbody):
+            for k, v in d.iteritems():
+                nhdpid_combined[k] = v
 
     on_network = set(nhd_network.trace_up_from_hu4_outlets())
 
@@ -744,10 +748,13 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         for row in u_cursor:
             gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
             if gridcode != 0:
-                nhdpid, sourcefc, vpuid = gridcode_dict[gridcode]
-            permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
+                if nhd_network.plus:
+                    nhdpid, sourcefc, vpuid = gridcode_dict[gridcode]
+                else:
+                    nhdpid, sourcefc, vpuid, permid = gridcode_dict[gridcode]
+            if not permid:
+                permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
             onmain = 'Y' if permid in on_network else 'N'
-            # permid: if no permid, some kind of sink, None is fine
             u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
     output_fc = DM.CopyFeatures(dissolved, output_fc)
@@ -1004,3 +1011,57 @@ def compactness(interlake_watershed_fc, network_watershed_fc):
                 c, shape = row
                 c = (4 * 3.14159 * shape.area)/(shape.length**2)
                 u_cursor.updateRow((c, shape))
+
+# tools for alternate workflow (non-NHDPlus)
+def make_gridcode(nhd_gdb, output_table):
+    """Add lakes to gridcode table and save the result as a new table.
+
+    Only lakes over 0.009 sq. km. in area that match the LAGOS lake filter will be added.The features added will be
+    slightly more than those that have watersheds created (more inclusive filter) to allow for inadequate precision
+    found in the AreaSqKm field.
+
+    :param nhd_gdb: The NHDPlus HR geodatabase containing the NHDPlusNHDPlusIDGridCode table to be updated
+    :param output_table: A new table that contains the contents of NHDPlusNHDPlusIDGridCode,
+    plus new rows for waterbodies
+    :return: ArcGIS Result object for output_table
+
+    """
+    # setup
+    from arcpy import management as DM
+    vpuid = nhd_gdb[-12:-8]
+    nhd_waterbody_fc = os.path.join(nhd_gdb, 'NHDWaterbody')
+    nhd_flowline_fc = os.path.join(nhd_gdb, 'NHDFlowline')
+    eligible_clause = 'AreaSqKm > 0.009 AND FCode IN {}'.format(lagosGIS.LAGOS_FCODE_LIST)
+
+    # make new table
+    result = DM.CreateTable(os.path.dirname(output_table), os.path.basename(output_table))
+
+    DM.AddField(result, 'NHDPlusID', 'DOUBLE') # dummy field for alignment with HR gridcode table
+    DM.AddField(result, 'SourceFC', 'TEXT', field_length=20)
+    DM.AddField(result, 'VPUID', 'TEXT', field_length=8)
+    DM.AddField(result, 'GridCode', 'LONG')
+    DM.AddField(result, 'Permanent_Identifier', 'TEXT', field_length=40)
+
+
+    # get IDs to be added
+    flow_permids = [r[0] for r in arcpy.da.SearchCursor(nhd_flowline_fc, ['Permanent_Identifier'])]
+    wb_permids = [r[0] for r in arcpy.da.SearchCursor(nhd_waterbody_fc, ['Permanent_Identifier'], eligible_clause)]
+
+    # start with the next highest grid code
+    gridcode =  1
+    i_cursor = arcpy.da.InsertCursor(result, ['NHDPlusID', 'SourceFC', 'GridCode', 'VPUID', 'Permanent_Identifier'])
+
+    # insert new rows with new grid codes
+    for permid in flow_permids:
+        sourcefc = 'NHDFlowline'
+        new_row = (None, sourcefc, gridcode, vpuid, permid)
+        i_cursor.insertRow(new_row)
+        gridcode += 1
+    for permid in wb_permids:
+        sourcefc = 'NHDWaterbody'
+        new_row = (None, sourcefc, gridcode, vpuid, permid)
+        i_cursor.insertRow(new_row)
+        gridcode += 1
+    del i_cursor
+
+    return result

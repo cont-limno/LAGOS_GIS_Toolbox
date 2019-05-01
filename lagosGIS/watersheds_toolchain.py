@@ -404,10 +404,10 @@ def run_alternate(huc4, last_tool='network', wait=False):
         tool_count += 1
 
     # Create catseed
-    paths.lagos_catseed = path.join(paths.out_dir, 'pourpoints{}'.format(huc4), 'pour_points.tif')  # TODO: Update names
+    paths.lagos_catseed = path.join(paths.out_dir, 'pourpoints{}'.format(huc4), 'lagos_catseed.tif')
     if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 3:
         arcpy.AddMessage('Identifying pour points started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        make_catseed(paths.gdb, paths.lagos_fel, paths.out_dir)
+        make_catseed(paths.gdb, paths.lagos_fel, paths.out_dir, paths.lagos_gridcode, LAGOS_LAKES)
         tool_count += 1
 
     # Create fdr

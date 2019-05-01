@@ -65,7 +65,7 @@ def select_pour_points(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible
     arcpy.PolygonToRaster_conversion('eligible_lakes', "GridCode", lakes_raster, "", "", 10)
 
     # Mosaic the rasters together favoring waterbodies over flowlines.
-    arcpy.MosaicToNewRaster_management([flowline_raster, lakes_raster], pour_dir, "pour_points.tif", projection, "32_BIT_UNSIGNED", "10", "1", "LAST", "LAST")
+    arcpy.MosaicToNewRaster_management([flowline_raster, lakes_raster], pour_dir, "lagos_catseed.tif", projection, "32_BIT_UNSIGNED", "10", "1", "LAST", "LAST")
 
 def main():
     # User inputs parameters:

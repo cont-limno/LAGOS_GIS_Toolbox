@@ -16,8 +16,6 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     # Copy flowlines to shapefile that will inherit environ output coord system
     # just easier to have a copy in the correct projection later
     arcpy.CopyFeatures_management(flowline, 'flowline_proj')
-##    arcpy.FeatureClassToFeatureClass_conversion("NHDFlowline", "in_memory", flow_line)
-    arcpy.AddMessage("Prepared NHDFlowline for rasterizing.")
 
     # Feature to Raster- rasterize the NHDFlowline
     # will inherit grid from env.snapRaster
@@ -26,11 +24,18 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     arcpy.AddMessage("Converted flowlines to raster.")
 
     # Raster Calculator- burns in streams, beveling in from 500m
-    arcpy.AddMessage("Burning streams into raster, 10m deep and beveling in from 500m out. This may take a while....")
+    arcpy.AddMessage("Burning streams into raster...")
     arcpy.CheckOutExtension("Spatial")
+
+    # convert heights to cm and round to 1 mm, to match NHDPlus
     distance = EucDistance('flowline_proj', cell_size = "10")
     streams = Reclassify(Raster('flowline_raster') > 0, "Value", "1 1; NoData 0")
-    burnt = Raster(subregion_ned) - (10 * streams) - (0.02 * (500 - distance) * (distance < 500))
+    width = 16000
+    soft = 50000
+    sharp = 100000
+    burnt = round(
+        100 * Raster(subregion_ned)- (sharp * streams) - (1/soft * (soft - distance) * int(distance < width)),
+        1)
 
     arcpy.AddMessage("Saving output raster...")
     burnt.save(burnt_out)
@@ -47,12 +52,6 @@ def main():
     subregion_ned = arcpy.GetParameterAsText(0)
     nhd_gdb = arcpy.GetParameterAsText(1)
     burnt_out = arcpy.GetParameterAsText(2)
-    burn_streams(subregion_ned, nhd_gdb, burnt_out)
-
-def test():
-    subregion_ned = 'C:/GISData/Scratch/NHD0411/NED13_0411.tif'
-    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHDH0411.gdb'
-    burnt_out = 'C:/GISData/Scratch/NHD0411/Burnt_0411.tif'
     burn_streams(subregion_ned, nhd_gdb, burnt_out)
 
 if __name__ == "__main__":

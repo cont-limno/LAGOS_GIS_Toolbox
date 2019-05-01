@@ -6,6 +6,7 @@ from time import sleep
 from zipfile import ZipFile
 import arcpy
 import nhdplushr_tools as nt
+import lagosGIS
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'fix_hydrodem', 'fel', 'fdr',
               'delineate_catchments', 'interlake', 'network')
@@ -66,7 +67,7 @@ class Paths:
         # output items that don't exist at start
         self.out_dir = path.join(OUTPUTS_PARENT_DIR, 'watersheds_{}'.format(huc4))
         self.out_gdb = path.join(self.out_dir, 'watersheds_{}.gdb'.format(huc4))
-        self.gridcode = path.join(self.out_gdb, 'lagos_gridcode_{}'.format(huc4))
+        self.lagos_gridcode = path.join(self.out_gdb, 'lagos_gridcode_{}'.format(huc4))
         self.lagos_catseed = path.join(self.out_dir, 'lagos_catseed_{}.tif'.format(huc4))
         self.lagos_burn = path.join(self.out_dir, 'lagos_burn_{}.tif'.format(huc4))
         self.lagos_fel = path.join(self.out_dir, 'lagos_hydrodem_{}_fel.tif'.format(huc4))
@@ -77,7 +78,7 @@ class Paths:
         self.network_sheds = path.join(self.out_gdb, 'lagos_watersheds_{}_network'.format(huc4))
 
         # alternate workflow only
-        self.dem = path.join(self.out_dir, 'NED13_{}.tif'.format(huc4))
+        self.dem = path.join(self.out_dir,'NED13_{}.tif'.format(huc4))
 
     def exist(self):
         """Check whether NHDPlus data available locally in order to proceed."""
@@ -121,7 +122,7 @@ class Paths:
                  self.rasters_zip,
                  'NHDWaterbody; catseed.tif; fdr.tif',
                  LAGOS_LAKES,
-                 self.gridcode,
+                 self.lagos_gridcode,
                  self.lagos_catseed,
                  self.local_catchments,
                  self.iws_sheds,
@@ -153,7 +154,7 @@ class Paths:
                 sp.call(gdal_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
 
 
-def run(huc4, last_tool='network', wait = False):
+def run(huc4, last_tool='network', wait = False, burn_override=True):
     paths = Paths(huc4)
     arcpy.AddMessage("Starting subregion {}...".format(paths.huc4))
     if last_tool:
@@ -178,26 +179,26 @@ def run(huc4, last_tool='network', wait = False):
 
     tool_count = 0
     # add_waterbody_nhdpid
-    if not arcpy.Exists(paths.gridcode) and stop_index >= 0:
+    if not arcpy.Exists(paths.lagos_gridcode) and stop_index >= 0:
         arcpy.AddMessage('Adding NHDPlusIDs to waterbodies started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.add_waterbody_nhdpid(paths.waterbody, LAGOS_LAKES)
         tool_count +=1
 
 
     # update_grid_codes
-    if not arcpy.Exists(paths.gridcode) and stop_index >= 0:
+    if not arcpy.Exists(paths.lagos_gridcode) and stop_index >= 0:
         arcpy.AddMessage('Updating grid codes started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.update_grid_codes(paths.gdb, paths.gridcode)
+        nt.update_grid_codes(paths.gdb, paths.lagos_gridcode)
         tool_count += 1
 
     # add_lake_seeds
     if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 1:
         arcpy.AddMessage('Adding lake seeds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.add_lake_seeds(paths.catseed, paths.gdb, paths.gridcode, LAGOS_LAKES, paths.lagos_catseed)
+        nt.add_lake_seeds(paths.catseed, paths.gdb, paths.lagos_gridcode, LAGOS_LAKES, paths.lagos_catseed)
         tool_count += 1
 
     # fix_hydrodem
-    if not arcpy.Exists(paths.lagos_burn) and stop_index >= 2:
+    if not arcpy.Exists(paths.lagos_burn) and stop_index >= 2 and not burn_override:
         arcpy.AddMessage('Fixing hydrodem burn started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         nt.fix_hydrodem(paths.hydrodem, paths.lagos_catseed, paths.lagos_burn)
         tool_count += 1
@@ -237,7 +238,7 @@ def run(huc4, last_tool='network', wait = False):
     # delineate_catchments
     if not arcpy.Exists(paths.local_catchments) and stop_index >= 5:
         arcpy.AddMessage('Delineating catchments started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gdb, paths.gridcode, paths.local_catchments)
+        nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gdb, paths.lagos_gridcode, paths.local_catchments)
         tool_count += 1
 
 
@@ -350,6 +351,7 @@ def patch_on_network_flag():
                 u_cursor.updateRow((permid, onmain))
 
 
+
 def run_alternate(huc4, last_tool='network', wait=False):
     import Ned2Subregion as mosaic
     from burn_streams import burn_streams
@@ -359,7 +361,7 @@ def run_alternate(huc4, last_tool='network', wait=False):
     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
     NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'
 
-    paths = Paths(huc4)
+    paths = Paths(huc4, hr=False)
     arcpy.AddMessage("Starting subregion {}...".format(paths.huc4))
     if last_tool:
         stop_index = ALT_TOOL_ORDER.index(last_tool)
@@ -378,8 +380,9 @@ def run_alternate(huc4, last_tool='network', wait=False):
     if not arcpy.Exists(paths.dem) and stop_index >= 0:
         arcpy.AddMessage('Mosaicking DEMs started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         work_dir = mosaic.stage_files(paths.gdb, NED_DIR, NED_FOOTPRINT, paths.out_dir, is_zipped=True)
-        ned = mosaic.mosaic(work_dir, work_dir, available_ram=48) # path on disk = self.dem = 'NED13_####.tif'
+        ned = mosaic.mosaic(work_dir, paths.gdb, paths.out_dir, available_ram=48) # path on disk = self.dem = 'NED13_####.tif'
         tool_count += 1
+    #TODO: Remove any originals, NED but maybe also NHD, did we modify that at all?
 
     # Create hydrodem burn
     if not arcpy.Exists(paths.lagos_burn) and stop_index >= 1:
@@ -394,13 +397,14 @@ def run_alternate(huc4, last_tool='network', wait=False):
         sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
         walled = add_walls(paths.gdb, [paths.lagos_fel], paths.out_dir) #TODO: Modify to HU12 walls
         # rename "wfel" output of add_walls to "fel", didn't need to save intermediate.
-        walled_path = paths.lagos_fel.replace('fel', 'wfel')
+        walled_tif_files = [os.path.join(paths.out_dir,f) for f in os.listdir(paths.out_dir) if 'wfel' in f]
         os.remove(paths.lagos_fel)
-        os.rename(walled_path, walled_path.replace('wfel', 'fel'))
+        for f in walled_tif_files:
+            os.rename(f, f.replace('wfel', 'fel'))
         tool_count += 1
 
     # Create catseed
-    paths.lagos_catseed = path.join(paths.out_dir, 'pour_points.tif')  # TODO: Update names
+    paths.lagos_catseed = path.join(paths.out_dir, 'pourpoints{}'.format(huc4), 'pour_points.tif')  # TODO: Update names
     if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 3:
         arcpy.AddMessage('Identifying pour points started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         make_catseed(paths.gdb, paths.lagos_fel, paths.out_dir)
@@ -413,17 +417,22 @@ def run_alternate(huc4, last_tool='network', wait=False):
         flow_dir = arcpy.sa.FlowDirection(paths.lagos_fel)
         # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
         wbdhu4 = path.join(paths.gdb, 'WBDHU4')
-        hu4 = arcpy.Select_analysis(wbdhu4, 'in_memory/hu4', 'HUC4 = {}'.format(huc4))
+        hu4 = arcpy.Select_analysis(wbdhu4, 'in_memory/hu4', "HUC4 = '{}'".format(huc4))
+        hu4_buff = arcpy.Buffer_analysis(hu4, 'in_memory/hu4_buff', '10 meters')
         arcpy.env.snapRaster = flow_dir
-        arcpy.Clip_management(flow_dir, hu4, paths.fdr)
+        arcpy.Clip_management(flow_dir, '', paths.lagos_fdr, hu4_buff, clipping_geometry='ClippingGeometry')
         arcpy.CheckInExtension('Spatial')
         arcpy.Delete_management('in_memory/hu4')
         tool_count += 1
 
-    # delineate_catchments
+
+    # delineate catchments
+    if not arcpy.Exists(paths.lagos_gridcode) and stop_index >=5:
+        nt.make_gridcode(paths.gdb, paths.lagos_gridcode)
+
     if not arcpy.Exists(paths.local_catchments) and stop_index >= 5:
         arcpy.AddMessage('Delineating catchments started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gdb, paths.gridcode, paths.local_catchments)
+        nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gdb, paths.lagos_gridcode, paths.local_catchments)
         tool_count += 1
 
 

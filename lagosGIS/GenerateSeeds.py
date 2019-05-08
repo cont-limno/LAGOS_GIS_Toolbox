@@ -34,14 +34,16 @@ def select_pour_points(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible
     env.workspace = pour_gdb
 
     # Make a layer from NHDWaterbody feature class and select out lakes smaller than a hectare. Project to EPSG 102039.
-    wb_permid_grid = {r[0]:r[1] for r in arcpy.da.SearchCursor(gridcode_table, ['Permanent_Identifier', 'GridCode'])}
-    this_gdb_wbs = tuple(wb_permid_grid.keys())
-    filter_clause = 'Permanent_Identifier IN {}'.format(this_gdb_wbs)
+    permid_grid = {r[0]:r[1] for r in arcpy.da.SearchCursor(gridcode_table, ['Permanent_Identifier', 'GridCode'])}
+    this_gdb_wbs = permid_grid.keys()
+    filter_clause = 'Permanent_Identifier IN ({})'.format(
+        ','.join(['\'{}\''.format(id) for id in this_gdb_wbs]))
     eligible_lakes_copy = AN.Select(eligible_lakes_fc, 'eligible_lakes_copy', filter_clause)
 
     # Make a shapefile from NHDFlowline and project to EPSG 102039
-    flow_permid_grid = {r[0]: r[1] for r in arcpy.da.SearchCursor(flowline, ['Permanent_Identifier', 'GridCode'])}
-    eligible_flowlines = arcpy.CopyFeatures_management(flowline, 'eligible_flowlines')
+    # 428 = pipeline, 336 = canal; flow direction must be initialized--matches NHDPlus rules pretty well
+    flowline_eligible_query = 'FType NOT IN (428,336) OR (FType = 336 and FlowDir = 1)'
+    eligible_flowlines = arcpy.Select_analysis(flowline, 'eligible_flowlines', flowline_eligible_query)
 
     # Add field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
 ##    # Flowlines get positive values, waterbodies get negative
@@ -50,19 +52,19 @@ def select_pour_points(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible
     arcpy.AddField_management(eligible_lakes_copy, "GridCode", "LONG")
     with arcpy.da.UpdateCursor(eligible_lakes_copy, ['Permanent_Identifier', 'GridCode']) as u_cursor:
         for row in u_cursor:
-            u_cursor.updateRow((row[0], wb_permid_grid[row[0]]))
+            u_cursor.updateRow((row[0], permid_grid[row[0]]))
 
     arcpy.AddField_management(eligible_flowlines, "GridCode", "LONG")
     with arcpy.da.UpdateCursor(eligible_flowlines, ['Permanent_Identifier', 'GridCode']) as u_cursor:
         for row in u_cursor:
-            u_cursor.updateRow((row[0], flow_permid_grid[row[0]]))
+            u_cursor.updateRow((row[0], permid_grid[row[0]]))
 
 
     # these must be saved as tifs for the mosiac nodata values to work with the watersheds tool
     flowline_raster = os.path.join(pour_dir, "flowline_raster.tif")
     lakes_raster = os.path.join(pour_dir, "lakes_raster.tif")
     arcpy.PolylineToRaster_conversion('eligible_flowlines', "GridCode", flowline_raster, "", "", 10)
-    arcpy.PolygonToRaster_conversion('eligible_lakes', "GridCode", lakes_raster, "", "", 10)
+    arcpy.PolygonToRaster_conversion(eligible_lakes_copy, "GridCode", lakes_raster, "", "", 10)
 
     # Mosaic the rasters together favoring waterbodies over flowlines.
     arcpy.MosaicToNewRaster_management([flowline_raster, lakes_raster], pour_dir, "lagos_catseed.tif", projection, "32_BIT_UNSIGNED", "10", "1", "LAST", "LAST")

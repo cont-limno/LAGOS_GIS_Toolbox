@@ -59,7 +59,7 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     burnt = 100 * Raster(subregion_ned) \
             - (sharp_drop * streams) \
             - (areal_drop * banks) \
-            - (1/soft_drop * (soft_drop - distance) * distance < width)
+            - soft_drop * ((distance * 100/width) - 1) # beveled drop, convert distance to cm
     no_wall = BooleanOr(IsNull(walls), streams) # allow streams to cut walls
     walled = Con(no_wall, burnt, walls)
 

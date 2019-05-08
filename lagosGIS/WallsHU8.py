@@ -32,14 +32,11 @@ def wall(nhd_gdb, rasters_list, outfolder, height = '500',
     wallsObject = Raster('wall_raster')
 
     for raster in rasters_list:
-        print(raster)
-        out_name = os.path.join(raster.replace('fel.tif', 'wfel.tif'))
-        print(out_name)
+        out_name = os.path.join(raster.replace('.tif', '_walled.tif'))
         arcpy.AddMessage('Creating output {0}'.format(out_name))
         env.extent = raster
         elevObject = Raster(raster)
-        walled_ned = Con(IsNull(wallsObject), elevObject,
-                        (wallsObject + elevObject))
+        walled_ned = Con(IsNull(wallsObject), elevObject, Con(LessThan(elevObject, -58000), elevObject, wallsObject))
 
         walled_ned.save(out_name)
 

@@ -13,32 +13,58 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     env.workspace = 'in_memory'
 
     flowline = os.path.join(nhd_gdb, 'NHDFlowline')
+    nhdarea = os.path.join(nhd_gdb, 'NHDArea')
+
     # Copy flowlines to shapefile that will inherit environ output coord system
     # just easier to have a copy in the correct projection later
-    arcpy.CopyFeatures_management(flowline, 'flowline_proj')
 
-    # Feature to Raster- rasterize the NHDFlowline
+    # 428 = pipeline, 336 = canal, flow direction must be initialized--matches NHDPlus rules pretty well
+    flowline_eligible_query = 'FType NOT IN (428,336) OR (FType = 336 and FlowDir = 1)'
+    arcpy.Select_analysis(flowline, 'flowline_proj', flowline_eligible_query)
+
+    # Feature to Raster- rasterize the feature classes
     # will inherit grid from env.snapRaster
-    arcpy.FeatureToRaster_conversion('flowline_proj', "OBJECTID",
+    flowline_raster = arcpy.FeatureToRaster_conversion('flowline_proj', "OBJECTID",
                                     'flowline_raster', "10")
-    arcpy.AddMessage("Converted flowlines to raster.")
+    nhdarea_raster = arcpy.FeatureToRaster_conversion(nhdarea, "OBJECTID",
+                                     'nhdarea_raster', "10")
+
+    arcpy.AddMessage("Converted feature classes to raster.")
 
     # Raster Calculator- burns in streams, beveling in from 500m
     arcpy.AddMessage("Burning streams into raster...")
     arcpy.CheckOutExtension("Spatial")
 
+    # HU12 layer
+    huc12_fc = os.path.join(nhd_gdb, "WBDHU12")
+    arcpy.MakeFeatureLayer_management(huc12_fc, "huc12_layer")
+
+    # make the walls raster object
+    arcpy.PolygonToLine_management(huc12_fc, 'wall_lines')
+    arcpy.AddField_management('wall_lines', "height", "FLOAT")
+    wall_ht = 500000
+    arcpy.CalculateField_management('wall_lines', "height", '{}'.format(wall_ht), "PYTHON")
+    arcpy.FeatureToRaster_conversion('wall_lines', "height", 'wall_raster')
+    walls = Raster('wall_raster')
+
     # convert heights to cm and round to 1 mm, to match NHDPlus
     distance = EucDistance('flowline_proj', cell_size = "10")
     streams = Reclassify(Raster('flowline_raster') > 0, "Value", "1 1; NoData 0")
-    width = 16000
-    soft = 50000
-    sharp = 100000
-    burnt = round(
-        100 * Raster(subregion_ned)- (sharp * streams) - (1/soft * (soft - distance) * int(distance < width)),
-        1)
+    banks = Reclassify(Raster('nhdarea_raster') > 0, "Value", "1 1; NoData 0")
+
+    width = 6000
+    soft_drop = 50000
+    sharp_drop = 500000
+    areal_drop = 10000
+    burnt = 100 * Raster(subregion_ned) \
+            - (sharp_drop * streams) \
+            - (areal_drop * banks) \
+            - (1/soft_drop * (soft_drop - distance) * distance < width)
+    no_wall = BooleanOr(IsNull(walls), streams) # allow streams to cut walls
+    walled = Con(no_wall, burnt, walls)
 
     arcpy.AddMessage("Saving output raster...")
-    burnt.save(burnt_out)
+    walled.save(burnt_out)
 
     # Delete intermediate rasters and shapefiles
     for item in ['flowline_proj', 'flowline_raster']:

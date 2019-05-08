@@ -853,7 +853,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     for lake_id in matching_ids:
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
-        if len(trace_permids) <= 1:
+        if len(trace_permids) <= 2:
             single_catchment_ids.append(lake_id)
 
         else:

@@ -14,20 +14,26 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
 
     flowline = os.path.join(nhd_gdb, 'NHDFlowline')
     nhdarea = os.path.join(nhd_gdb, 'NHDArea')
+    nhdwaterbody = os.path.join(nhd_gdb, 'NHDWaterbody')
 
     # Copy flowlines to shapefile that will inherit environ output coord system
     # just easier to have a copy in the correct projection later
 
     # 428 = pipeline, 336 = canal, flow direction must be initialized--matches NHDPlus rules pretty well
     flowline_eligible_query = 'FType NOT IN (428,336) OR (FType = 336 and FlowDir = 1)'
-    arcpy.Select_analysis(flowline, 'flowline_proj', flowline_eligible_query)
+    flowline_burn = arcpy.Select_analysis(flowline, 'flowline_proj', flowline_eligible_query)
+    area_burn = arcpy.Select_analysis(nhdarea, 'area_burn', 'FType = 460') # StreamRiver only
+    waterbody_burn = arcpy.Select_analysis(nhdwaterbody, 'waterbody_burn', 'FType IN (390, 436)')
+
 
     # Feature to Raster- rasterize the feature classes
     # will inherit grid from env.snapRaster
-    flowline_raster = arcpy.FeatureToRaster_conversion('flowline_proj', "OBJECTID",
+    flowline_raster = arcpy.FeatureToRaster_conversion(flowline_burn, "OBJECTID",
                                     'flowline_raster', "10")
-    nhdarea_raster = arcpy.FeatureToRaster_conversion(nhdarea, "OBJECTID",
+    nhdarea_raster = arcpy.FeatureToRaster_conversion(area_burn, "OBJECTID",
                                      'nhdarea_raster', "10")
+    lakes_raster = arcpy.FeatureToRaster_conversion(waterbody_burn, "OBJECTID",
+                                                      'lakes_raster', "10")
 
     arcpy.AddMessage("Converted feature classes to raster.")
 
@@ -48,26 +54,28 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     walls = Raster('wall_raster')
 
     # convert heights to cm and round to 1 mm, to match NHDPlus
-    distance = EucDistance('flowline_proj', cell_size = "10")
-    streams = Reclassify(Raster('flowline_raster') > 0, "Value", "1 1; NoData 0")
-    banks = Reclassify(Raster('nhdarea_raster') > 0, "Value", "1 1; NoData 0")
+    distance = EucDistance(flowline_burn, cell_size = "10")
+    streams = Reclassify(Raster(flowline_raster) > 0, "Value", "1 1; NoData 0")
+    banks = Reclassify(Raster(nhdarea_raster) > 0, "Value", "1 1; NoData 0")
+    lakes = Reclassify(Raster(lakes_raster) > 0, "Value", "1 1; NoData 0")
 
-    width = 6000
-    soft_drop = 50000
-    sharp_drop = 500000
-    areal_drop = 10000
+    width = 60 # in horizontal map units
+    soft_drop = 5000 # cm
+    sharp_drop = 100000 # cm
+    areal_drop = 10000 # cm
     burnt = 100 * Raster(subregion_ned) \
             - (sharp_drop * streams) \
             - (areal_drop * banks) \
-            - soft_drop * ((distance * 100/width) - 1) # beveled drop, convert distance to cm
+            - (areal_drop * lakes) \
+            + soft_drop * ((distance/width) - 1) * (distance < width) # beveled drop, convert distance to cm
     no_wall = BooleanOr(IsNull(walls), streams) # allow streams to cut walls
-    walled = Con(no_wall, burnt, walls)
+    walled = Con(no_wall, burnt, (burnt + walls))
 
     arcpy.AddMessage("Saving output raster...")
     walled.save(burnt_out)
 
     # Delete intermediate rasters and shapefiles
-    for item in ['flowline_proj', 'flowline_raster']:
+    for item in [flowline_burn, area_burn, waterbody_burn, flowline_raster, nhdarea_raster, lakes_raster, 'huc12_layer']:
         arcpy.Delete_management(item)
     arcpy.CheckInExtension("Spatial")
     arcpy.AddMessage("Burn process completed")

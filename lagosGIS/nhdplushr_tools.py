@@ -185,7 +185,7 @@ class NHDNetwork:
         self.waterbody_stop_ids = []
         self.flowline_stop_ids = []
 
-    def trace_up_from_a_flowline(self, flowline_start_id, include_wb_permids = True):
+    def trace_up_from_a_flowline(self, flowline_start_id, include_wb_permids = True, max_depth = None):
         """
         Trace a network upstream of the input flowline and return the traced network identifiers in a list.
 
@@ -196,6 +196,7 @@ class NHDNetwork:
         :param str flowline_start_id: Flowline Permanent_Identifier of flow destination (upstream trace start point).
         :param bool include_wb_permids: Whether to include waterbody Permanent_Identifiers in the trace. When False,
         only flowline Permanent_Identifiers will be returned.
+        :param int max_size: Limit the depth of the trace.
         :return: List of Permanent_Identifier values for flowlines and/or waterbodies in the upstream network trace,
         which includes the input flow destination
 
@@ -211,16 +212,18 @@ class NHDNetwork:
         all_from_ids.append(flowline_start_id)  # include start point in trace
 
         # while there is still network left, iteratively trace up and add on
-        while from_ids:
+        counter = 0
+        while from_ids and counter < max_depth:
+            counter += 1
             next_up = [self.upstream[id] for id in from_ids]
 
             # flatten results
-            next_up_flat = list(set([id for id_list in next_up for id in id_list]))
+            next_up_flat = set([id for id_list in next_up for id in id_list])
             if self.flowline_stop_ids:
-                next_up_flat = [id for id in next_up_flat if id not in stop_ids_set]
+                next_up_flat = next_up_flat.difference(stop_ids_set)
 
             # seed the new start point
-            from_ids = next_up_flat
+            from_ids = next_up_flat.difference(set(all_from_ids))
             all_from_ids.extend(from_ids)
         if include_wb_permids:
             if not self.flowline_waterbody:
@@ -253,9 +256,9 @@ class NHDNetwork:
             lowest_to_ids = list(to_ids.difference(next_up_flat))
             if lowest_to_ids == ['0']:
                 lowest_to_ids = self.upstream['0']
-            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id)) for id in lowest_to_ids}
+            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id, max_depth = 300)) for id in lowest_to_ids}
             max_net_size = max(distinct_net_sizes.values())
-            outlets = [id for id, n in distinct_net_sizes.items() if n >= .1 * max_net_size]
+            outlets = [id for id, n in distinct_net_sizes.items() if n >= .5 * max_net_size]
         self.outlets = outlets
         return outlets
 
@@ -744,6 +747,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
     on_network = set(nhd_network.trace_up_from_hu4_outlets())
 
+    print('Adding identifiers to dissolved watersheds...')
     with arcpy.da.UpdateCursor(dissolved, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
         for row in u_cursor:
             gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
@@ -822,7 +826,8 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     temp_gdb_watersheds_path = os.path.join(temp_gdb, 'watersheds_simple')
     watersheds_simple = lagosGIS.select_fields(catchments_fc, temp_gdb_watersheds_path, ['Permanent_Identifier'])
     DM.AddIndex(watersheds_simple, 'Permanent_Identifier', 'permid_idx')
-    watersheds_lyr = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr')
+    watersheds_lyr1 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr1') # no "interactive" selections
+    watersheds_lyr2 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr2')
 
 
 
@@ -853,7 +858,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     for lake_id in matching_ids:
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
-        if len(trace_permids) <= 2:
+        if len(trace_permids) <= 2: # headwater lakes have trace length = 2 (lake and flowline)
             single_catchment_ids.append(lake_id)
 
         else:
@@ -867,7 +872,7 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             # Loop Step 3: Select catchments with their Permanent_Identifier in the lake's upstream network trace.
             watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                              for id in trace_permids]))
-            selected_watersheds = AN.Select(watersheds_lyr, 'selected_watersheds', watersheds_query)
+            selected_watersheds = AN.Select(watersheds_lyr1, 'selected_watersheds', watersheds_query)
 
             # Loop Step 4: Make a single, hole-free catchment polygon.
             this_watershed_holes = DM.Dissolve(selected_watersheds, 'this_watershed_holes')  # sheds has selection
@@ -876,7 +881,10 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
             # Loop Step 5: Erase the lake from its own shed.
             lakeless_watershed = arcpy.Erase_analysis(no_holes, this_lake, 'lakeless_watershed')
             DM.AddField(lakeless_watershed, 'Permanent_Identifier', 'TEXT', field_length=40)
-            DM.CalculateField(lakeless_watershed, 'Permanent_Identifier', """'{}'""".format(lake_id), 'PYTHON')
+            with arcpy.da.UpdateCursor(lakeless_watershed, 'Permanent_Identifier') as u_cursor:
+                for row in u_cursor:
+                    u_cursor.updateRow([lake_id])
+            # DM.CalculateField(lakeless_watershed, 'Permanent_Identifier', """'{}'""".format(lake_id), 'PYTHON')
 
             # Loop Step 5: If interlake mode and there are things to erase, erase upstream 10ha+ lake subnetworks.
             # Create dissolved, hole-free subnetwork polygons before erasing.
@@ -886,17 +894,17 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
                 # Loop Step 5a: Select matching subnetwork watersheds (note: will include isolated).
                 tenha_subnetworks_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                  for id in minus_traces[lake_id]]))
-                DM.SelectLayerByAttribute(watersheds_lyr, 'NEW_SELECTION', tenha_subnetworks_query)
-                DM.SelectLayerByLocation(watersheds_lyr, 'INTERSECT', lakeless_watershed,
+                DM.SelectLayerByAttribute(watersheds_lyr2, 'NEW_SELECTION', tenha_subnetworks_query)
+                DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', lakeless_watershed,
                                          selection_type='SUBSET_SELECTION')
-                erase_count = int(DM.GetCount(watersheds_lyr).getOutput(0))
+
+                erase_count = int(DM.GetCount(watersheds_lyr2).getOutput(0))
                 if erase_count == 0:
                     this_watershed = lakeless_watershed
-                    DM.SelectLayerByAttribute(watersheds_lyr, 'CLEAR_SELECTION')
                 else:
                     # Loop Step 5b: Make a single, hole-free polygon for each subnetwork.
-                    other_tenha_dissolved = DM.Dissolve(watersheds_lyr, 'other_tenha_dissolved')
-                    DM.SelectLayerByAttribute(watersheds_lyr, 'CLEAR_SELECTION')
+                    other_tenha = DM.CopyFeatures(watersheds_lyr2, 'other_tenha') # makes dissolve faster, weird but true
+                    other_tenha_dissolved = DM.Dissolve(other_tenha, 'other_tenha_dissolved')
                     other_tenha_holeless = DM.EliminatePolygonPart(other_tenha_dissolved, 'other_tenha_holeless', 'PERCENT',
                                                                    part_area_percent='99.999')
 
@@ -944,10 +952,10 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
         islands_lyr = DM.MakeFeatureLayer(islands_holeless, 'islands_lyr')
         # select those filled lakes that are entirely within the island polygons and process their sheds.
         DM.SelectLayerByLocation(waterbody_lyr, 'COMPLETELY_WITHIN', islands_lyr)
-        DM.SelectLayerByLocation(watersheds_lyr, 'INTERSECT', waterbody_lyr)
+        DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', waterbody_lyr)
         # get waterbody catchments only (no island stream catchments
-        DM.SelectLayerByAttribute(watersheds_lyr, 'SUBSET_SELECTION', watersheds_query)
-        island_sheds = AN.Erase(watersheds_lyr, waterbody_lyr, 'island_sheds') # SELECTION ON both
+        DM.SelectLayerByAttribute(watersheds_lyr2, 'SUBSET_SELECTION', watersheds_query)
+        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr, 'island_sheds') # SELECTION ON both
         DM.Append(island_sheds, merged_fc, 'NO_TEST')
         for item in [islands, islands_holeless, islands_lyr, island_sheds]:
             DM.Delete(item)
@@ -966,10 +974,13 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     arcpy.SetLogHistory(True)
     refined = DM.EliminatePolygonPart(merged_fc, 'refined1', 'AREA', part_area='99', part_option='ANY')
     result = AN.Clip(refined, hu4, output_fc)
-    DM.DeleteField(result, 'ORIG_FID')
+    try:
+        DM.DeleteField(result, 'ORIG_FID')
+    except:
+        pass
 
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
-    for item in [waterbody_lyr, watersheds_lyr,
+    for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
                  hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
                  merged_fc, refined]:
         DM.Delete(item)

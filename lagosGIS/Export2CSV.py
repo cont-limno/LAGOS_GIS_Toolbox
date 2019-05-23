@@ -67,6 +67,7 @@ def rename_variables(file):
         filtered_header = [name for name in desired_header if 'OBJECT' not in name and 'zoneid' not in name]
 
         # write out selected fields with new names
+        arcpy.AddMessage('{}'.format(update_dict))
         with tempfile:
             writer = csv.DictWriter(tempfile, fieldnames = filtered_header)
             writer.writeheader()
@@ -76,7 +77,8 @@ def rename_variables(file):
 
     shutil.move(tempfile.name, file)
 
-def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '', export_qa_version = True, field_list = []):
+def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '',
+               rename_fields = True, export_qa_version = True, field_list = []):
     name = os.path.splitext(os.path.basename(in_table))[0]
     out_qa_csv = os.path.join(out_folder, "{}_QA_ONLY.csv".format(name))
     out_csv = os.path.join(out_folder, "{}.csv".format(name))
@@ -88,34 +90,35 @@ def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '', 
     ha_prefix = tuple(["Ha_{}".format(d) for d in range(10)])
     fields = [f for f in fields_qa if not f.startswith(ha_prefix)]
 
+    def format_value(x):
+        """PREVENTS scientific notation in exports and change null values"""
+        try:
+            if math.isnan(x):
+                return 'NULL'
+        except:
+            pass
+        if x is None:
+            return 'NULL'
+        elif isinstance(x, float):
+            d = Decimal(x)
+            out_value = str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
+            if out_value == '-0':
+                out_value = '0'
+            return out_value
+        elif isinstance(x, int):
+            return str(x)
+        elif isinstance(x, unicode) or isinstance(x, str):
+            if ',' in x:
+                x = '"{}"'.format(x)  # quote-protection for commas
+            return x.encode('utf-8')
+        elif isinstance(x, datetime.datetime):
+            return str(x)
+
     if export_qa_version:
         with open(out_qa_csv, 'w') as f:
             f.write(','.join(fields_qa) + '\n')  # csv headers
             with arcpy.da.SearchCursor(in_table, fields_qa) as cursor:
                 for row in cursor:
-                    # next line PREVENTS scientific notation in exports and change null values
-
-                    def format_value(x):
-                        try:
-                            if math.isnan(x):
-                                return 'NULL'
-                        except:
-                            pass
-                        if x is None:
-                            return 'NULL'
-                        elif isinstance(x, float):
-                            d = Decimal(x)
-                            out_value = str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
-                            if out_value == '-0':
-                                out_value = '0'
-                            return out_value
-                        elif isinstance(x, int):
-                            return str(x)
-                        elif isinstance(x, unicode):
-                            return x.encode('utf-8')
-                        elif isinstance(x, datetime.datetime):
-                            return str(x)
-
                     values = map(format_value, row)
                     f.write(','.join(values) + '\n')
 
@@ -123,37 +126,16 @@ def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '', 
         f.write(','.join(fields)+'\n') #csv headers
         with arcpy.da.SearchCursor(in_table, fields) as cursor:
             for row in cursor:
-                # next line PREVENTS scientific notation in exports and change null values
-
-                def format_value(x):
-                    try:
-                        if math.isnan(x):
-                            return 'NULL'
-                    except:
-                        pass
-                    if x is None:
-                        return 'NULL'
-                    elif isinstance(x, float):
-                        d = Decimal(x)
-                        out_value = str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
-                        if out_value == '-0':
-                            out_value = '0'
-                        return out_value
-                    elif isinstance(x, int):
-                        return str(x)
-                    elif isinstance(x, unicode):
-                        return x.encode('utf-8')
-                    elif isinstance(x, datetime.datetime):
-                        return str(x)
                 values = map(format_value, row)
                 f.write(','.join(values)+'\n')
 
-    rename_variables(out_csv)
-    rename_variables(out_qa_csv)
+    if rename_fields:
+        rename_variables(out_csv)
+        rename_variables(out_qa_csv)
 
     if output_schema:
         out_schema = os.path.join(out_folder, "{}_schema.csv".format(name))
-        out_schema = describe_arcgis_table_csv(in_table, out_schema, field_list)
+        out_schema = describe_arcgis_table_csv(in_table, out_schema, field_list, rename_fields=rename_fields)
 
     if new_table_name:
         out_qa_csv_rename = os.path.join(out_folder, "{}_QA_ONLY.csv".format(new_table_name))

@@ -9,12 +9,14 @@ __all__ = ["lake_connectivity_classification",
            "polygons_in_zones",
            "lakes_in_zones",
            "aggregate_watersheds_NE",
-           "aggregate_watersheds_US"]
+           "aggregate_watersheds_US",
+           "subset_overlapping_zones"]
 
 import os
 import arcpy
 from LakeConnectivity import full_classify as lake_connectivity_classification
 from zonal_tabarea import handle_overlaps as zonal_attribution_of_raster_data
+from color_polygons import colorPolygons as subset_overlapping_zones
 from Export2CSV import TableToCSV as export_to_csv
 from upstream_lakes import upstream_lakes
 from georeference import spatialize_lakes

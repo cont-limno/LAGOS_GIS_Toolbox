@@ -196,7 +196,6 @@ class NHDNetwork:
         :param str flowline_start_id: Flowline Permanent_Identifier of flow destination (upstream trace start point).
         :param bool include_wb_permids: Whether to include waterbody Permanent_Identifiers in the trace. When False,
         only flowline Permanent_Identifiers will be returned.
-        :param int max_size: Limit the depth of the trace.
         :return: List of Permanent_Identifier values for flowlines and/or waterbodies in the upstream network trace,
         which includes the input flow destination
 
@@ -212,9 +211,7 @@ class NHDNetwork:
         all_from_ids.append(flowline_start_id)  # include start point in trace
 
         # while there is still network left, iteratively trace up and add on
-        counter = 0
-        while from_ids and counter < max_depth:
-            counter += 1
+        while from_ids:
             next_up = [self.upstream[id] for id in from_ids]
 
             # flatten results
@@ -526,6 +523,7 @@ def calculate_waterbody_strahler(nhdplus_gdb, output_table):
 
     # function to call for each waterbody
     nhd_flowline_dict_items = nhd_flowline_dict2.items()
+
     def get_matching_strahlers(wb_permid):
         matching_strahlers = [nhd_vaa_dict[flow_plusid] for flow_plusid, linked_wb_permid
                               in nhd_flowline_dict_items if linked_wb_permid == wb_permid]
@@ -709,6 +707,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     arcpy.CheckOutExtension('Spatial')
     arcpy.env.workspace = 'in_memory'
     arcpy.env.snapRaster = flowdir_raster
+    arcpy.env.extent = flowdir_raster
     nhd_network = NHDNetwork(nhdplus_gdb)
 
 

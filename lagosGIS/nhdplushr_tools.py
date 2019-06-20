@@ -209,6 +209,7 @@ class NHDNetwork:
         from_ids = self.upstream[flowline_start_id]
         all_from_ids = from_ids[:]
         all_from_ids.append(flowline_start_id)  # include start point in trace
+        limit = len(self.upstream)
 
         # while there is still network left, iteratively trace up and add on
         while from_ids:
@@ -220,8 +221,16 @@ class NHDNetwork:
                 next_up_flat = next_up_flat.difference(stop_ids_set)
 
             # seed the new start point
-            from_ids = next_up_flat.difference(set(all_from_ids))
+            # if the network size exceeds number of network features, it's because of circular flow
+            # de-duplicate trace and make sure from_ids are NEW in that case before proceeding
+            if len(all_from_ids) >= limit:
+                all_from_ids = list(set(all_from_ids))
+                from_ids = next_up_flat.difference(set(all_from_ids))
+            # otherwise the trace just walks upstream and records the results of this iteration
+            else:
+                from_ids = next_up_flat
             all_from_ids.extend(from_ids)
+
         if include_wb_permids:
             if not self.flowline_waterbody:
                 self.map_flowlines_to_waterbodies()
@@ -275,7 +284,6 @@ class NHDNetwork:
         which includes the input waterbody
 
         """
-
         # set up the network if necessary
         if not self.upstream:
             self.prepare_upstream()
@@ -827,8 +835,6 @@ def aggregate_watersheds(catchments_fc, nhdplus_gdb, eligible_lakes_fc, output_f
     DM.AddIndex(watersheds_simple, 'Permanent_Identifier', 'permid_idx')
     watersheds_lyr1 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr1') # no "interactive" selections
     watersheds_lyr2 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr2')
-
-
 
     # Step 2: If interlake, get traces for all 10ha+ lakes, so they can be erased while other sinks are dissolved in.
     #  If network, do nothing.

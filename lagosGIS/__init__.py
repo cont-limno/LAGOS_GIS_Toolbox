@@ -54,18 +54,21 @@ def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
         else:
             arcpy.TableSelect_analysis(first_fc, output_fc, filter)
         arcpy.SetLogHistory = False  # speeds up iterative updates, won't write to geoprocessing for every step
-        cursor_fields = ["*"]
+        cursor_fields = list(arcpy.da.SearchCursor(output_fc, ['*']).fields)
         if description.dataType == "FeatureClass":
             cursor_fields.append('SHAPE@')
         insertRows = arcpy.da.InsertCursor(output_fc, cursor_fields)
 
         for fc in feature_class_or_table_list:
-            searchRows = arcpy.da.SearchCursor(fc, cursor_fields, filter)
             counter = 0
+            searchRows = arcpy.da.SearchCursor(fc, cursor_fields, filter)
             for searchRow in searchRows:
                 insertRows.insertRow(searchRow)
                 counter +=1
-            del searchRow, searchRows
+            try:
+                del searchRow, searchRows
+            except:
+                print("Merged NO features from {}; filter eliminated all features".format(fc))
             print("Merged {0} features from {1}".format(counter, fc))
         del insertRows
         arcpy.SetLogHistory = True

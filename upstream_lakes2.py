@@ -10,7 +10,7 @@
 #-------------------------------------------------------------------------------
 import os
 import arcpy
-import nhdplushr_tools as nt
+from lagosGIS import nhdplushr_tools as nt
 
 def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
     #define paths in nhd geodatabase
@@ -93,10 +93,12 @@ def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
         new_row = (wb_id, lakes1ha_n, lakes1ha_ha, lakes4ha_n, lakes4ha_ha, lakes10ha_n, lakes10ha_ha)
         out_rows.insertRow(new_row)
 
+    del out_rows
+
     if unique_id == 'lagoslakeid':
         arcpy.AddField_management(out, 'lagoslakeid', 'LONG')
         lagos_dict = {r[0]:r[1] for r in
-                      arcpy.da.SearchCursor(network.waterbody, ['Permanent_Identifer', 'lagoslakeid'])}
+                      arcpy.da.SearchCursor(network.waterbody, ['Permanent_Identifier', 'lagoslakeid'])}
         with arcpy.da.UpdateCursor(out, ['Permanent_Identifier', 'lagoslakeid']) as u_cursor:
             for row in u_cursor:
                 new_row = [row[0], lagos_dict[row[0]]]

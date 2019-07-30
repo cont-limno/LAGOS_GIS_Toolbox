@@ -10,7 +10,8 @@ __all__ = ["lake_connectivity_classification",
            "lakes_in_zones",
            "aggregate_watersheds_NE",
            "aggregate_watersheds_US",
-           "subset_overlapping_zones"]
+           "subset_overlapping_zones",
+           "nhdplushr_tools"]
 
 import os
 import arcpy
@@ -27,6 +28,7 @@ from polygons_in_zones import polygons_in_zones
 from lakes_in_zones2 import lakes_in_zones
 from interlake2 import aggregate_watersheds as aggregate_watersheds_NE
 # from nhdplushr_tools import aggregate_watersheds2 as aggregate_watersheds_US
+import nhdplushr_tools
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):

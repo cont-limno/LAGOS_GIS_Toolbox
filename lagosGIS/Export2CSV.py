@@ -52,10 +52,13 @@ def describe_arcgis_table_csv(in_table, out_path, field_list = [], rename_fields
             writer.writerow(out_dict)
     return(out_path)
 
-def rename_variables(file):
+def rename_variables(file, prefix = ''):
     tempfile = NamedTemporaryFile(delete=False)
-    short_f_orig = os.path.splitext(os.path.basename(file))[0]
-    short_f = short_f_orig.replace('_QA_ONLY', '')
+    if prefix:
+        short_f = prefix
+    else:
+        short_f_orig = os.path.splitext(os.path.basename(file))[0]
+        short_f = short_f_orig.replace('_QA_ONLY', '')
 
     with open(file, 'rb') as csv_file:
         reader = csv.DictReader(csv_file)
@@ -77,11 +80,12 @@ def rename_variables(file):
 
     shutil.move(tempfile.name, file)
 
-def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '',
+def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_table_name = '',
                rename_fields = True, export_qa_version = True, field_list = []):
     name = os.path.splitext(os.path.basename(in_table))[0]
     out_qa_csv = os.path.join(out_folder, "{}_QA_ONLY.csv".format(name))
     out_csv = os.path.join(out_folder, "{}.csv".format(name))
+    arcpy.AddMessage("out csv is {}".format(out_csv))
 
     if field_list:
         fields_qa = field_list
@@ -130,8 +134,8 @@ def TableToCSV(in_table, out_folder, output_schema = True, new_table_name = '',
                 f.write(','.join(values)+'\n')
 
     if rename_fields:
-        rename_variables(out_csv)
-        rename_variables(out_qa_csv)
+        rename_variables(out_csv, prefix)
+        rename_variables(out_qa_csv, prefix)
 
     if output_schema:
         out_schema = os.path.join(out_folder, "{}_schema.csv".format(name))
@@ -150,8 +154,10 @@ def main():
     in_table = arcpy.GetParameterAsText(0)
     out_folder = arcpy.GetParameterAsText(1)
     output_schema = arcpy.GetParameter(2)
-    new_table_name = arcpy.GetParameter(3)
-    TableToCSV(in_table, out_folder, output_schema, new_table_name)
+    rename_fields = arcpy.GetParameter(3)
+    prefix = arcpy.GetParameter(4)
+    new_table_name = arcpy.GetParameterAsText(5)
+    TableToCSV(in_table, out_folder, output_schema, rename_fields=rename_fields, prefix=prefix, new_table_name=new_table_name)
 
 if __name__ == '__main__':
     main()

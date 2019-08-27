@@ -82,7 +82,10 @@ def rename_variables(file, prefix = ''):
 
 def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_table_name = '',
                rename_fields = True, export_qa_version = True, field_list = []):
-    name = os.path.splitext(os.path.basename(in_table))[0]
+    if arcpy.env.workspace == 'in_memory' and ':' not in in_table:
+        name = os.path.basename(str(in_table))
+    else:
+        name = os.path.splitext(os.path.basename(in_table))[0]
     out_qa_csv = os.path.join(out_folder, "{}_QA_ONLY.csv".format(name))
     out_csv = os.path.join(out_folder, "{}.csv".format(name))
     arcpy.AddMessage("out csv is {}".format(out_csv))
@@ -146,8 +149,10 @@ def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_tabl
         out_csv_rename = os.path.join(out_folder, "{}.csv".format(new_table_name))
         out_schema_rename = os.path.join(out_folder, "{}_schema.csv".format(new_table_name))
         os.rename(out_csv, out_csv_rename)
-        os.rename(out_qa_csv, out_qa_csv_rename)
-        os.rename(out_schema, out_schema_rename)
+        if export_qa_version:
+            os.rename(out_qa_csv, out_qa_csv_rename)
+        if output_schema:
+            os.rename(out_schema, out_schema_rename)
 
 
 def main():

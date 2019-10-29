@@ -68,56 +68,37 @@ def rename_field(inTable, oldFieldName, newFieldName, deleteOld = False):
     if deleteOld == True: arcpy.DeleteField_management(inTable, oldFieldName)
 
 
-def one_in_one_out(tool_table, calculated_fields, zone_fc, zone_field, output_table):
+def one_in_one_out(tool_table, zone_fc, zone_field, output_table):
     """ Occasionally, ArcGIS tools we use do not produce an output record for
     every input feature. This function is used in the toolbox whenever we need
     to correct this problem, and should be called at the end of the script to
-    create the final output. This function also takes care of cleaning up
-    the output table so that it only has the ID field and the newly calculated
-    fields.
+    create the final output.
     tool_table: the intermediate table with missing features
-    calculated_fields: the fields newly calculated by the tool that you wish to
-    appear in the output
     zone_fc: the feature class with the zones
     zone_field: the field uniquely identifying each feature that was used in
     the creation of tool_table. Because this function is called within our
     scripts, the zone_field should always be the same in tool_table and
     extent_fc
     output_table: the final output table
-    tool_fields: the calculated fields you want to retain, besides zone_field
     """
+    # get list of zones that need nulls inserted
+    original_zones = {r[0] for r in arcpy.da.SearchCursor(zone_fc, zone_field)}
+    null_zones = original_zones.difference({r[0] for r in arcpy.da.SearchCursor(tool_table, zone_field)})
 
-    # # This function is mostly a hack on an outer right join. Want to join to
-    # # zone_fc but select ONLY the ID field, and keep all records in zone_fc
-    # # If you find a better way, update this.
-    # arcpy.CopyRows_management(zone_fc, output_table)
-    # arcpy.JoinField_management(output_table, zone_field, tool_table, zone_field)
-    # calculated_fields.append(zone_field)
-    # field_names = [f.name for f in arcpy.ListFields(output_table)]
-    # for f in field_names:
-    #     if f not in calculated_fields:
-    #         try:
-    #             arcpy.DeleteField_management(output_table, f)
-    #         except:
-    #             continue
-
-    # replaces old method, and is faster
-    zone_field_vals = [row[0] for row in arcpy.da.SearchCursor(zone_fc, zone_field)]
+    # get list of fields from table that can be inserted
     editable_fields = [f.name for f in arcpy.ListFields(tool_table) if f.editable]
     editable_fields.remove(zone_field)
-    with arcpy.da.UpdateCursor(tool_table, [zone_field] + editable_fields) as uCursor:
-        for row in uCursor:
-            zone_value = row[0]
-            if zone_value in zone_field_vals:
-                zone_field_vals.remove(zone_value)
-        # now, with the IDs that are left, make null rows
-        for val in zone_field_vals:
-            new_row = val + [None]*len(editable_fields)
-            uCursor.updateRow(new_row)
+
+    # insert a null row for every ID we identified
+    iCursor = arcpy.da.InsertCursor(tool_table, [zone_field] + editable_fields)
+    for zone_id in null_zones:
+        new_row = [zone_id] + [None]*len(editable_fields)
+        iCursor.insertRow(new_row)
+    del iCursor
+
+    # copy to output
     output_table = arcpy.CopyRows_management(tool_table, output_table)
     return output_table
-
-
 
 
 def redefine_nulls(in_table, in_fields, out_values):

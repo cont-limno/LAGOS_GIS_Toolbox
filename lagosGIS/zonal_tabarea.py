@@ -79,7 +79,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # # in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
     if not is_thematic:
         arcpy.AddMessage("Calculating Zonal Statistics...")
-        temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'MIN_MAX_MEAN')
+        temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster, 'temp_zonal_table', 'DATA', 'MEAN')
 
     if is_thematic:
         #for some reason env.cellSize doesn't work
@@ -164,7 +164,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
     # cleanup
     if not debug_mode:
-        for item in ['temp_zonal_table', temp_entire_table, zone_raster, 'convertraster']:
+        for item in ['temp_zonal_table', temp_entire_table, 'convertraster']: # don't add zone_raster, orig
             arcpy.Delete_management(item)
     arcpy.ResetEnvironments()
     arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch

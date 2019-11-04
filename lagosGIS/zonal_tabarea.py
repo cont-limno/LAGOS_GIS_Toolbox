@@ -106,14 +106,14 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
     arcpy.AddMessage("Refining output table...")
 
-    arcpy.AddField_management(temp_entire_table, 'DataCoverage_pct', 'DOUBLE')
+    arcpy.AddField_management(temp_entire_table, 'datacoveragepct', 'DOUBLE')
     arcpy.AddField_management(temp_entire_table, 'ORIGINAL_COUNT', 'LONG')
 
-    # calculate DataCoverage_pct by comparing to original areas in zone raster
+    # calculate datacoveragepct by comparing to original areas in zone raster
     # alternative to using JoinField, which is prohibitively slow if zones exceed hu12 count
     zone_raster_dict = {row[0]:row[1] for row in arcpy.da.SearchCursor(zone_raster, [zone_field, 'Count'])}
     temp_entire_table_dict = {row[0]:row[1] for row in arcpy.da.SearchCursor(temp_entire_table, [zone_field, 'COUNT'])}
-    with arcpy.da.UpdateCursor(temp_entire_table, [zone_field, 'DataCoverage_Pct', 'ORIGINAL_COUNT']) as cursor:
+    with arcpy.da.UpdateCursor(temp_entire_table, [zone_field, 'datacoveragepct', 'ORIGINAL_COUNT']) as cursor:
         for uRow in cursor:
             key_value, data_pct, count_orig = uRow
             count_orig = zone_raster_dict[key_value]
@@ -140,8 +140,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
     # right now we just can't fill in polygon zones that didn't convert to raster in our system
     cu.one_in_one_out(temp_entire_table, zone_fc, zone_field, out_table)
 
-    # Convert "DataCoverage_pct" and "ORIGINAL_COUNT" values to 0 for zones with no metrics calculated
-    with arcpy.da.UpdateCursor(out_table, [zone_field, 'DataCoverage_pct', 'ORIGINAL_COUNT', 'CELL_COUNT']) as u_cursor:
+    # Convert "datacoveragepct" and "ORIGINAL_COUNT" values to 0 for zones with no metrics calculated
+    with arcpy.da.UpdateCursor(out_table, [zone_field, 'datacoveragepct', 'ORIGINAL_COUNT', 'CELL_COUNT']) as u_cursor:
         for row in u_cursor:
             # data_coverage pct to 0
             if row[1] is None:
@@ -249,16 +249,16 @@ def flatten_overlaps(fc_with_overlapping_polygons, zone_id, in_value_raster, out
                 original_flat[row[0]].append(row[1])
 
     # Use CELL_COUNT as weight for means to calculate final values for each zone.
-    fixed_fields = [zone_id, 'ORIGINAL_COUNT', 'CELL_COUNT', 'DataCoverage_pct']
+    fixed_fields = [zone_id, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct']
     other_field_names = [f.name for f in editable_fields if f.name not in fixed_fields]
     i_cursor = arcpy.da.InsertCursor(result, fixed_fields + other_field_names) # open output table cursor
     flat_stats = {r[0]:r[1:] for r in arcpy.da.SearchCursor(
-        flatzone_stats_table, [flat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'DataCoverage_pct'] + other_field_names)}
+        flatzone_stats_table, [flat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct'] + other_field_names)}
 
     for zid, unflat_ids in original_flat.items():
         area_vec = [flat_stats[id][0] for id in unflat_ids] # ORIGINAL_COUNT specified in 0 index earlier
         cell_vec = [flat_stats[id][1] for id in unflat_ids]
-        coverage_vec = [flat_stats[id][2] for id in unflat_ids]  # DataCoverage_pct special handling
+        coverage_vec = [flat_stats[id][2] for id in unflat_ids]  # datacoveragepct special handling
         stat_vectors_by_id = [flat_stats[id][3:] for id in unflat_ids] # "the rest", list of lists
 
         # calc the new summarized values

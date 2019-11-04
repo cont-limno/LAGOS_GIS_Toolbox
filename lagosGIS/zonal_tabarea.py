@@ -14,17 +14,15 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
     if is_thematic:
         value_fields = arcpy.ListFields(t, "VALUE*")
         pct_fields = [f.name.replace("VALUE", "Pct") for f in value_fields]
-        ha_fields = [f.name.replace("VALUE", "Ha") for f in value_fields]
         # add all the new fields needed
         # ha field does NOT add up to original feature area, cannot if vector inputs aren't used.
         # it's unnecessary--being dropped at the export stage. calculating for data QA only.
-        for f, pct_field, ha_field in zip(value_fields, pct_fields, ha_fields):
+        for f, pct_field in zip(value_fields, pct_fields):
             # find percent of total area in a new field
             arcpy.AddField_management(t, pct_field, f.type)
-            arcpy.AddField_management(t, ha_field, f.type)
 
         value_field_names = [f.name for f in value_fields]
-        cursor_fields = ['AREA'] + value_field_names + pct_fields + ha_fields
+        cursor_fields = ['AREA'] + value_field_names + pct_fields
         uCursor = arcpy.da.UpdateCursor(t, cursor_fields)
         for uRow in uCursor:
             # unpacks area + 3 tuples of the right fields for each, no matter how many there are
@@ -32,10 +30,9 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
             pf_i_end = vf_i_end + len(pct_fields)
 
             # pct_values and ha_values are both null at this point but unpack for clarity
-            area, value_values, pct_values, ha_values = uRow[0], uRow[1:vf_i_end], uRow[vf_i_end:pf_i_end], uRow[pf_i_end:]
+            area, value_values, pct_values = uRow[0], uRow[1:vf_i_end], uRow[vf_i_end:pf_i_end]
             new_pct_values = [100*vv/area for vv in value_values]
-            new_ha_values = [vv/10000 for vv in value_values] # convert square m to ha
-            new_row = [area] + value_values + new_pct_values + new_ha_values
+            new_row = [area] + value_values + new_pct_values
             uCursor.updateRow(new_row)
 
         for vf in value_field_names:
@@ -72,8 +69,8 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
     zone_desc = arcpy.Describe(zone_fc)
     zone_raster = 'convertraster'
-    if zone_desc.dataType != 'RasterDataset':
-        arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER', cellsize = CELL_SIZE)
+    if zone_desc.dataType not in ['RasterDataset', 'RasterLayer']:
+        zone_raster = arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER', cellsize = CELL_SIZE)
     else:
         zone_raster = zone_fc
 
@@ -167,7 +164,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
 
     # cleanup
     if not debug_mode:
-        for item in ['temp_zonal_table', temp_entire_table, 'convertraster']:
+        for item in ['temp_zonal_table', temp_entire_table, zone_raster, 'convertraster']:
             arcpy.Delete_management(item)
     arcpy.ResetEnvironments()
     arcpy.env.workspace = orig_env # hope this prevents problems using list of FCs from workspace as batch

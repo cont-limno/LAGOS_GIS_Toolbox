@@ -7,26 +7,24 @@ import csiutils as cu
 import lagosGIS
 from collections import defaultdict
 
-def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
+def refine_zonal_output(t, is_thematic, debug_mode = False):
     """Makes a nicer output for this tool. Rename some fields, drop unwanted
         ones, calculate percentages using raster AREA before deleting that
         field."""
     if is_thematic:
         value_fields = arcpy.ListFields(t, "VALUE*")
-        pct_fields = [f.name.replace("VALUE", "Pct") for f in value_fields]
+        pct_fields = ['{}_pct'.format(f.name) for f in value_fields] # VALUE_41_pct, etc. Field can't start with number.
+
         # add all the new fields needed
-        # ha field does NOT add up to original feature area, cannot if vector inputs aren't used.
-        # it's unnecessary--being dropped at the export stage. calculating for data QA only.
         for f, pct_field in zip(value_fields, pct_fields):
-            # find percent of total area in a new field
             arcpy.AddField_management(t, pct_field, f.type)
 
-        value_field_names = [f.name for f in value_fields]
-        cursor_fields = ['AREA'] + value_field_names + pct_fields
+        # calculate the percents
+        cursor_fields = ['AREA'] + [f.name for f in value_fields] + pct_fields
         uCursor = arcpy.da.UpdateCursor(t, cursor_fields)
         for uRow in uCursor:
             # unpacks area + 3 tuples of the right fields for each, no matter how many there are
-            vf_i_end = len(value_field_names)+1
+            vf_i_end = len(value_fields)+1
             pf_i_end = vf_i_end + len(pct_fields)
 
             # pct_values and ha_values are both null at this point but unpack for clarity
@@ -35,8 +33,8 @@ def refine_zonal_output(t, zone_field, is_thematic, debug_mode = False):
             new_row = [area] + value_values + new_pct_values
             uCursor.updateRow(new_row)
 
-        for vf in value_field_names:
-            arcpy.DeleteField_management(t, vf)
+        for vf in value_fields:
+            arcpy.DeleteField_management(t, vf.name)
 
     arcpy.AlterField_management(t, 'COUNT', 'CELL_COUNT')
     drop_fields = ['ZONE_CODE', 'COUNT', 'AREA']
@@ -125,7 +123,7 @@ def stats_area_table(zone_fc, zone_field, in_value_raster, out_table, is_themati
             cursor.updateRow((key_value, data_pct, count_orig))
 
     # Refine the output
-    refine_zonal_output(temp_entire_table, zone_field, is_thematic)
+    refine_zonal_output(temp_entire_table, is_thematic)
 
     # final table gets a record even for no-data zones
     keep_fields = [f.name for f in arcpy.ListFields(temp_entire_table)]

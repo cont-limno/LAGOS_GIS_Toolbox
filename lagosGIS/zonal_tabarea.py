@@ -1,3 +1,4 @@
+import csv
 import os
 import arcpy
 from arcpy import management as DM
@@ -19,7 +20,8 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
     
-    def stats_area_table():
+    def stats_area_table(zone_fc=zone_fc, zone_field=zone_field, in_value_raster=in_value_raster,
+                         out_table=out_table, is_thematic=is_thematic):
         def refine_zonal_output(t):
             """Makes a nicer output for this tool. Rename some fields, drop unwanted
                 ones, calculate percentages using raster AREA before deleting that
@@ -135,7 +137,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
 
         # in order to add vector capabilities back, need to do something with this
         # right now we just can't fill in polygon zones that didn't convert to raster in our system
-        cu.one_in_one_out(temp_entire_table, zone_fc, temp_zone_field, out_table)
+        out_table = cu.one_in_one_out(temp_entire_table, zone_fc, temp_zone_field, out_table)
 
         # Convert "datacoveragepct" and "ORIGINAL_COUNT" values to 0 for zones with no metrics calculated
         with arcpy.da.UpdateCursor(out_table,
@@ -288,11 +290,36 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         return [result, count_diff]
     
     if zone_has_overlaps:
-        out_table = flatten_overlaps()
+        result = flatten_overlaps()
     else:
-        out_table = stats_area_table()
+        result= stats_area_table()
+    out_table = result[0]
+    total_count_diff = result[1]
 
-    total_count_diff = out_table[1]
+    # rename things (LAGOS standard), if desired
+    if rename_tag:
+        # datacoverage just gets tag
+        new_datacov_name = '{}_datacoveragepct'.format(rename_tag)
+        DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
+        if not is_thematic:
+            new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_') # if no units, just rename_tag
+            DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
+        else:
+            # look up the values based on the rename tag
+            geo_file = os.path.abspath('../geo_metric_provenance.csv')
+            with open(geo_file) as csv_file:
+                reader = csv.DictReader(csv_file)
+                mapping = {row['subgroup_original_code']: row['subgroup']
+                             for row in reader if row['main_feature'] == rename_tag}
+
+            # update them
+            for old, new in mapping.items():
+                old_fname= 'VALUE_{}_pct'.format(old)
+                new_fname = '{}_pct'.format(new)
+                try:
+                    DM.AlterField(out_table, old_fname, new_fname, clear_field_alias=True)
+                except:
+                    pass # sometimes not all values are included in the output table
 
     if total_count_diff > 0:
         warn_msg = ("WARNING: {0} zones have null zonal statistics. There are 2 possible reasons:\n"

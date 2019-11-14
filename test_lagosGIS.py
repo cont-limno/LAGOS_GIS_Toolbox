@@ -20,15 +20,23 @@ __all__ = ["lake_connectivity_classification",
 def lake_connectivity_classification(out_feature_class, debug_mode = True):
     lagosGIS.lake_connectivity_classification(TEST_DATA_GDB, out_feature_class, debug_mode)
 
-def zonal_attribution_of_raster_data(out_table, is_thematic = False, debug_mode = True):
-    zone_fc = os.path.join(TEST_DATA_GDB, 'HU12_raster')
+def zonal_attribution_of_raster_data(out_table, zone_has_overlaps=False, is_thematic =False):
+    if zone_has_overlaps:
+        zone_fc = os.path.join(TEST_DATA_GDB, 'buff500')
+        zone_field = 'buff500_zoneid'
+    else:
+        zone_fc = os.path.join(TEST_DATA_GDB, 'hu12_raster')
+        zone_field = 'hu12_zoneid'
     if is_thematic:
         in_value_raster = os.path.join(TEST_DATA_GDB, 'NLCD_LandCover_2006')
+        rename_tag = 'nlcd2006'
+        units=''
     else:
         in_value_raster = os.path.join(TEST_DATA_GDB, 'Total_Nitrogen_Deposition_2006')
-    zone_field = arcpy.ListFields(zone_fc, '*zoneid')[0].name
-    lagosGIS.zonal_attribution_of_raster_data(zone_fc, zone_field, in_value_raster,
-                                              out_table, is_thematic = is_thematic, debug_mode =  debug_mode)
+        rename_tag = 'wetdepno3_2006'
+        units = 'kgperha'
+    lagosGIS.zonal_attribution_of_raster_data(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out_table,
+                                              is_thematic=is_thematic, rename_tag=rename_tag, units=units)
 # hand-verified to be correct
 # update 2018-05-29, these numbers rely on the old method of using the source raster data grid instead of the
 # common_grid.tif

@@ -18,6 +18,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         arcpy.AddMessage('Debugging workspace located at {}'.format(temp_gdb))
     else:
         env.workspace = 'in_memory'
+    arcpy.SetLogHistory(False)
     arcpy.CheckOutExtension("Spatial")
     
     def stats_area_table(zone_fc=zone_fc, zone_field=zone_field, in_value_raster=in_value_raster,
@@ -85,7 +86,6 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
             arcpy.AddMessage("Calculating Zonal Statistics...")
             temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster,
                                                                 'temp_zonal_table', 'DATA', 'MEAN')
-            temp_zone_field = zone_field # see alt assignment, below
 
         if is_thematic:
             # for some reason env.cellSize doesn't work
@@ -93,7 +93,14 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
             arcpy.AddMessage("Tabulating areas...")
             temp_entire_table = arcpy.sa.TabulateArea(zone_raster, zone_field, in_value_raster, 'Value',
                                                       'temp_area_table', CELL_SIZE)
-            temp_zone_field = zone_field.upper() # TabulateArea does this for some annoying reason
+            # TabulateArea capitalizes the zone for some annoying reason and ArcGIS is case-insensitive to field names
+            # so we have this work-around:
+            zone_field_t = '{}_t'.format(zone_field)
+            DM.AddField(temp_entire_table, zone_field_t, 'TEXT', field_length = 20)
+            expr = '!{}!'.format(zone_field.upper())
+            DM.CalculateField(temp_entire_table, zone_field_t, expr, 'PYTHON')
+            DM.DeleteField(temp_entire_table, zone_field.upper())
+            DM.AlterField(temp_entire_table, zone_field_t, zone_field, clear_field_alias=True)
 
             # replaces join to Zonal Stats in previous versions of tool
             # no joining, just calculate the area/count from what's produced by TabulateArea
@@ -120,8 +127,8 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         # alternative to using JoinField, which is prohibitively slow if zones exceed hu12 count
         zone_raster_dict = {row[0]: row[1] for row in arcpy.da.SearchCursor(zone_raster, [zone_field, 'Count'])}
         temp_entire_table_dict = {row[0]: row[1] for row in
-                                  arcpy.da.SearchCursor(temp_entire_table, [temp_zone_field, 'COUNT'])}
-        with arcpy.da.UpdateCursor(temp_entire_table, [temp_zone_field, 'datacoveragepct', 'ORIGINAL_COUNT']) as cursor:
+                                  arcpy.da.SearchCursor(temp_entire_table, [zone_field, 'COUNT'])}
+        with arcpy.da.UpdateCursor(temp_entire_table, [zone_field, 'datacoveragepct', 'ORIGINAL_COUNT']) as cursor:
             for uRow in cursor:
                 key_value, data_pct, count_orig = uRow
                 count_orig = zone_raster_dict[key_value]
@@ -137,7 +144,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
 
         # in order to add vector capabilities back, need to do something with this
         # right now we just can't fill in polygon zones that didn't convert to raster in our system
-        out_table = cu.one_in_one_out(temp_entire_table, zone_fc, temp_zone_field, out_table)
+        out_table = cu.one_in_one_out(temp_entire_table, zone_fc, zone_field, out_table)
 
         # Convert "datacoveragepct" and "ORIGINAL_COUNT" values to 0 for zones with no metrics calculated
         with arcpy.da.UpdateCursor(out_table,
@@ -298,6 +305,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
 
     # rename things (LAGOS standard), if desired
     if rename_tag:
+        arcpy.AddMessage("Renaming.")
         # datacoverage just gets tag
         new_datacov_name = '{}_datacoveragepct'.format(rename_tag)
         DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
@@ -310,12 +318,12 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
             with open(geo_file) as csv_file:
                 reader = csv.DictReader(csv_file)
                 mapping = {row['subgroup_original_code']: row['subgroup']
-                             for row in reader if row['main_feature'] == rename_tag}
+                             for row in reader if row['main_feature'] in rename_tag}
 
             # update them
             for old, new in mapping.items():
                 old_fname= 'VALUE_{}_pct'.format(old)
-                new_fname = '{}_pct'.format(new)
+                new_fname = '{}_{}_pct'.format(rename_tag, new)
                 try:
                     DM.AlterField(out_table, old_fname, new_fname, clear_field_alias=True)
                 except:
@@ -326,6 +334,8 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
                     "1) Presence of zones that are fully outside the extent of the raster summarized.\n"
                     "2) Zones are too small relative to the raster resolution.".format(total_count_diff))
         arcpy.AddWarning(warn_msg)
+
+    arcpy.SetLogHistory(True)
 
     return out_table
 
@@ -344,4 +354,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

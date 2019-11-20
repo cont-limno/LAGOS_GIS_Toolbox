@@ -70,7 +70,6 @@ def rename_variables(file, prefix = ''):
         filtered_header = [name for name in desired_header if 'OBJECT' not in name and 'zoneid' not in name]
 
         # write out selected fields with new names
-        arcpy.AddMessage('{}'.format(update_dict))
         with tempfile:
             writer = csv.DictWriter(tempfile, fieldnames = filtered_header)
             writer.writeheader()

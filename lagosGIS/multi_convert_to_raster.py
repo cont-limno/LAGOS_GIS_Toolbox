@@ -1,15 +1,21 @@
 # Converts multiple polygon feature classes to "zone" rasters using a common grid
+import math
 import os
 import arcpy
 from arcpy import env
 this_files_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(this_files_dir)
 SNAP_RASTER = '../common_grid.tif'
-CELL_SIZE = 30
+CELL_SIZE = 90
 
 def multi_convert_to_raster(polygon_fc_list, output_workspace):
 
     for polygon_fc in polygon_fc_list:
+        if 'hu12' in polygon_fc:
+            cell_size = 30
+        else:
+            cell_size = CELL_SIZE
+
         env.extent = polygon_fc
         env.snapRaster = SNAP_RASTER
         short_name = os.path.splitext(os.path.basename(polygon_fc))[0]
@@ -20,7 +26,7 @@ def multi_convert_to_raster(polygon_fc_list, output_workspace):
                                          zoneid_field,
                                          output_raster,
                                          'CELL_CENTER',
-                                         cellsize = CELL_SIZE)
+                                         cellsize = cell_size)
         arcpy.BuildPyramids_management(output_raster, SKIP_FIRST = True)
     arcpy.AddMessage("Completed.")
 

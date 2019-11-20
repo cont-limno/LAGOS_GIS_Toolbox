@@ -68,16 +68,19 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         common_grid = os.path.abspath('../common_grid.tif')
         env.snapRaster = common_grid
         env.cellSize = common_grid
-        CELL_SIZE = 30
+
         env.extent = zone_fc
 
         zone_desc = arcpy.Describe(zone_fc)
         zone_raster = 'convertraster'
         if zone_desc.dataType not in ['RasterDataset', 'RasterLayer']:
             zone_raster = arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER',
-                                                           cellsize=CELL_SIZE)
+                                                           cellsize=env.cellSize)
+            print('cell size is {}'.format(env.cellSize))
         else:
             zone_raster = zone_fc
+            env.cellSize = zone_raster
+            print('cell size is {}'.format(env.cellSize))
 
         # I tested and there is no need to resample the raster being summarized. It will be resampled correctly
         # internally in the following tool given that the necessary environments are set above (cell size, snap).
@@ -92,7 +95,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
             # calculate/doit
             arcpy.AddMessage("Tabulating areas...")
             temp_entire_table = arcpy.sa.TabulateArea(zone_raster, zone_field, in_value_raster, 'Value',
-                                                      'temp_area_table', CELL_SIZE)
+                                                      'temp_area_table', processing_cell_size = env.cellSize)
             # TabulateArea capitalizes the zone for some annoying reason and ArcGIS is case-insensitive to field names
             # so we have this work-around:
             zone_field_t = '{}_t'.format(zone_field)
@@ -114,7 +117,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
                 for uRow in uCursor:
                     area, count, value_fields = uRow[0], uRow[1], uRow[2:]
                     area = sum(value_fields)
-                    count = round(area / (CELL_SIZE * CELL_SIZE), 0)
+                    count = round(area / (int(env.cellSize) * int(env.cellSize)), 0)
                     new_row = [area, count] + value_fields
                     uCursor.updateRow(new_row)
 
@@ -188,10 +191,12 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         flat_zoneid_prefix = 'flat{}_'.format(os.path.basename(zone_fc))
 
         # Union with FID_Only (A)
+        arcpy.AddMessage("Splitting overlaps in polygons...")
         zoneid_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(zone_fc, [objectid, zone_field])}
         self_union = AN.Union([zone_fc, zone_fc], 'self_union', 'ONLY_FID')
 
         # Add the original zone ids and save to table (E)
+        arcpy.AddMessage("Assigning temporary IDs to split polygons...")
         unflat_table = DM.CopyRows(self_union, 'unflat_table')
         DM.AddField(unflat_table, zone_field, zone_type)  # default text length of 50 is fine if needed
         with arcpy.da.UpdateCursor(unflat_table, [fid1, zone_field]) as u_cursor:
@@ -308,7 +313,8 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         arcpy.AddMessage("Renaming.")
         # datacoverage just gets tag
         new_datacov_name = '{}_datacoveragepct'.format(rename_tag)
-        DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
+        cu.rename_field(out_table, 'datacoveragepct', new_datacov_name, deleteOld=True)
+        #DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
         if not is_thematic:
             new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_') # if no units, just rename_tag
             DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
@@ -319,13 +325,16 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
                 reader = csv.DictReader(csv_file)
                 mapping = {row['subgroup_original_code']: row['subgroup']
                              for row in reader if row['main_feature'] in rename_tag}
+                print(mapping)
 
             # update them
             for old, new in mapping.items():
                 old_fname= 'VALUE_{}_pct'.format(old)
                 new_fname = '{}_{}_pct'.format(rename_tag, new)
                 try:
-                    DM.AlterField(out_table, old_fname, new_fname, clear_field_alias=True)
+                    # same problem with AlterField limit of 31 characters here.
+                    #DM.AlterField(out_table, old_fname, new_fname, clear_field_alias=True)
+                    cu.rename_field(out_table, old_fname, new_fname, deleteOld=True)
                 except:
                     pass # sometimes not all values are included in the output table
 

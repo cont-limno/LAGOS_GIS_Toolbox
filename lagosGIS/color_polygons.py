@@ -5,7 +5,7 @@ import numpy
 
 # All of the following is from the ESRI Spatial Analyst team's tool called
 # "Zonal Statistics as Table for Overlapping Features"
-def colorPolygons(in_feature_class, feature_field, out_feature_class):
+def colorPolygons(in_feature_class, feature_field, out_feature_class, needs_dissolve=False):
     arcpy.env.overwriteOutput = True
 
 ##    # Create temporary directory
@@ -18,27 +18,31 @@ def colorPolygons(in_feature_class, feature_field, out_feature_class):
 
 
     # Initialize variables
-    temp_features = 'in_memory/dissolve'
-    bldissolved = False
-    # Dissolve on non-ObjectID field
-    desc = arcpy.Describe(in_feature_class)
-    arcpy.AddMessage("Dissolving features.")
-    if hasattr(desc, "OIDFieldName"):
-        if feature_field != desc.OIDFieldName:
+    if needs_dissolve:
+        temp_features = 'in_memory/dissolve'
+        bldissolved = False
+        # Dissolve on non-ObjectID field
+        desc = arcpy.Describe(in_feature_class)
+        arcpy.AddMessage("Dissolving features.")
+        if hasattr(desc, "OIDFieldName"):
+            if feature_field != desc.OIDFieldName:
+                arcpy.Dissolve_management(in_feature_class, temp_features, \
+                    feature_field)
+                bldissolved = True
+            else:
+                temp_features = in_feature_class
+        else:
             arcpy.Dissolve_management(in_feature_class, temp_features, \
                 feature_field)
             bldissolved = True
+        # Get ObjectID field from dissolved
+        if bldissolved:
+            desc = arcpy.Describe(temp_features)
+            oid_field = desc.OIDFieldName
         else:
-            temp_features = in_feature_class
+            oid_field = feature_field
     else:
-        arcpy.Dissolve_management(in_feature_class, temp_features, \
-            feature_field)
-        bldissolved = True
-    # Get ObjectID field from dissolved
-    if bldissolved:
-        desc = arcpy.Describe(temp_features)
-        oid_field = desc.OIDFieldName
-    else:
+        temp_features = in_feature_class
         oid_field = feature_field
 
     # Calculate polygon contiguity

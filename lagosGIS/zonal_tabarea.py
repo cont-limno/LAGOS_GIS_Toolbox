@@ -187,13 +187,16 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         zone_type = [f.type for f in arcpy.ListFields(zone_fc, zone_field)][0]
         fid1 = 'FID_{}'.format(os.path.basename(zone_fc))
         fid2 = fid1 + '_1'
-        flat_zoneid = 'flat{}_zoneid'.format(os.path.basename(zone_fc))
-        flat_zoneid_prefix = 'flat{}_'.format(os.path.basename(zone_fc))
+        flat_zoneid = 'flat{}'.format(zone_field)
+        flat_zoneid_prefix = 'flat{}_'.format(zone_field.replace('_zoneid', ''))
 
         # Union with FID_Only (A)
         arcpy.AddMessage("Splitting overlaps in polygons...")
         zoneid_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(zone_fc, [objectid, zone_field])}
         self_union = AN.Union([zone_fc, zone_fc], 'self_union', 'ONLY_FID')
+        # overlap_regions = arcpy.Select_analysis(self_union, 'overlap_regions', '{} <> {}'.format(fid1, fid2))
+        # geom_check = arcpy.CheckGeometry_management(overlap_regions, 'geom_check')
+
 
         # Add the original zone ids and save to table (E)
         arcpy.AddMessage("Assigning temporary IDs to split polygons...")

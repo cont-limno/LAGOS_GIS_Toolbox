@@ -68,7 +68,7 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     with arcpy.da.SearchCursor("ned_clip", ["FILE_ID"]) as cursor:
         for row in cursor:
             file_id = row[0].replace("g","")
-
+            print file_id
             # unzipping if needed
 
             if is_zipped:
@@ -92,7 +92,7 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
         warning_text = "WARNING: NED tiles did not exist for the following: %s" % ','.join(missing_NED_list)
         arcpy.AddWarning(warning_text)
         print(warning_text)
-    for item in ["wbd_buf", "ned_clip"]:
+    for item in ["wbd_poly", "wbd_buf", "ned_clip"]:
         arcpy.Delete_management(item)
     return out_subdir
 
@@ -162,6 +162,7 @@ def mosaic(in_workspace, nhd_gdb, out_dir, available_ram = 4, projection = arcpy
     arcpy.AddMessage("Found NED rasters.")
 
     # Update environments
+    orig_extent = env.extent
     env.extent = subregion_buffer
     approx_size_dir_GB = len(mosaic_rasters) * .5
 
@@ -199,18 +200,19 @@ def mosaic(in_workspace, nhd_gdb, out_dir, available_ram = 4, projection = arcpy
     env.outputCoordinateSystem = projection
     arcpy.AddMessage("Clipping final mosaic...")
 
+    nodata = arcpy.Describe(mosaic_rasters[0]).noDataValue
     out_mosaic = os.path.join(out_dir, "NED13_%s.tif" % huc4_code)
-    arcpy.Clip_management(mosaic_proj, '', out_mosaic, subregion_buffer,
-     "0", "ClippingGeometry")
+    arcpy.Clip_management(mosaic_proj, '', out_mosaic, subregion_buffer, str(nodata), "ClippingGeometry")
 
     # Clean up
-    for item in [mosaic_unproj, mosaic_proj]:
+    for item in [mosaic_unproj, mosaic_proj, "Subregion"]:
         arcpy.Delete_management(item)
     arcpy.AddMessage("Mosaicked NED tiles and clipped to HUC4 extent.")
 
-    for raster in mosaic_rasters:
-        arcpy.Delete_management(raster)
+    # for raster in mosaic_rasters:
+    #     arcpy.Delete_management(raster)
 
+    env.extent = orig_extent
     return out_mosaic
 
 

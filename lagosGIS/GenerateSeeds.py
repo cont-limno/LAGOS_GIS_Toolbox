@@ -14,6 +14,7 @@ def select_pour_points(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible
     # Preliminary environmental settings:
     env.snapRaster = subregion_dem
     env.extent = subregion_dem
+    env.mask = subregion_dem
     env.cellSize = 10
     env.pyramid = "PYRAMIDS -1 SKIP_FIRST"
     env.outputCoordinateSystem = projection

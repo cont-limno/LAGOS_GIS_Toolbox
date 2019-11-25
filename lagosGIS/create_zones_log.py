@@ -232,6 +232,10 @@ for line in lines:
                  line['LAGOS-NE Name'])
 
 
+# delete hu12 with SHAPE_Area < 5000 and (hu12_onlandborder = 'Y' or hu12_oncoast = 'Y')
+# TODO: 2019-11-20 add the code to do this, because you deleted 15 sliver hu12 by hand on this date.
+
+
 # # Add 100% open water designation to HU12
 # # First select only LAGOS lakes over 250 hectares (0.2% of HU12 size):  3567 lakes
 # arcpy.env.workspace = 'in_memory'
@@ -263,4 +267,7 @@ for line in lines:
 # # Atlantic Ocean name or Pacific Ocean or Gulf of Mexico name, does not have "Frontal", "Beach", "Bank" in the name AND contains no lakes
 # # 	Border slivers as detected by compactness (something like this query original_area_pct < 0.1 AND compactness < .2 AND area_ha < 60)
 # # 	Belongs to a HU8 not found in LAGOS (true for just one HU12: 040602000000)
+
+
+
 

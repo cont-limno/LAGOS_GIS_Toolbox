@@ -5,7 +5,7 @@ import shutil
 import fileinput
 import arcpy
 import csiutils as cu
-from decimal import *
+from decimal import Decimal
 
 def describe_arcgis_table_csv(in_table, out_path, field_list = [], rename_fields = True):
     """
@@ -89,6 +89,9 @@ def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_tabl
     out_csv = os.path.join(out_folder, "{}.csv".format(name))
     arcpy.AddMessage("out csv is {}".format(out_csv))
 
+    # for rounding
+    places = 10
+
     if field_list:
         fields_qa = field_list
     else:
@@ -106,8 +109,9 @@ def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_tabl
         if x is None:
             return 'NULL'
         elif isinstance(x, float):
-            d = Decimal(x)
-            out_value = str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
+            x_10 = round(x, 10)
+            x_int = int(round(x, 0))
+            out_value = str(x_int if x_10 == x_int else x_10)
             if out_value == '-0':
                 out_value = '0'
             return out_value

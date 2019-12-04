@@ -63,12 +63,13 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
                         continue
 
         # Set up environments for alignment between zone raster and theme raster
+        if isinstance(zone_fc, arcpy.Result):
+            zone_fc = zone_fc.getOutput(0)
         this_files_dir = os.path.dirname(os.path.abspath(__file__))
         os.chdir(this_files_dir)
         common_grid = os.path.abspath('../common_grid.tif')
         env.snapRaster = common_grid
         env.cellSize = common_grid
-
         env.extent = zone_fc
 
         zone_desc = arcpy.Describe(zone_fc)
@@ -186,17 +187,33 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         objectid = [f.name for f in arcpy.ListFields(zone_fc) if f.type == 'OID'][0]
         zone_type = [f.type for f in arcpy.ListFields(zone_fc, zone_field)][0]
         fid1 = 'FID_{}'.format(os.path.basename(zone_fc))
-        fid2 = fid1 + '_1'
         flat_zoneid = 'flat{}'.format(zone_field)
         flat_zoneid_prefix = 'flat{}_'.format(zone_field.replace('_zoneid', ''))
 
         # Union with FID_Only (A)
         arcpy.AddMessage("Splitting overlaps in polygons...")
         zoneid_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(zone_fc, [objectid, zone_field])}
-        self_union = AN.Union([zone_fc, zone_fc], 'self_union', 'ONLY_FID')
-        # overlap_regions = arcpy.Select_analysis(self_union, 'overlap_regions', '{} <> {}'.format(fid1, fid2))
-        # geom_check = arcpy.CheckGeometry_management(overlap_regions, 'geom_check')
+        self_union = AN.Union([zone_fc], 'self_union', 'ONLY_FID', cluster_tolerance='1 Meters')
 
+        # If you don't run this section, Find Identical fails with error 999999. Seems to have to do with small slivers
+        # having 3 vertices and/or only circular arcs in the geometry.
+        arcpy.AddMessage("Repairing self-union geometries...")
+        DM.AddGeometryAttributes(self_union, 'POINT_COUNT')
+        self_union_fix = DM.MakeFeatureLayer(self_union, 'self_union_fix', where_clause='PNT_COUNT <= 4')
+        arcpy.Densify_edit(self_union_fix, 'OFFSET', max_deviation='1 Meters') # selection ON, edits self_union disk
+        DM.RepairGeometry(self_union_fix) # eliminate empty geometries. selection ON, edits self_union disk
+
+        # Find Identical by Shape (B)
+        identical_shapes = DM.FindIdentical(self_union, 'identical_shapes', 'Shape')
+
+        # Join A to B and calc flat[zone]_zoneid = FEAT_SEQ (C)
+        DM.AddField(self_union, flat_zoneid, 'TEXT', field_length=20)
+        union_oid = [f.name for f in arcpy.ListFields(self_union) if f.type == 'OID'][0]
+        identical_shapes_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(identical_shapes, ['IN_FID', 'FEAT_SEQ'])}
+        with arcpy.da.UpdateCursor(self_union, [union_oid, flat_zoneid]) as u_cursor:
+            for row in u_cursor:
+                row[1] = '{}{}'.format(flat_zoneid_prefix, identical_shapes_dict[row[0]])
+                u_cursor.updateRow(row)
 
         # Add the original zone ids and save to table (E)
         arcpy.AddMessage("Assigning temporary IDs to split polygons...")
@@ -207,32 +224,11 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
                 row[1] = zoneid_dict[row[0]]  # assign zone id
                 u_cursor.updateRow(row)
 
-        # Find Identical by Shape (B)
-        identical_shapes = DM.FindIdentical(self_union, 'identical_shapes', 'Shape')
-
-        # Join A to B and calc flat[zone]_zoneid = FEAT_SEQ (C)
-        DM.AddField(self_union, flat_zoneid, 'TEXT', field_length=20)
-        identical_shapes_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(identical_shapes, ['IN_FID', 'FEAT_SEQ'])}
-        with arcpy.da.UpdateCursor(self_union, [objectid, flat_zoneid]) as u_cursor:
-            for row in u_cursor:
-                row[1] = '{}{}'.format(flat_zoneid_prefix, identical_shapes_dict[row[0]])
-                u_cursor.updateRow(row)
-
-        # Add the original zone ids and save to table (E)
-        unflat_table = DM.CopyRows(self_union, 'unflat_table')
-        DM.AddField(unflat_table, zone_field, zone_type)  # default text length of 50 is fine if needed
-        with arcpy.da.UpdateCursor(unflat_table, [fid1, zone_field]) as u_cursor:
-            for row in u_cursor:
-                row[1] = zoneid_dict[row[0]]  # assign zone id
-                u_cursor.updateRow(row)
-
         # Delete Identical (C) (save as flat[zone])
-        flatzone = DM.CopyFeatures(self_union, 'flatzone')
-        flatzone = DM.DeleteIdentical(flatzone, flat_zoneid)
-        DM.Delete(self_union)  # large and we're done with it
+        flatzone = DM.DeleteIdentical(self_union, flat_zoneid)
 
         # Run Stats tool on C (D)
-        flatzone_stats_table = stats_area_table('flatzone', flat_zoneid, in_value_raster, 'temp_out_table', is_thematic)
+        flatzone_stats_table = stats_area_table(flatzone, flat_zoneid, in_value_raster, 'temp_out_table', is_thematic)
         count_diff = flatzone_stats_table[1]
         flatzone_stats_table = flatzone_stats_table[0]
 

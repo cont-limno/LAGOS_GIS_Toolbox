@@ -199,9 +199,9 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         # having 3 vertices and/or only circular arcs in the geometry.
         arcpy.AddMessage("Repairing self-union geometries...")
         DM.AddGeometryAttributes(self_union, 'POINT_COUNT')
-        self_union_fix = DM.MakeFeatureLayer(self_union, 'self_union_fix', where_clause='PNT_COUNT <= 4')
-        arcpy.Densify_edit(self_union_fix, 'OFFSET', max_deviation='1 Meters') # selection ON, edits self_union disk
-        DM.RepairGeometry(self_union_fix) # eliminate empty geometries. selection ON, edits self_union disk
+        union_fix = DM.MakeFeatureLayer(self_union, 'union_fix', where_clause='PNT_COUNT <= 4 OR Shape_Area = 0')
+        arcpy.Densify_edit(union_fix, 'OFFSET', max_deviation='1 Meters') # selection ON, edits self_union disk
+        DM.RepairGeometry(union_fix, 'DELETE_NULL') # eliminate empty geoms. selection ON, edits self_union disk
 
         # Find Identical by Shape (B)
         identical_shapes = DM.FindIdentical(self_union, 'identical_shapes', 'Shape')
@@ -225,10 +225,16 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
                 u_cursor.updateRow(row)
 
         # Delete Identical (C) (save as flat[zone])
-        flatzone = DM.DeleteIdentical(self_union, flat_zoneid)
+        with arcpy.da.UpdateCursor(self_union, 'OID@') as cursor:
+            visited = []
+            for row in cursor:
+                feat_seq = identical_shapes_dict[row[0]]
+                if feat_seq in visited:
+                    cursor.deleteRow()
+                visited.append(feat_seq)
 
         # Run Stats tool on C (D)
-        flatzone_stats_table = stats_area_table(flatzone, flat_zoneid, in_value_raster, 'temp_out_table', is_thematic)
+        flatzone_stats_table = stats_area_table(self_union, flat_zoneid, in_value_raster, 'temp_out_table', is_thematic)
         count_diff = flatzone_stats_table[1]
         flatzone_stats_table = flatzone_stats_table[0]
 

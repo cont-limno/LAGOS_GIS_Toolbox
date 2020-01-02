@@ -79,7 +79,7 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
         # validate (optional)
         for arg in validate_args:
             check_item = cook_string(line[arg])
-            if not arcpy.Exists(check_item):
+            if check_item and not arcpy.Exists(check_item):
                 print('WARNING: {} does not exist.'.format(check_item))
 
     # Call each tool and export the result to CSV

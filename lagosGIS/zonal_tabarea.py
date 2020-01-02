@@ -222,10 +222,11 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
 
         count_diff = 0
         for zid, unflat_ids in original_flat.items():
-            area_vec = [flat_stats[id][0] for id in unflat_ids]  # ORIGINAL_COUNT specified in 0 index earlier
-            cell_vec = [flat_stats[id][1] for id in unflat_ids]
-            coverage_vec = [flat_stats[id][2] for id in unflat_ids]  # datacoveragepct special handling
-            stat_vectors_by_id = [flat_stats[id][3:] for id in unflat_ids]  # "the rest", list of lists
+            valid_unflat_ids = [id for id in unflat_ids if id in flat_stats] # skip flatpolys not rasterized
+            area_vec = [flat_stats[id][0] for id in valid_unflat_ids]  # ORIGINAL_COUNT specified in 0 index earlier
+            cell_vec = [flat_stats[id][1] for id in valid_unflat_ids]
+            coverage_vec = [flat_stats[id][2] for id in valid_unflat_ids]  # datacoveragepct special handling
+            stat_vectors_by_id = [flat_stats[id][3:] for id in valid_unflat_ids]  # "the rest", list of lists
 
             # calc the new summarized values
             original_count = sum(filter(None, area_vec))  # None area is functionally equivalent to 0, all Nones = 0 too
@@ -239,7 +240,7 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
                 # instead of the full zone original_count. You have to do both or the mean will be distorted.
                 # hand-verification that this works as intended using test GIS data on was completed 2019-11-01 by NJS
                 crossprods = []
-                for i in range(0, len(unflat_ids)):
+                for i in range(0, len(valid_unflat_ids)):
                     crossprods.append([cell_vec[i] * float(s or 0) for s in stat_vectors_by_id[i]])
 
                 weighted_stat_means = []

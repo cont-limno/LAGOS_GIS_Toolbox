@@ -11,7 +11,7 @@ CELL_SIZE = 90
 def multi_convert_to_raster(polygon_fc_list, output_workspace):
 
     for polygon_fc in polygon_fc_list:
-        if 'hu12' in polygon_fc:
+        if 'hu12' in polygon_fc or 'buff' in polygon_fc or ('ws' in polygon_fc and 'nws' not in polygon_fc):
             cell_size = 30
         else:
             cell_size = CELL_SIZE

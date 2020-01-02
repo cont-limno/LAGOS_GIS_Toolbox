@@ -11,7 +11,7 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
     """
     Reads a job control file with the following CSV format: First column contains function name to run. Columns contain arguments to use, in order.
     :param job_control_csv: The path to the job control CSV file
-    :param start_line: The line to start the job from
+    :param start_line: The line to start the job from or a list of line numbers to run
     :param end_line: The line to end the job from
     :param validate: Validate the inputs only, do not run.
     :param validate_args: A list of the argument labels to validate. Use ['Arg1', 'Arg2'] etc.
@@ -45,8 +45,11 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
     with open(job_control_csv) as csv_file:
         reader = csv.DictReader(csv_file)
         lines = [line for line in reader]
-        if start_line > 0 or end_line > 0:
+        if isinstance(start_line, int) and \
+                (start_line > 0 or end_line > 0):
             lines = lines[start_line-1:end_line]
+        elif isinstance(start_line, list):
+            lines = [line for line in lines if int(line['Line']) in start_line]
 
     calls = []
     outputs = []
@@ -60,6 +63,10 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
             input_arg = line['Arg{}'.format(i+1)]
             if input_arg:
                 args.append(cook_string(input_arg))
+            elif line['Arg{}'.format(i+2)]:
+                args.append('')
+            else:
+                continue
         output = cook_string(line['Output'])
         csv_path = cook_string(line['CSV'])
         outputs.append(output)

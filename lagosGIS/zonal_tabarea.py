@@ -8,7 +8,7 @@ import csiutils as cu
 import lagosGIS
 from collections import defaultdict
 
-def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out_table, is_thematic,
+def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',
                     rename_tag='', units='', debug_mode=False):
     orig_env = env.workspace
     if debug_mode:
@@ -80,7 +80,9 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
             print('cell size is {}'.format(env.cellSize))
         else:
             zone_raster = zone_fc
-            env.cellSize = zone_raster
+            zone_size = min(arcpy.Describe(zone_raster).meanCellHeight, arcpy.Describe(zone_raster).meanCellWidth)
+            raster_size = min(arcpy.Describe(in_value_raster).meanCellHeight, arcpy.Describe(in_value_raster).meanCellWidth)
+            env.cellSize = min([zone_size, raster_size])
             print('cell size is {}'.format(env.cellSize))
 
         # I tested and there is no need to resample the raster being summarized. It will be resampled correctly
@@ -148,7 +150,7 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
 
         # in order to add vector capabilities back, need to do something with this
         # right now we just can't fill in polygon zones that didn't convert to raster in our system
-        out_table = cu.one_in_one_out(temp_entire_table, zone_fc, zone_field, out_table)
+        stats_result = cu.one_in_one_out(temp_entire_table, zone_fc, zone_field, out_table)
 
         # Convert "datacoveragepct" and "ORIGINAL_COUNT" values to 0 for zones with no metrics calculated
         with arcpy.da.UpdateCursor(out_table,
@@ -181,94 +183,44 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         env.workspace = orig_env  # hope this prevents problems using list of FCs from workspace as batch
         arcpy.CheckInExtension("Spatial")
 
-        return [out_table, count_diff]
+        return [stats_result, count_diff]
     
-    def flatten_overlaps():
-        objectid = [f.name for f in arcpy.ListFields(zone_fc) if f.type == 'OID'][0]
-        zone_type = [f.type for f in arcpy.ListFields(zone_fc, zone_field)][0]
-        fid1 = 'FID_{}'.format(os.path.basename(zone_fc))
-        flat_zoneid = 'flat{}'.format(zone_field)
-        flat_zoneid_prefix = 'flat{}_'.format(zone_field.replace('_zoneid', ''))
-
-        # Union with FID_Only (A)
-        arcpy.AddMessage("Splitting overlaps in polygons...")
-        zoneid_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(zone_fc, [objectid, zone_field])}
-        self_union = AN.Union([zone_fc], 'self_union', 'ONLY_FID', cluster_tolerance='1 Meters')
-
-        # If you don't run this section, Find Identical fails with error 999999. Seems to have to do with small slivers
-        # having 3 vertices and/or only circular arcs in the geometry.
-        arcpy.AddMessage("Repairing self-union geometries...")
-        DM.AddGeometryAttributes(self_union, 'POINT_COUNT')
-        union_fix = DM.MakeFeatureLayer(self_union, 'union_fix', where_clause='PNT_COUNT <= 4 OR Shape_Area = 0')
-        arcpy.Densify_edit(union_fix, 'OFFSET', max_deviation='1 Meters') # selection ON, edits self_union disk
-        DM.RepairGeometry(union_fix, 'DELETE_NULL') # eliminate empty geoms. selection ON, edits self_union disk
-
-        # Find Identical by Shape (B)
-        identical_shapes = DM.FindIdentical(self_union, 'identical_shapes', 'Shape')
-
-        # Join A to B and calc flat[zone]_zoneid = FEAT_SEQ (C)
-        DM.AddField(self_union, flat_zoneid, 'TEXT', field_length=20)
-        union_oid = [f.name for f in arcpy.ListFields(self_union) if f.type == 'OID'][0]
-        identical_shapes_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(identical_shapes, ['IN_FID', 'FEAT_SEQ'])}
-        with arcpy.da.UpdateCursor(self_union, [union_oid, flat_zoneid]) as u_cursor:
-            for row in u_cursor:
-                row[1] = '{}{}'.format(flat_zoneid_prefix, identical_shapes_dict[row[0]])
-                u_cursor.updateRow(row)
-
-        # Add the original zone ids and save to table (E)
-        arcpy.AddMessage("Assigning temporary IDs to split polygons...")
-        unflat_table = DM.CopyRows(self_union, 'unflat_table')
-        DM.AddField(unflat_table, zone_field, zone_type)  # default text length of 50 is fine if needed
-        with arcpy.da.UpdateCursor(unflat_table, [fid1, zone_field]) as u_cursor:
-            for row in u_cursor:
-                row[1] = zoneid_dict[row[0]]  # assign zone id
-                u_cursor.updateRow(row)
-
-        # Delete Identical (C) (save as flat[zone])
-        with arcpy.da.UpdateCursor(self_union, 'OID@') as cursor:
-            visited = []
-            for row in cursor:
-                feat_seq = identical_shapes_dict[row[0]]
-                if feat_seq in visited:
-                    cursor.deleteRow()
-                visited.append(feat_seq)
-
-        # Run Stats tool on C (D)
-        flatzone_stats_table = stats_area_table(self_union, flat_zoneid, in_value_raster, 'temp_out_table', is_thematic)
-        count_diff = flatzone_stats_table[1]
-        flatzone_stats_table = flatzone_stats_table[0]
-
+    def unflatten(intermediate_table):
+        flat_zoneid = zone_field
+        unflat_zoneid = zone_field.replace('flat', '')
+        zone_type = [f.type for f in arcpy.ListFields(zone_fc, flat_zoneid)][0]
         # Set up the output table (can't do this until the prior tool is run)
         if os.path.dirname(out_table):
             out_path = os.path.dirname(out_table)
         else:
             out_path = orig_env
 
-        result = DM.CreateTable(out_path, os.path.basename(out_table))
+        unflat_result = DM.CreateTable(out_path, os.path.basename(out_table))
 
         # get the fields to add to the table
-        editable_fields = [f for f in arcpy.ListFields(flatzone_stats_table)
+        editable_fields = [f for f in arcpy.ListFields(intermediate_table)
                            if f.editable and f.name.lower() != flat_zoneid.lower()]
 
         # populate the new table schema
-        DM.AddField(result, zone_field, zone_type)
+        DM.AddField(unflat_result, unflat_zoneid, zone_type)
         for f in editable_fields:
-            DM.AddField(result, f.name, f.type, field_length=f.length)
+            DM.AddField(unflat_result, f.name, f.type, field_length=f.length)
 
         # map original zone ids to new zone ids
         original_flat = defaultdict(list)
-        with arcpy.da.SearchCursor(unflat_table, [zone_field, flat_zoneid]) as cursor:
+        with arcpy.da.SearchCursor(unflat_table, [unflat_zoneid, flat_zoneid]) as cursor:
             for row in cursor:
                 if row[1] not in original_flat[row[0]]:
                     original_flat[row[0]].append(row[1])
 
         # Use CELL_COUNT as weight for means to calculate final values for each zone.
-        fixed_fields = [zone_field, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct']
+        fixed_fields = [unflat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct']
         other_field_names = [f.name for f in editable_fields if f.name not in fixed_fields]
-        i_cursor = arcpy.da.InsertCursor(result, fixed_fields + other_field_names)  # open output table cursor
+        i_cursor = arcpy.da.InsertCursor(unflat_result, fixed_fields + other_field_names)  # open output table cursor
         flat_stats = {r[0]: r[1:] for r in arcpy.da.SearchCursor(
-            flatzone_stats_table, [flat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct'] + other_field_names)}
+            intermediate_table, [flat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct'] + other_field_names)}
 
+        count_diff = 0
         for zid, unflat_ids in original_flat.items():
             area_vec = [flat_stats[id][0] for id in unflat_ids]  # ORIGINAL_COUNT specified in 0 index earlier
             cell_vec = [flat_stats[id][1] for id in unflat_ids]
@@ -296,20 +248,24 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
             else:
                 weighted_coverage = 0
                 weighted_stat_means = [None] * len(other_field_names)
+                count_diff += 1
 
             new_row = [zid, original_count, cell_count, weighted_coverage] + weighted_stat_means
             i_cursor.insertRow(new_row)
         del i_cursor
 
-        for item in [unflat_table, identical_shapes, 'flatzone', flatzone, flatzone_stats_table]:
+        for item in [unflat_table, intermediate_table]:
             DM.Delete(item)
 
-        return [result, count_diff]
+        return [unflat_result, count_diff]
     
-    if zone_has_overlaps:
-        result = flatten_overlaps()
+    if unflat_table:
+        intermediate_stats = stats_area_table(out_table='intermediate_stats')
+        result = unflatten(intermediate_stats[0])
+
     else:
-        result= stats_area_table()
+        result = stats_area_table()
+
     out_table = result[0]
     total_count_diff = result[1]
 
@@ -322,7 +278,8 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
         #DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
         if not is_thematic:
             new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_') # if no units, just rename_tag
-            DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
+            cu.rename_field(out_table, 'MEAN', new_mean_name, deleteOld=True)
+            #DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
         else:
             # look up the values based on the rename tag
             geo_file = os.path.abspath('../geo_metric_provenance.csv')
@@ -356,14 +313,14 @@ def handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out
 def main():
     zone_fc = arcpy.GetParameterAsText(0)
     zone_field = arcpy.GetParameterAsText(1)
-    zone_has_overlaps = arcpy.GetParameter(2) # boolean
+    unflat_table = arcpy.GetParameterAsText(2)
     in_value_raster = arcpy.GetParameterAsText(3)
     is_thematic = arcpy.GetParameter(4) # boolean
     out_table = arcpy.GetParameterAsText(5)
     rename_tag = arcpy.GetParameterAsText(6) # optional
     units = arcpy.GetParameterAsText(7) # optional
 
-    handle_overlaps(zone_fc, zone_field, zone_has_overlaps, in_value_raster, out_table, is_thematic,
+    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table,
                     rename_tag, units)
 
 if __name__ == '__main__':

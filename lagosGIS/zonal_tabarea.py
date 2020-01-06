@@ -280,7 +280,6 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
 
             # update them
             for old, new in mapping.items():
-                print(old, new)
                 old_fname = 'VALUE_{}_pct'.format(old)
                 new_fname = '{}_{}_pct'.format(rename_tag, new)
                 if arcpy.ListFields(table, old_fname):
@@ -300,10 +299,8 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         named_as_original = stats_area_table(out_table='named_as_original')
 
     if rename_tag:
-        print("test rename")
         named_as_standard = rename_to_standard(named_as_original[0])
         out_table = DM.CopyRows(named_as_standard, out_table)
-        print(out_table)
     else:
         out_table = DM.CopyRows(named_as_original[0], out_table)
 
@@ -316,9 +313,6 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         arcpy.AddWarning(warn_msg)
 
     arcpy.SetLogHistory(True)
-
-    print("test1")
-    print(out_table)
 
     return out_table
 

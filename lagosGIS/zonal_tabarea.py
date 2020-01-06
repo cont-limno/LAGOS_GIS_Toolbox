@@ -190,12 +190,12 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         unflat_zoneid = zone_field.replace('flat', '')
         zone_type = [f.type for f in arcpy.ListFields(zone_fc, flat_zoneid)][0]
         # Set up the output table (can't do this until the prior tool is run)
-        if os.path.dirname(out_table):
-            out_path = os.path.dirname(out_table)
-        else:
-            out_path = orig_env
+        # if os.path.dirname(out_table):
+        #     out_path = os.path.dirname(out_table)
+        # else:
+        #     out_path = orig_env
 
-        unflat_result = DM.CreateTable(out_path, os.path.basename(out_table))
+        unflat_result = DM.CreateTable('in_memory', os.path.basename(out_table))
 
         # get the fields to add to the table
         editable_fields = [f for f in arcpy.ListFields(intermediate_table)
@@ -255,51 +255,59 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
             i_cursor.insertRow(new_row)
         del i_cursor
 
-        for item in [unflat_table, intermediate_table]:
-            DM.Delete(item)
+        DM.Delete(intermediate_table)
 
         return [unflat_result, count_diff]
-    
-    if unflat_table:
-        intermediate_stats = stats_area_table(out_table='intermediate_stats')
-        result = unflatten(intermediate_stats[0])
 
-    else:
-        result = stats_area_table()
-
-    out_table = result[0]
-    total_count_diff = result[1]
-
-    # rename things (LAGOS standard), if desired
-    if rename_tag:
+    def rename_to_standard(table):
         arcpy.AddMessage("Renaming.")
         # datacoverage just gets tag
         new_datacov_name = '{}_datacoveragepct'.format(rename_tag)
-        cu.rename_field(out_table, 'datacoveragepct', new_datacov_name, deleteOld=True)
-        #DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
+        cu.rename_field(table, 'datacoveragepct', new_datacov_name, deleteOld=True)
+        # DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
         if not is_thematic:
-            new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_') # if no units, just rename_tag
-            cu.rename_field(out_table, 'MEAN', new_mean_name, deleteOld=True)
-            #DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
+            new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_')  # if no units, just rename_tag
+            cu.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
+            # DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
         else:
             # look up the values based on the rename tag
             geo_file = os.path.abspath('../geo_metric_provenance.csv')
             with open(geo_file) as csv_file:
                 reader = csv.DictReader(csv_file)
                 mapping = {row['subgroup_original_code']: row['subgroup']
-                             for row in reader if row['main_feature'] in rename_tag}
+                           for row in reader if row['main_feature'] and row['main_feature'] in rename_tag}
                 print(mapping)
 
             # update them
             for old, new in mapping.items():
-                old_fname= 'VALUE_{}_pct'.format(old)
+                print(old, new)
+                old_fname = 'VALUE_{}_pct'.format(old)
                 new_fname = '{}_{}_pct'.format(rename_tag, new)
-                try:
-                    # same problem with AlterField limit of 31 characters here.
-                    #DM.AlterField(out_table, old_fname, new_fname, clear_field_alias=True)
-                    cu.rename_field(out_table, old_fname, new_fname, deleteOld=True)
-                except:
-                    pass # sometimes not all values are included in the output table
+                if arcpy.ListFields(table, old_fname):
+                    try:
+                        # same problem with AlterField limit of 31 characters here.
+                        DM.AlterField(table, old_fname, new_fname, clear_field_alias=True)
+                    except:
+                        cu.rename_field(table, old_fname, new_fname, deleteOld=True)
+        return table
+    
+    if unflat_table:
+        if not arcpy.Exists(unflat_table):
+            raise Exception('Unflat_table must exist.')
+        intermediate_stats = stats_area_table(out_table='intermediate_stats')
+        named_as_original = unflatten(intermediate_stats[0])
+    else:
+        named_as_original = stats_area_table(out_table='named_as_original')
+
+    if rename_tag:
+        print("test rename")
+        named_as_standard = rename_to_standard(named_as_original[0])
+        out_table = DM.CopyRows(named_as_standard, out_table)
+        print(out_table)
+    else:
+        out_table = DM.CopyRows(named_as_original[0], out_table)
+
+    total_count_diff = named_as_original[1]
 
     if total_count_diff > 0:
         warn_msg = ("WARNING: {0} zones have null zonal statistics. There are 2 possible reasons:\n"
@@ -309,7 +317,11 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
 
     arcpy.SetLogHistory(True)
 
+    print("test1")
+    print(out_table)
+
     return out_table
+
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

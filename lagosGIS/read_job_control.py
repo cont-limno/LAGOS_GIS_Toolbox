@@ -84,6 +84,7 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
 
     # Call each tool and export the result to CSV
     if not validate:
+        exceptions = []
         for call, output, csv_path in zip(calls, outputs, csv_paths):
             output_dir = os.path.dirname(output)
             if not arcpy.Exists(output_dir):
@@ -91,12 +92,19 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
             if not arcpy.Exists(output):
                 print time.ctime()
                 print(call)
-                eval(call)
+                try:
+                    eval(call)
+                    out_folder = os.path.dirname(csv_path)
+                    out_basename = os.path.splitext(os.path.basename(csv_path))[0]
+                    lagosGIS.export_to_csv(output, out_folder, rename_fields=False)
+                except Exception as e:
+                    exceptions.append(e.message)
+                    print('WARNING: {}'.format(e.message))
 
-                out_folder = os.path.dirname(csv_path)
-                out_basename = os.path.splitext(os.path.basename(csv_path))[0]
-                lagosGIS.export_to_csv(output, out_folder, rename_fields=False)
 
             # Keep in_memory workspace from carrying over to the next call
             arcpy.Delete_management('in_memory')
+        print("ALL EXCEPTION MESSAGES FROM THIS RUN:----------------")
+        for emsg in exceptions:
+            print emsg
 

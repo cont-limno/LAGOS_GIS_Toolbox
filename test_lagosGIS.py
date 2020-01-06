@@ -22,7 +22,7 @@ def lake_connectivity_classification(out_feature_class, debug_mode = True):
 
 def zonal_attribution_of_raster_data(out_table, overlaps=False, is_thematic=False):
     if overlaps:
-        zone_fc = os.path.join(TEST_DATA_GDB, 'buff500_flat_raster')
+        zone_fc = os.path.join(TEST_DATA_GDB, 'flatbuff500_raster')
         zone_field = 'flatbuff500_zoneid'
         unflat_table = os.path.join(TEST_DATA_GDB, 'buff500_unflat')
     else:

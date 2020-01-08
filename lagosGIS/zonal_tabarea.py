@@ -69,6 +69,7 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         os.chdir(this_files_dir)
         common_grid = os.path.abspath('../common_grid.tif')
         env.snapRaster = common_grid
+        env.cellSize = common_grid
         env.extent = zone_fc
 
         zone_desc = arcpy.Describe(zone_fc)
@@ -77,6 +78,7 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
             zone_raster = arcpy.PolygonToRaster_conversion(zone_fc, zone_field, zone_raster, 'CELL_CENTER',
                                                            cellsize=env.cellSize)
             print('cell size is {}'.format(env.cellSize))
+            zone_size = int(env.cellSize)
         else:
             zone_raster = zone_fc
             zone_size = min(arcpy.Describe(zone_raster).meanCellHeight, arcpy.Describe(zone_raster).meanCellWidth)
@@ -134,7 +136,6 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         temp_entire_table_dict = {row[0]: row[1] for row in
                                   arcpy.da.SearchCursor(temp_entire_table, [zone_field, 'COUNT'])}
 
-        print("test")
         sum_cell_area = float(env.cellSize) * float(env.cellSize)
         orig_cell_area = zone_size * zone_size
 

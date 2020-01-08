@@ -139,7 +139,7 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
                 count_orig = zone_raster_dict[key_value]
                 if key_value in temp_entire_table_dict:
                     count_summarized = temp_entire_table_dict[key_value]
-                    data_pct = 100 * float(count_summarized * env.cellSize / count_orig * zone_size)
+                    data_pct = 100 * float(count_summarized * int(env.cellSize) / count_orig * zone_size)
                 else:
                     data_pct = None
                 cursor.updateRow((key_value, data_pct, count_orig))

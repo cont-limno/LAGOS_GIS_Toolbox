@@ -133,13 +133,18 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         zone_raster_dict = {row[0]: row[1] for row in arcpy.da.SearchCursor(zone_raster, [zone_field, 'Count'])}
         temp_entire_table_dict = {row[0]: row[1] for row in
                                   arcpy.da.SearchCursor(temp_entire_table, [zone_field, 'COUNT'])}
+
+        print("test")
+        sum_cell_area = float(env.cellSize) * float(env.cellSize)
+        orig_cell_area = zone_size * zone_size
+
         with arcpy.da.UpdateCursor(temp_entire_table, [zone_field, 'datacoveragepct', 'ORIGINAL_COUNT']) as cursor:
             for uRow in cursor:
                 key_value, data_pct, count_orig = uRow
                 count_orig = zone_raster_dict[key_value]
                 if key_value in temp_entire_table_dict:
                     count_summarized = temp_entire_table_dict[key_value]
-                    data_pct = 100 * float(count_summarized * int(env.cellSize) / count_orig * zone_size)
+                    data_pct = 100 * float((count_summarized * sum_cell_area) / (count_orig * orig_cell_area))
                 else:
                     data_pct = None
                 cursor.updateRow((key_value, data_pct, count_orig))

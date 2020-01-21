@@ -13,9 +13,9 @@ __all__ = ["lake_connectivity_classification",
            "zonal_attribution_of_raster_data",
            "polygons_in_zones",
            "lakes_in_zones",
-           "interlake_watersheds_old",
-           "interlake_watersheds_new",
-           "upstream_lakes"]
+           "interlake_watersheds_US",
+           "upstream_lakes",
+           "point_attribution_of_raster_data"]
 
 def lake_connectivity_classification(out_feature_class, debug_mode = True):
     lagosGIS.lake_connectivity_classification(TEST_DATA_GDB, out_feature_class, debug_mode)
@@ -70,3 +70,9 @@ def interlake_watersheds_US(out_fc):
 
 def upstream_lakes(out_table):
     lagosGIS.upstream_lakes(TEST_DATA_GDB, out_table)
+
+def point_attribution_of_raster_data(out_table):
+    zone_points = os.path.join(TEST_DATA_GDB, 'Lakes_1ha_Point')
+    in_value_raster = os.path.join(TEST_DATA_GDB, 'Total_Nitrogen_Deposition_2006')
+    lagosGIS.point_attribution_of_raster_data(zone_points, 'Permanent_Identifier', in_value_raster, out_table,
+                                              'lake_wetdepinorgnitrogen', 'kgperha')

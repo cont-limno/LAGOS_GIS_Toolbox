@@ -22,6 +22,18 @@ def point_attribution_of_raster_data(zone_points, zone_field, in_value_raster, o
 
     if rename_tag:
         new_field_name = '{}_{}'.format(rename_tag, units)
-    cu.rename_field(point_stats, 'RASTERVALU', new_field_name, deleteOld=True)
+        cu.rename_field(point_stats, 'RASTERVALU', new_field_name, deleteOld=True)
     arcpy.CopyRows_management(point_stats, out_table)
     return out_table
+
+def main():
+    zone_points = arcpy.GetParameterAsText(0)
+    zone_field = arcpy.GetParameterAsText(1)
+    in_value_raster = arcpy.GetParameterAsText(2)
+    out_table = arcpy.GetParameterAsText(3)
+    rename_tag = arcpy.GetParameterAsText(4)
+    units = arcpy.GetParameterAsText(5)
+    point_attribution_of_raster_data(zone_points, zone_field, in_value_raster, out_table, rename_tag, units)
+
+if __name__ == '__main__':
+    main()

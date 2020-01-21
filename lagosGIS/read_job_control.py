@@ -59,7 +59,10 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
     for line in lines:
         function = cook_string(line['Function'])
         args = []
-        for i in range(8):
+        # find last non-empty argument
+        arg_cols = line.values()[:8]
+        args_length = arg_cols.index(next(arg for arg in reversed(arg_cols) if arg))
+        for i in range(args_length):
             input_arg = line['Arg{}'.format(i+1)]
             if input_arg:
                 args.append(cook_string(input_arg))
@@ -73,7 +76,10 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
         csv_paths.append(csv_path)
         formatted_args = ','.join(["r'{}'".format(arg) if isinstance(arg, str) else str(arg) for arg in args])
 
-        call = "lagosGIS.{}({})".format(function, formatted_args)
+        if "arcpy." in function:
+            call = "{}({})".format(function, formatted_args)
+        else:
+            call = "lagosGIS.{}({})".format(function, formatted_args)
         calls.append(call)
 
         # validate (optional)

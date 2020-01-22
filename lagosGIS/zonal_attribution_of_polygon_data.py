@@ -6,7 +6,7 @@ import csiutils as cu
 
 def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=''):
 
-    def rename_to_standard(table):
+    def rename_to_standard(table, numeric=False):
         arcpy.AddMessage("Renaming.")
 
         # look up the values based on the rename tag
@@ -17,11 +17,12 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
             reader = csv.DictReader(csv_file)
             mapping = {row['subgroup_original_code']: row['subgroup']
                        for row in reader if row['main_feature'] in rename_tag and row['main_feature']}
+            if numeric:
+                mapping = {'{}{}'.format(class_field, k):v for k, v in mapping.items()}
             arcpy.AddMessage(mapping)
 
         # update them
         for old, new in mapping.items():
-            arcpy.AddMessage(new)
             old_fname = '{}'.format(old)
             new_fname = '{}_{}_pct'.format(rename_tag, new)
             if arcpy.ListFields(table, old_fname):
@@ -35,9 +36,27 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
 
     arcpy.env.workspace = 'in_memory'
     tab = arcpy.TabulateIntersection_analysis(zone_fc, zone_field, class_fc, 'tab', class_field)
+    # guard against all numeric values--can't pivot when that is the case
+    vals = [r[0] for r in arcpy.da.SearchCursor(tab, class_field)]
+    all_numeric = all([str.isdigit(str(v)) for v in vals])
+    if all_numeric:
+        with arcpy.da.UpdateCursor(tab, class_field) as cursor:
+            for row in cursor:
+                row[0] = '{}{}'.format(class_field, row[0])
+                cursor.updateRow(row)
     pivot = arcpy.PivotTable_management(tab, zone_field, class_field, "PERCENTAGE", 'pivot')
-    renamed = rename_to_standard(pivot)
-    arcpy.CopyRows_management(renamed, out_table)
+    renamed = rename_to_standard(pivot, all_numeric)
+
+    # make sure all input zones have an output row, and where there was no data, consider this a 0 value, assuming
+    # the vector data was comprehensive.
+    all_zones = cu.one_in_one_out(renamed, zone_fc, zone_field, 'all_zones')
+    new_fields = [f.name for f in arcpy.ListFields(all_zones) if f.name <> zone_field and f.type not in ('OID', 'Geometry')]
+    with arcpy.da.UpdateCursor(all_zones, new_fields) as cursor:
+        for row in cursor:
+            row = [val if val else 0 for val in row]
+            cursor.updateRow(row)
+
+    arcpy.CopyRows_management(all_zones, out_table)
     for item in [tab, pivot, renamed]:
         arcpy.Delete_management(item)
 

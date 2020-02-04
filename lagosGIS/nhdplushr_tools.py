@@ -9,7 +9,6 @@ import csiutils
 
 
 class NHDNetwork:
-
     """
 
     Class for assessing network connectivity within an NHD HR or NHDPlus HR geodatabase.
@@ -63,6 +62,7 @@ class NHDNetwork:
         self.flowline_start_ids = []
         self.flowline_stop_ids = []
         self.waterbody_stop_ids = []
+        self.tenha_waterbody_ids = []
         self.upstream = defaultdict(list)
         self.downstream = defaultdict(list)
         self.nhdpid_flowline = defaultdict(list)
@@ -70,49 +70,79 @@ class NHDNetwork:
         self.waterbody_flowline = defaultdict(list)
         self.waterbody_nhdpid = defaultdict(list)
         self.nhdpid_waterbody = defaultdict(list)
+        self.intermit_flowline_ids = set()
         self.inlets = []
         self.outlets = []
+        self.exclude_intermittent_flow = False
 
-
-    def prepare_upstream(self):
+    def prepare_upstream(self, force=False):
         """Read the geodatabase flow table and collapse into a flow dictionary."""
-        if not self.upstream:
+        if not self.upstream or force:
+            self.upstream = defaultdict(list)
             with arcpy.da.SearchCursor(self.flow, [self.from_column, self.to_column]) as cursor:
                 for row in cursor:
                     from_id, to_id = row
-                    if from_id == '0':
+                    if from_id == '0': # see drop_intermittent_flow
                         self.upstream[to_id] = []
-                    else:
+                    elif from_id not in self.intermit_flowline_ids: # see drop_intermittent_flow
                         self.upstream[to_id].append(from_id)
+                    else:
+                        continue
 
-    def prepare_downstream(self):
+    def prepare_downstream(self, force=False):
         """Read the geodatabase flow table and collapse into a flow dictionary."""
-        if not self.downstream:
+        if not self.downstream or force:
+            self.downstream = defaultdict(list)
             with arcpy.da.SearchCursor(self.flow, [self.from_column, self.to_column]) as cursor:
                 for row in cursor:
                     from_id, to_id = row
-                    if to_id == '0':
+                    if to_id == '0' :
                         self.downstream[from_id] = []
-                    else:
+                    elif to_id not in self.intermit_flowline_ids: # see drop_intermittent_flow
                         self.downstream[from_id].append(to_id)
+                    else:
+                        continue
 
     def map_nhdpid_to_flowlines(self):
         """Construct the nhdpid_flowline identifier mapping dictionary."""
-        self.nhdpid_flowline = {r[0]:r[1]
-                         for r in arcpy.da.SearchCursor(self.flowline, ['NHDPlusID', 'Permanent_Identifier'])}
+        self.nhdpid_flowline = {r[0]: r[1]
+                                for r in arcpy.da.SearchCursor(self.flowline, ['NHDPlusID', 'Permanent_Identifier'])}
 
     def map_waterbody_to_nhdpids(self):
         """Construct the waterbody_nhdpid and nhdpid_waterbody identifier mapping dictionaries."""
-        self.waterbody_nhdpid = {r[0]:r[1]
-                         for r in arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'NHDPlusID'])}
-        self.nhdpid_waterbody = {v:k for k, v in self.waterbody_nhdpid.items()}
+        self.waterbody_nhdpid = {r[0]: r[1]
+                                 for r in arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'NHDPlusID'])}
+        self.nhdpid_waterbody = {v: k for k, v in self.waterbody_nhdpid.items()}
+
+    def drop_intermittent_flow(self):
+        self.intermit_flowline_ids= {r[0] for r in arcpy.da.SearchCursor(self.flowline,
+                                                        ['Permanent_Identifier', 'FCode']) if
+                                     r[1] in [46003, 46007]}
+        self.exclude_intermittent_flow = True
+
+        # refresh the upstream/downstream dictionaries
+        if self.upstream:
+            self.prepare_upstream(force=True)
+        if self.downstream:
+            self.prepare_downstream(force=True)
+
+    def include_intermittent_flow(self):
+        self.intermit_flowline_ids = set()
+        self.exclude_intermittent_flow = False
+
+        # refresh the upstream/downstream dictionaries
+        if self.upstream:
+            self.prepare_upstream(force=True)
+        if self.downstream:
+            self.prepare_downstream(force=True)
 
     def map_flowlines_to_waterbodies(self):
         """Construct the flowline_waterbody identifier mapping dictionary."""
-        self.flowline_waterbody = {r[0]:r[1]
+        self.flowline_waterbody = {r[0]: r[1]
                                    for r in arcpy.da.SearchCursor(self.flowline,
-                                                             ['Permanent_Identifier', 'WBArea_Permanent_Identifier'])
-                                                             if r[1]}
+                                                                  ['Permanent_Identifier',
+                                                                   'WBArea_Permanent_Identifier'])
+                                   if r[1]}
 
     def map_waterbodies_to_flowlines(self):
         """Construct the waterbody_flowline identifier mapping dictionary."""
@@ -180,13 +210,15 @@ class NHDNetwork:
                     self.waterbody_stop_ids.append(id)
         # and set the flowlines too
         self.set_stop_ids(self.waterbody_stop_ids)
+        # and save stable for re-use by network class
+        self.tenha_waterbody_ids = self.waterbody_stop_ids
 
     def deactivate_stops(self):
         """Deactivate all network barriers (flow proceeds unimpeded through entire network)."""
         self.waterbody_stop_ids = []
         self.flowline_stop_ids = []
 
-    def trace_up_from_a_flowline(self, flowline_start_id, include_wb_permids = True, max_depth = None):
+    def trace_up_from_a_flowline(self, flowline_start_id, include_wb_permids=True):
         """
         Trace a network upstream of the input flowline and return the traced network identifiers in a list.
 
@@ -237,9 +269,64 @@ class NHDNetwork:
                 self.map_flowlines_to_waterbodies()
             # get the waterbody ids for all flowlines in trace (including start) and add to results
             wb_permids_set = {self.flowline_waterbody[id] for id in all_from_ids if id in self.flowline_waterbody}
-            wb_permids = list(wb_permids_set.difference(set(self.waterbody_stop_ids))) # if stops present, remove
+            wb_permids = list(wb_permids_set.difference(set(self.waterbody_stop_ids)))  # if stops present, remove
             all_from_ids.extend(wb_permids)
         return list(set(all_from_ids))
+
+    def trace_down_from_a_flowline(self, flowline_start_id, include_wb_permids=True):
+        """
+        Trace a network upstream of the input flowline and return the traced network identifiers in a list.
+
+        Barriers currently activated on the network will be respected by the trace.
+
+        A trace includes its own starting flowline.
+
+        :param str flowline_start_id: Flowline Permanent_Identifier of flow destination (upstream trace start point).
+        :param bool include_wb_permids: Whether to include waterbody Permanent_Identifiers in the trace. When False,
+        only flowline Permanent_Identifiers will be returned.
+        :return: List of Permanent_Identifier values for flowlines and/or waterbodies in the upstream network trace,
+        which includes the input flow destination
+
+        """
+        if not self.downstream:
+            self.prepare_downstream()
+        if self.flowline_stop_ids:
+            stop_ids_set = set(self.flowline_stop_ids)
+
+        # get the next IDs down from the start
+        to_ids = self.downstream[flowline_start_id]
+        all_to_ids = to_ids[:]
+        all_to_ids.append(flowline_start_id)  # include start point in trace
+        limit = len(self.downstream)
+
+        # while there is still network left, iteratively trace down and add on
+        while to_ids:
+            next_down = [self.downstream[id] for id in to_ids]
+
+            # flatten results
+            next_down_flat = set([id for id_list in next_down for id in id_list])
+            if self.flowline_stop_ids:
+                next_down_flat = next_down_flat.difference(stop_ids_set)
+
+            # seed the new start point
+            # if the network size exceeds number of network features, it's because of circular flow
+            # de-duplicate trace and make sure from_ids are NEW in that case before proceeding
+            if len(all_to_ids) >= limit:
+                all_to_ids = list(set(all_to_ids))
+                to_ids = next_down_flat.difference(set(all_to_ids))
+            # otherwise the trace just walks upstream and records the results of this iteration
+            else:
+                to_ids = next_down_flat
+            all_to_ids.extend(to_ids)
+
+        if include_wb_permids:
+            if not self.flowline_waterbody:
+                self.map_flowlines_to_waterbodies()
+            # get the waterbody ids for all flowlines in trace (including start) and add to results
+            wb_permids_set = {self.flowline_waterbody[id] for id in all_to_ids if id in self.flowline_waterbody}
+            wb_permids = list(wb_permids_set.difference(set(self.waterbody_stop_ids)))  # if stops present, remove
+            all_to_ids.extend(wb_permids)
+        return list(set(all_to_ids))
 
     def identify_outlets(self):
         """Identify inlets: flowlines that flow in but have no upstream flowline in this gdb."""
@@ -263,7 +350,7 @@ class NHDNetwork:
             lowest_to_ids = list(to_ids.difference(next_up_flat))
             if lowest_to_ids == ['0']:
                 lowest_to_ids = self.upstream['0']
-            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id, max_depth = 300)) for id in lowest_to_ids}
+            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id, max_depth=300)) for id in lowest_to_ids}
             max_net_size = max(distinct_net_sizes.values())
             outlets = [id for id, n in distinct_net_sizes.items() if n >= .5 * max_net_size]
         self.outlets = outlets
@@ -282,7 +369,7 @@ class NHDNetwork:
 
         :param waterbody_start_id: Waterbody Permanent_Identifier of flow destination (upstream trace start point).
         :return: List of Permanent_Identifier values for flowlines and waterbodies in the upstream network trace,
-        which includes the input waterbody
+        which includes the input waterbody if the waterbody is on a network. Empty list if waterbody is isolated.
 
         """
         # set up the network if necessary
@@ -318,6 +405,90 @@ class NHDNetwork:
 
         return all_from_ids
 
+    def trace_down_from_a_waterbody(self, waterbody_start_id):
+        """
+        Trace a network upstream of the input waterbody and return the traced network identifiers in a list.
+
+        The lowest flowline segments within the input waterbody will be identified and used to initiate the trace (in
+        other words, traces will be found upstream of all waterbody outlets. Waterbodies with no flowline segments
+        have an empty trace (are not in their own trace).
+
+        Barriers currently activated on the network will be respected by the trace. The input waterbody will not
+        act as a barrier for its own traced network.
+
+        :param waterbody_start_id: Waterbody Permanent_Identifier of flow destination (upstream trace start point).
+        :return: List of Permanent_Identifier values for flowlines and waterbodies in the upstream network trace,
+        which includes the input waterbody
+
+        """
+        # set up the network if necessary
+        if not self.downstream:
+            self.prepare_downstream()
+        if not self.waterbody_flowline:
+            self.map_waterbodies_to_flowlines()
+        flowline_start_ids = set(self.waterbody_flowline[waterbody_start_id])  # one or more
+
+        # remove waterbody's own flowlines from stop ids--don't want them to stop themselves
+        if self.flowline_stop_ids:
+            flowline_stop_ids_restore = self.flowline_stop_ids[:]
+            waterbody_stop_ids_restore = self.waterbody_stop_ids[:]
+            self.flowline_stop_ids = [id for id in self.flowline_stop_ids if id not in flowline_start_ids]
+            self.waterbody_stop_ids = [id for id in self.waterbody_stop_ids if id not in waterbody_start_id]
+            reset_stops = True
+        else:
+            reset_stops = False  # use in case all stop ids are erased
+
+        # first identify only the highest start ids
+        next_down = [self.upstream[id] for id in flowline_start_ids]
+        next_down_flat = {id for id_list in next_down for id in id_list}
+        highest_flowline_start_ids = flowline_start_ids.difference(next_down_flat)  # lakes may have multiple inlets
+
+        # then trace down for all and flatten result
+        unflat_trace_all = [self.trace_down_from_a_flowline(id, True) for id in highest_flowline_start_ids]
+        all_to_ids = list({id for id_list in unflat_trace_all for id in id_list})
+
+        # reset flowline_stop_ids
+        if reset_stops:
+            self.flowline_stop_ids = flowline_stop_ids_restore[:]
+            self.waterbody_stop_ids = waterbody_stop_ids_restore[:]
+
+        return all_to_ids
+
+    def classify_waterbody_connectivity(self, waterbody_start_id):
+        if not self.upstream:
+            self.prepare_upstream()
+        if not self.downstream:
+            self.prepare_upstream()
+        if not self.waterbody_flowline:
+            self.map_flowlines_to_waterbodies()
+        if not self.tenha_waterbody_ids:
+            self.activate_10ha_lake_stops()
+            self.deactivate_stops()
+
+        # Isolated first
+        trace_up = self.trace_up_from_a_waterbody(waterbody_start_id)
+        trace_down = self.trace_down_from_a_waterbody(waterbody_start_id)
+        if len(trace_up) == 0 and len(trace_down) == 0 and not self.exclude_intermittent_flow:
+            connclass = 'Isolated'
+        # otherwise subtract lake's self and internal flowlines, check for 10 ha lakes in trace, and classify
+        else:
+            inside_ids = self.waterbody_flowline[waterbody_start_id]
+            inside_ids.append(waterbody_start_id)
+            nonself_trace_down = set(trace_down).difference(set(inside_ids))
+            nonself_trace_up = set(trace_up).difference(set(inside_ids))
+            tenha_upstream = set(nonself_trace_up).intersection(set(self.tenha_waterbody_ids))
+
+            if len(nonself_trace_up) == 0:
+                if len(nonself_trace_down) > 0:
+                    connclass = 'Headwater'
+                if len(nonself_trace_down) == 0:
+                    connclass = 'Isolated'
+            elif tenha_upstream:
+                connclass = 'DrainageLk'
+            else:
+                connclass = 'Drainage'
+        return connclass
+
     def trace_up_from_waterbody_starts(self):
         """
         Trace up from all waterbody start locations currently set on the NHDNetwork instance.
@@ -352,7 +523,7 @@ class NHDNetwork:
         self.set_start_ids(tenha_ids)
         self.deactivate_stops()
         tenha_traces_no_stops_lists = self.trace_up_from_waterbody_starts()
-        tenha_traces_no_stops = {k:set(v) for k, v in tenha_traces_no_stops_lists.items()}
+        tenha_traces_no_stops = {k: set(v) for k, v in tenha_traces_no_stops_lists.items()}
         isolated_tenha = [k for k, v in tenha_traces_no_stops.items() if not v]
         # reset start ids to whatever they were before method invoked
         self.set_start_ids(initial_start_ids)
@@ -379,7 +550,6 @@ class NHDNetwork:
             else:
                 subnetwork = []
 
-
             # will add ALL isolated lakes back in, not just those in this region/full-trace
             if not exclude_isolated:
                 if lake_id in isolated_tenha:
@@ -388,7 +558,6 @@ class NHDNetwork:
                     other_tenha_ids = isolated_tenha[:]
                 subnetwork.extend(other_tenha_ids)
             subnetworks[lake_id] = subnetwork
-
 
         return subnetworks
 
@@ -403,7 +572,7 @@ class NHDNetwork:
     def save_trace_catchments(self, trace, output_fc):
         """Select traced features from NHDFlowline and save to output."""
         query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
-                                                        for id in trace]))
+                                                                for id in trace]))
         output_fc = DM.Select(self.flowline, output_fc, query)
         return output_fc
 
@@ -416,18 +585,19 @@ def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
 
     # copy to output and prep
     nhd_cat_copy = DM.CopyFeatures(nhd_cat, output_fc)
-    DM.AddField(nhd_cat_copy, 'Lake_PermID', field_type = 'TEXT', field_length = 40)
-    DM.AddField(nhd_cat_copy, 'Flowline_PermID', field_type = 'TEXT', field_length = 40)
+    DM.AddField(nhd_cat_copy, 'Lake_PermID', field_type='TEXT', field_length=40)
+    DM.AddField(nhd_cat_copy, 'Flowline_PermID', field_type='TEXT', field_length=40)
 
     # build dictionaries for the joins
-    nhd_flowline_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
+    nhd_flowline_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
                                                                    ['NHDPlusID', 'Permanent_Identifier'])}
-    nhd_wbarea_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
-                                                                   ['NHDPlusID', 'WBArea_Permanent_Identifier'])}
-    nhd_wb_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_wb, ['NHDPlusID', 'Permanent_Identifier'])}
+    nhd_wbarea_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
+                                                                 ['NHDPlusID', 'WBArea_Permanent_Identifier'])}
+    nhd_wb_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_wb, ['NHDPlusID', 'Permanent_Identifier'])}
     valid_wb_ids = set(nhd_wb_dict.values())
     # some WBArea_... values come from NHDArea polygons, not NHDWaterbody. Filter dictionary for valid only.
-    flowline_wb_dict = {nhdplusid:nhd_wbarea_dict[nhdplusid] for nhdplusid, wb_permid in nhd_wbarea_dict.items() if wb_permid in valid_wb_ids}
+    flowline_wb_dict = {nhdplusid: nhd_wbarea_dict[nhdplusid] for nhdplusid, wb_permid in nhd_wbarea_dict.items() if
+                        wb_permid in valid_wb_ids}
 
     with arcpy.da.UpdateCursor(nhd_cat_copy, ['NHDPlusID', 'Lake_PermID', 'Flowline_PermID']) as nhd_cat_copy_cursor:
 
@@ -447,16 +617,16 @@ def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
                 lake_permid_sink = nhd_wb_dict[nhdplusid]
 
             # concatenate & calculate update
-            if lake_permid_flowline: # on network
+            if lake_permid_flowline:  # on network
                 lake_permid = lake_permid_flowline
 
-            else: # off network (sink)
+            else:  # off network (sink)
                 lake_permid = lake_permid_sink
                 stream_permid = None
 
-            if nhdplusid in nhd_flowline_dict: # catchment is not for a sink
+            if nhdplusid in nhd_flowline_dict:  # catchment is not for a sink
                 stream_permid = nhd_flowline_dict[nhdplusid]
-            else: # catchment is for a sink
+            else:  # catchment is for a sink
                 stream_permid = None
 
             # write the update
@@ -474,7 +644,7 @@ def merge_lake_catchments(nhdplus_gdb, output_catchments_fc):
     stream_cats = AN.Select(catchments_assigned, 'stream_cats', 'Lake_PermID IS NULL')
     lake_cats = AN.Select(catchments_assigned, 'lake_cats', 'Lake_PermID IS NOT NULL')
     dissolved_lake_cats = DM.Dissolve(lake_cats, 'dissolved_lake_cats', ['Lake_PermID'])
-    DM.AddField(dissolved_lake_cats, 'NHDPlusID', 'DOUBLE') # leave as all NULL on purpose
+    DM.AddField(dissolved_lake_cats, 'NHDPlusID', 'DOUBLE')  # leave as all NULL on purpose
 
     # # update each lake watershed shape so that it includes the entire lake/cannot extend beyond the lake.
     # wb_shapes_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhdwaterbody, ['Permanent_Identifier', 'SHAPE@'])}
@@ -514,12 +684,13 @@ def calculate_waterbody_strahler(nhdplus_gdb, output_table):
     nhd_wb_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_wb, ['Permanent_Identifier', 'NHDPlusID'])}
     # filter upcoming dictionary to only include artificial flowlines (but with both waterbody and NHDArea ids)
     nhd_flowline_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
-                                                ['NHDPlusID', 'WBArea_Permanent_Identifier']) if r[1]}
+                                                                   ['NHDPlusID', 'WBArea_Permanent_Identifier']) if
+                         r[1]}
     # filter out flowlines we can't get strahler for NOW, so that loop below doesn't have to test
     nhd_vaa_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_vaa, ['NHDPlusID', 'StreamOrde'])
                     if r[0] in nhd_flowline_dict}
     # filter out lines with uninitialized flow as they don't appear in nhd_vaa_dict
-    nhd_flowline_dict2 = {key:val for key,val in nhd_flowline_dict.items() if key in nhd_vaa_dict}
+    nhd_flowline_dict2 = {key: val for key, val in nhd_flowline_dict.items() if key in nhd_vaa_dict}
 
     # set up new table
     output_table = DM.CreateTable(os.path.dirname(output_table), os.path.basename(output_table))
@@ -571,8 +742,8 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
         DM.AddField(eligible_lakes_fc, 'NHDPlusID', 'DOUBLE')
 
     # get nhdpids
-    wbplus_permid_nhdpid = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhdplus_waterbody_fc,
-                                                                   ['Permanent_Identifier', 'NHDPlusID'])}
+    wbplus_permid_nhdpid = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhdplus_waterbody_fc,
+                                                                      ['Permanent_Identifier', 'NHDPlusID'])}
 
     # transfer nhdpids to the other lakes fc
     with arcpy.da.UpdateCursor(eligible_lakes_fc, ['Permanent_Identifier', 'NHDPlusID']) as u_cursor:
@@ -622,7 +793,8 @@ def update_grid_codes(nhdplus_gdb, output_table):
     return output_table
 
 
-def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible_lakes_fc, output_raster, nhdplus_waterbody_fc = ''):
+def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible_lakes_fc, output_raster,
+                   nhdplus_waterbody_fc=''):
     """
     Modify NHDPlus HR "catseed" raster to include lake-based pour points (seeds) for all lakes in need of watersheds.
 
@@ -654,7 +826,7 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     arcpy.env.outputCoordinateSystem = arcpy.Describe(nhdplus_catseed_raster).spatialReference
 
     # add gridcodes to lakes
-    nhdpid_grid = {r[0]:r[1] for r in arcpy.da.SearchCursor(gridcode_table, ['NHDPlusID', 'GridCode'])}
+    nhdpid_grid = {r[0]: r[1] for r in arcpy.da.SearchCursor(gridcode_table, ['NHDPlusID', 'GridCode'])}
     this_gdb_wbs = tuple(nhdpid_grid.keys())
     filter_clause = 'NHDPlusID IN {}'.format(this_gdb_wbs)
     eligible_lakes_copy = AN.Select(eligible_lakes_fc, 'eligible_lakes_copy', filter_clause)
@@ -668,7 +840,7 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     lake_seeds = arcpy.PolygonToRaster_conversion(eligible_lakes_copy, 'GridCode', 'lake_seeds')
 
     combined = DM.MosaicToNewRaster([nhdplus_catseed_raster, lake_seeds], arcpy.env.workspace, 'combined',
-                         pixel_type='32_BIT_SIGNED', number_of_bands='1', mosaic_method='LAST')
+                                    pixel_type='32_BIT_SIGNED', number_of_bands='1', mosaic_method='LAST')
     DM.BuildRasterAttributeTable(combined)
 
     # due to burn/catseed errors in NHD, we are removing all sinks marked "NHDWaterbody closed lake" (SC)
@@ -680,7 +852,7 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     arcpy.CheckOutExtension('Spatial')
     if sinks_to_remove:
         nobadsinks = arcpy.sa.SetNull(combined, combined, 'VALUE in ({})'.format(','.join(['{}'.format(id)
-                                                                                         for id in sinks_to_remove])))
+                                                                                           for id in sinks_to_remove])))
         nobadsinks.save(output_raster)
     else:
         DM.CopyRaster(combined, output_raster)
@@ -698,7 +870,7 @@ def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
     arcpy.CheckOutExtension('Spatial')
     dem_null = arcpy.sa.IsNull(hydrodem_raster)
     lagos_null = arcpy.sa.IsNull(lagos_catseed_raster)
-    replacement = arcpy.sa.FocalStatistics(hydrodem_raster, statistics_type='MINIMUM') # assign lake elevation value
+    replacement = arcpy.sa.FocalStatistics(hydrodem_raster, statistics_type='MINIMUM')  # assign lake elevation value
     result = arcpy.sa.Con((dem_null == 1) & (lagos_null == 1), replacement, hydrodem_raster)
     result.save(out_raster)
     arcpy.CheckInExtension('Spatial')
@@ -724,7 +896,6 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     arcpy.env.extent = flowdir_raster
     nhd_network = NHDNetwork(nhdplus_gdb)
 
-
     # delineate watersheds with ArcGIS Watershed tool, then convert to one polygon per watershed
     arcpy.AddMessage("Delineating watersheds...")
     sheds = arcpy.sa.Watershed(flowdir_raster, catseed_raster, 'Value')
@@ -734,17 +905,16 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     dissolved = DM.Dissolve(sheds_poly, 'dissolved', 'GridCode')
     arcpy.AddMessage("Watersheds converted to vector.")
 
-
     # "Join" to the other identifiers via GridCode
     update_fields = ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID']
     if not nhd_network.plus:
         update_fields.append('Permanent_Identifier')
-    gridcode_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(gridcode_table, update_fields)}
+    gridcode_dict = {r[0]: r[1:] for r in arcpy.da.SearchCursor(gridcode_table, update_fields)}
     DM.AddField(dissolved, 'NHDPlusID', 'DOUBLE')
     DM.AddField(dissolved, 'SourceFC', 'TEXT', field_length=20)
     DM.AddField(dissolved, 'VPUID', 'TEXT', field_length=8)
-    DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length = 40)
-    DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length = 1)
+    DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length=40)
+    DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length=1)
 
     # add permids to watersheds for NHDPlus
 
@@ -761,7 +931,8 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     on_network = set(nhd_network.trace_up_from_hu4_outlets())
 
     print('Adding identifiers to dissolved watersheds...')
-    with arcpy.da.UpdateCursor(dissolved, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier', 'On_Main_Network']) as u_cursor:
+    with arcpy.da.UpdateCursor(dissolved, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier',
+                                           'On_Main_Network']) as u_cursor:
         for row in u_cursor:
             gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
             if gridcode != 0:
@@ -779,7 +950,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
 
 def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
-                         mode = ['interlake', 'network']):
+                         mode=['interlake', 'network']):
     """
     Accumulate upstream watersheds for all eligible lakes in this subregion and save result as a feature class.
 
@@ -823,15 +994,15 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     eligible_lake_ids = {row[0] for row in arcpy.da.SearchCursor(eligible_lakes_fc, 'Permanent_Identifier')}
     matching_ids = list(gdb_wb_permids.intersection(eligible_lake_ids))
 
-    #-----Use temp GDB to create both waterbodies and watersheds copies that are INDEXED then accessed as layer
-    #-----Dropping extra fields speeds up dissolve greatly
+    # -----Use temp GDB to create both waterbodies and watersheds copies that are INDEXED then accessed as layer
+    # -----Dropping extra fields speeds up dissolve greatly
     # waterbodies copy
 
     temp_waterbodies = os.path.join(temp_gdb, 'waterbody_holeless')
-    subregion_wb_query ='Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id) for id in matching_ids]))
+    subregion_wb_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id) for id in matching_ids]))
     waterbody_mem = AN.Select(nhd_network.waterbody, 'waterbody_mem', subregion_wb_query)
     waterbody_holeless = DM.EliminatePolygonPart(waterbody_mem, temp_waterbodies,
-                                                 'PERCENT', part_area_percent = '99')
+                                                 'PERCENT', part_area_percent='99')
     DM.AddIndex(waterbody_holeless, 'Permanent_Identifier', 'permid_idx')
     waterbody_lyr = DM.MakeFeatureLayer(waterbody_holeless)
 
@@ -839,7 +1010,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     temp_gdb_watersheds_path = os.path.join(temp_gdb, 'watersheds_simple')
     watersheds_simple = lagosGIS.select_fields(catchments_fc, temp_gdb_watersheds_path, ['Permanent_Identifier'])
     DM.AddIndex(watersheds_simple, 'Permanent_Identifier', 'permid_idx')
-    watersheds_lyr1 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr1') # no "interactive" selections
+    watersheds_lyr1 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr1')  # no "interactive" selections
     watersheds_lyr2 = DM.MakeFeatureLayer(watersheds_simple, 'watersheds_lyr2')
 
     # Step 2: If interlake, get traces for all 10ha+ lakes, so they can be erased while other sinks are dissolved in.
@@ -847,7 +1018,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     arcpy.AddMessage("Preparing network traces...")
     nhd_network.set_start_ids(matching_ids)
     if mode == 'interlake':
-        minus_traces = nhd_network.trace_10ha_subnetworks() # traces to be erased in any event
+        minus_traces = nhd_network.trace_10ha_subnetworks()  # traces to be erased in any event
         nhd_network.activate_10ha_lake_stops()
 
     # Step 3: Run the desired traces according to the mode. trace[id] = list of all flowline IDS in trace
@@ -869,7 +1040,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     for lake_id in matching_ids:
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
-        if len(trace_permids) <= 2: # headwater lakes have trace length = 2 (lake and flowline)
+        if len(trace_permids) <= 2:  # headwater lakes have trace length = 2 (lake and flowline)
             single_catchment_ids.append(lake_id)
 
         else:
@@ -882,7 +1053,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
             # Loop Step 3: Select catchments with their Permanent_Identifier in the lake's upstream network trace.
             watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
-                                                                             for id in trace_permids]))
+                                                                               for id in trace_permids]))
             selected_watersheds = AN.Select(watersheds_lyr1, 'selected_watersheds', watersheds_query)
 
             # Loop Step 4: Make a single, hole-free catchment polygon.
@@ -904,7 +1075,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
                 # Loop Step 5a: Select matching subnetwork watersheds (note: will include isolated).
                 tenha_subnetworks_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
-                                                                 for id in minus_traces[lake_id]]))
+                                                                                          for id in
+                                                                                          minus_traces[lake_id]]))
                 DM.SelectLayerByAttribute(watersheds_lyr2, 'NEW_SELECTION', tenha_subnetworks_query)
                 DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', lakeless_watershed,
                                          selection_type='SUBSET_SELECTION')
@@ -914,9 +1086,11 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
                     this_watershed = lakeless_watershed
                 else:
                     # Loop Step 5b: Make a single, hole-free polygon for each subnetwork.
-                    other_tenha = DM.CopyFeatures(watersheds_lyr2, 'other_tenha') # makes dissolve faster, weird but true
+                    other_tenha = DM.CopyFeatures(watersheds_lyr2,
+                                                  'other_tenha')  # makes dissolve faster, weird but true
                     other_tenha_dissolved = DM.Dissolve(other_tenha, 'other_tenha_dissolved')
-                    other_tenha_holeless = DM.EliminatePolygonPart(other_tenha_dissolved, 'other_tenha_holeless', 'PERCENT',
+                    other_tenha_holeless = DM.EliminatePolygonPart(other_tenha_dissolved, 'other_tenha_holeless',
+                                                                   'PERCENT',
                                                                    part_area_percent='99.999')
 
                     # Loop Step 5c: Erase the subnetworks.
@@ -944,10 +1118,11 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     # in one operation (to save time in loop).
     arcpy.AddMessage("Batch processing remaining lakes...")
     if single_catchment_ids:
-        waterbodies_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id) for id in single_catchment_ids]))
+        waterbodies_query = 'Permanent_Identifier IN ({})'.format(
+            ','.join(['\'{}\''.format(id) for id in single_catchment_ids]))
         these_lakes = AN.Select(waterbody_lyr, 'these_lakes', waterbodies_query)
         watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
-                                                                                 for id in single_catchment_ids]))
+                                                                           for id in single_catchment_ids]))
         these_watersheds = AN.Select(watersheds_simple, 'these_watersheds', watersheds_query)
         lakeless_watersheds = AN.Erase(these_watersheds, these_lakes, 'lakeless_watersheds')
         DM.Append(lakeless_watersheds, merged_fc, 'NO_TEST')
@@ -966,7 +1141,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', waterbody_lyr)
         # get waterbody catchments only (no island stream catchments
         DM.SelectLayerByAttribute(watersheds_lyr2, 'SUBSET_SELECTION', watersheds_query)
-        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr, 'island_sheds') # SELECTION ON both
+        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr, 'island_sheds')  # SELECTION ON both
         DM.Append(island_sheds, merged_fc, 'NO_TEST')
         for item in [islands, islands_holeless, islands_lyr, island_sheds]:
             DM.Delete(item)
@@ -1000,11 +1175,11 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     # TODO: Delete after confirming none missing
     final_count = int(DM.GetCount(result).getOutput(0))
     if final_count < len(matching_ids):
-
         output_ids = {r[0] for r in arcpy.da.SearchCursor(output_fc, 'Permanent_Identifier')}
         missing = list(set(matching_ids).difference(output_ids))
         arcpy.AddWarning("The following lakes do not have watersheds in the output: {}".format('\n'.join(missing)))
     return result
+
 
 def watershed_equality(interlake_watershed_fc, network_watershed_fc):
     """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""
@@ -1016,22 +1191,24 @@ def watershed_equality(interlake_watershed_fc, network_watershed_fc):
         DM.AddField(network_watershed_fc, 'equalsiws', 'TEXT', field_length=1)
     except:
         pass
-    iws_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(interlake_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
-    net_area = {r[0]:r[1] for r in arcpy.da.SearchCursor(network_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
-    with arcpy.da.UpdateCursor(interlake_watershed_fc, ['Permanent_Identifier','equalsnetwork']) as u_cursor:
+    iws_area = {r[0]: r[1] for r in
+                arcpy.da.SearchCursor(interlake_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
+    net_area = {r[0]: r[1] for r in arcpy.da.SearchCursor(network_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
+    with arcpy.da.UpdateCursor(interlake_watershed_fc, ['Permanent_Identifier', 'equalsnetwork']) as u_cursor:
         for row in u_cursor:
             permid, flag = row
             if permid in iws_area and permid in net_area:
-                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 10 # meters square, or 0.01 hectares
+                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 10  # meters square, or 0.01 hectares
                 flag = 'N' if area_is_diff else 'Y'
             u_cursor.updateRow((permid, flag))
-    with arcpy.da.UpdateCursor(network_watershed_fc, ['Permanent_Identifier','equalsiws']) as u_cursor:
+    with arcpy.da.UpdateCursor(network_watershed_fc, ['Permanent_Identifier', 'equalsiws']) as u_cursor:
         for row in u_cursor:
             permid, flag = row
             if permid in iws_area and permid in net_area:
-                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 10 # square meters
+                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 10  # square meters
                 flag = 'N' if area_is_diff else 'Y'
             u_cursor.updateRow((permid, flag))
+
 
 def qa_shape_metrics(interlake_watershed_fc, network_watershed_fc, lakes_fc):
     for fc in [interlake_watershed_fc, network_watershed_fc]:
@@ -1047,15 +1224,17 @@ def qa_shape_metrics(interlake_watershed_fc, network_watershed_fc, lakes_fc):
             DM.AddField(fc, 'lake_shed_area_ratio', 'DOUBLE')
         except:
             pass
-        lake_areas ={r[0]:r[1] for r in arcpy.da.SearchCursor(lakes_fc, ['Permanent_Identifier', 'lake_waterarea_ha'])}
+        lake_areas = {r[0]: r[1] for r in
+                      arcpy.da.SearchCursor(lakes_fc, ['Permanent_Identifier', 'lake_waterarea_ha'])}
         with arcpy.da.UpdateCursor(fc, ['isoperimetric', 'perim_area_ratio',
                                         'lake_shed_area_ratio', 'Permanent_Identifier', 'SHAPE@']) as u_cursor:
             for row in u_cursor:
                 iso, pa, lakeshed, id, shape = row
-                iso = (4 * 3.14159 * shape.area)/(shape.length**2)
-                pa = shape.length/shape.area
-                lakeshed = lake_areas[id] * 10000/shape.area # convert lake area to m2
+                iso = (4 * 3.14159 * shape.area) / (shape.length ** 2)
+                pa = shape.length / shape.area
+                lakeshed = lake_areas[id] * 10000 / shape.area  # convert lake area to m2
                 u_cursor.updateRow((iso, pa, lakeshed, id, shape))
+
 
 # tools for alternate workflow (non-NHDPlus)
 def make_gridcode(nhd_gdb, output_table):
@@ -1081,19 +1260,18 @@ def make_gridcode(nhd_gdb, output_table):
     # make new table
     result = DM.CreateTable(os.path.dirname(output_table), os.path.basename(output_table))
 
-    DM.AddField(result, 'NHDPlusID', 'DOUBLE') # dummy field for alignment with HR gridcode table
+    DM.AddField(result, 'NHDPlusID', 'DOUBLE')  # dummy field for alignment with HR gridcode table
     DM.AddField(result, 'SourceFC', 'TEXT', field_length=20)
     DM.AddField(result, 'VPUID', 'TEXT', field_length=8)
     DM.AddField(result, 'GridCode', 'LONG')
     DM.AddField(result, 'Permanent_Identifier', 'TEXT', field_length=40)
-
 
     # get IDs to be added
     flow_permids = [r[0] for r in arcpy.da.SearchCursor(nhd_flowline_fc, ['Permanent_Identifier'])]
     wb_permids = [r[0] for r in arcpy.da.SearchCursor(nhd_waterbody_fc, ['Permanent_Identifier'], eligible_clause)]
 
     # start with the next highest grid code
-    gridcode =  1
+    gridcode = 1
     i_cursor = arcpy.da.InsertCursor(result, ['NHDPlusID', 'SourceFC', 'GridCode', 'VPUID', 'Permanent_Identifier'])
 
     # insert new rows with new grid codes
@@ -1111,6 +1289,7 @@ def make_gridcode(nhd_gdb, output_table):
 
     return result
 
+
 def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
     if fits_naming_standard:
         permid = 'ws_permanent_identifier'
@@ -1122,20 +1301,19 @@ def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
         eq = 'equalsnetwork'
         vpuid = 'VPUID'
 
-
     # Get list of eligible lakes
     nhd_network = NHDNetwork(nhd_gdb)
     gdb_wb_permids = {row[0] for row in arcpy.da.SearchCursor(nhd_network.waterbody, 'Permanent_Identifier') if row[0]}
     eligible_lake_ids = {row[0] for row in arcpy.da.SearchCursor(interlake_fc, permid)}
     matching_ids = list(gdb_wb_permids.intersection(eligible_lake_ids))
 
-    matching_ids_query = '{} IN ({})'.format(permid,','.join(['\'{}\''.format(id) for id in matching_ids]))
+    matching_ids_query = '{} IN ({})'.format(permid, ','.join(['\'{}\''.format(id) for id in matching_ids]))
     interlake_fc_mem = arcpy.Select_analysis(interlake_fc, 'in_memory/interlake_fc', matching_ids_query)
 
     # Pick up watershed equality flag
     print('read eq flag')
     try:
-        equalsnetwork = {r[0]:r[1] for r in arcpy.da.SearchCursor(interlake_fc_mem, [permid, eq])}
+        equalsnetwork = {r[0]: r[1] for r in arcpy.da.SearchCursor(interlake_fc_mem, [permid, eq])}
     except:
         print('Run the watershed_equality function to calculate the equalsnetwork flag before using this tool.')
         raise
@@ -1144,7 +1322,6 @@ def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
     print('trace')
     nhd_network.set_start_ids(matching_ids)
     traces = nhd_network.trace_up_from_waterbody_starts()
-
 
     # Step 4: Calculate sub-types
     def label_subtype(trace, equalsnetwork):
@@ -1156,19 +1333,18 @@ def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
             return 'DWS'
 
     print('calc results')
-    subtype_results = {k:label_subtype(v, equalsnetwork[k]) for k, v in traces.items()}
-
+    subtype_results = {k: label_subtype(v, equalsnetwork[k]) for k, v in traces.items()}
 
     if not arcpy.ListFields(interlake_fc, 'ws_subtype'):
-        DM.AddField(interlake_fc, 'ws_subtype','TEXT', field_length=4)
+        DM.AddField(interlake_fc, 'ws_subtype', 'TEXT', field_length=4)
 
     with arcpy.da.UpdateCursor(interlake_fc, [permid, vpuid, 'ws_subtype'], matching_ids_query) as u_cursor:
         for row in u_cursor:
             new_result = subtype_results[row[0]]
             vpuid_val = row[1]
-            if vpuid_val == nhd_network.huc4: # only update if the catchment came from the corresponding VPUID
+            if vpuid_val == nhd_network.huc4:  # only update if the catchment came from the corresponding VPUID
                 row[2] = new_result
             u_cursor.updateRow(row)
 
     DM.Delete('in_memory/interlake_fc')
-    return(subtype_results)
+    return (subtype_results)

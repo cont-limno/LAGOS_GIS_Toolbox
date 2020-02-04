@@ -29,6 +29,7 @@ def batch_add_merge_ids(nhd_parent_directory):
                 if fdate_search_result:
                     fdate_field = fdate_search_result[0]
                     fcs.append(fc)
+                    print(fc)
 
     # For each fc in the list, calculate a new field. The two fields being concatenated into the new field are
     # a composite key in a naive merge of all NHD features (with full identicals removed).
@@ -38,6 +39,42 @@ def batch_add_merge_ids(nhd_parent_directory):
             arcpy.DeleteField_management(fc, "nhd_merge_id")
         arcpy.AddField_management(fc, "nhd_merge_id", "TEXT", field_length=70)
         arcpy.CalculateField_management(fc, "nhd_merge_id", '''!Permanent_Identifier! + '_' + str(!FDate!)''', "PYTHON")
+
+
+def batch_add_merge_ids2(nhd_parent_directory):
+    """
+    Adds a new id field called nhd_merge_id to all feature classes containing the identifier "Permanent_Identifier"
+    in all NHD geodatabases in the parent directory provided. The resulting field can be used to link multiple
+    geoprocessing outputs from NHD datasets staged by subregion to the source features (merged or original) without
+    ID conflicts. Outputs will also need a merge rule to be safely combined, see nhd_gp_output_merge.
+
+    :param nhd_parent_directory: The directory containing all (unzipped) NHD subregion geodatabases.
+    :return: None
+    """
+    # Find all fcs containing a field called "Permanent_Identifier"
+    print("Finding feature classes containing Permanent_Identifier...")
+    fcs = []
+    arcpy.env.workspace = nhd_parent_directory
+    all_gdbs = arcpy.ListWorkspaces("*")
+    for gdb in all_gdbs:
+        print(gdb)
+        fcs.append(os.path.join(nhd_parent_directory, gdb, 'NHDWaterbody'))
+        #fcs.append(os.path.join(nhd_parent_directory, gdb, 'NHDArea'))
+        #fcs.append(os.path.join(nhd_parent_directory, gdb, 'NHDFlowline'))
+
+    # For each fc in the list, calculate a new field. The two fields being concatenated into the new field are
+    # a composite key in a naive merge of all NHD features (with full identicals removed).
+    for fc in fcs:
+        print("Adding new identifier all_merge_id to {}...".format(fc.split(nhd_parent_directory)[1]))
+        try:
+            arcpy.AddField_management(fc, "nhd_merge_id", "TEXT", field_length=70)
+        except:
+            pass
+        with arcpy.da.UpdateCursor(fc, ['Permanent_Identifier', 'FDate', 'nhd_merge_id']) as cursor:
+            for row in cursor:
+                row[2] = '{}_{}'.format(row[0], str(row[1]))
+                cursor.updateRow(row)
+        #arcpy.CalculateField_management(fc, "nhd_merge_id", '''!Permanent_Identifier! + '_' + str(!FDate!)''', "PYTHON")
 
 def efficient_merge(feature_class_list, output_fc, filter =''):
     fc_count = len(feature_class_list)

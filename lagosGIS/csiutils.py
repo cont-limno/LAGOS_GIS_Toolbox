@@ -65,7 +65,8 @@ def rename_field(inTable, oldFieldName, newFieldName, deleteOld = False):
     old_field = arcpy.ListFields(inTable, oldFieldName)
     arcpy.AddField_management(inTable, newFieldName, old_field[0].type, field_length = old_field[0].length)
     arcpy.CalculateField_management(inTable, newFieldName,'!%s!' % oldFieldName, "PYTHON")
-    if deleteOld == True: arcpy.DeleteField_management(inTable, oldFieldName)
+    if deleteOld == True:
+        arcpy.DeleteField_management(inTable, oldFieldName)
 
 
 def one_in_one_out(tool_table, zone_fc, zone_field, output_table):

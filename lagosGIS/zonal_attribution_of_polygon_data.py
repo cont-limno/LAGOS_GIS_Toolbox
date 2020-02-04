@@ -35,7 +35,7 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
 
 
     arcpy.env.workspace = 'in_memory'
-    tab = arcpy.TabulateIntersection_analysis(zone_fc, zone_field, class_fc, 'tab', class_field)
+    tab = arcpy.TabulateIntersection_analysis(zone_fc, zone_field, class_fc, 'tab', class_field, xy_tolerance='0.001 Meters')
     # guard against all numeric values--can't pivot when that is the case
     vals = [r[0] for r in arcpy.da.SearchCursor(tab, class_field)]
     all_numeric = all([str.isdigit(str(v)) for v in vals])
@@ -49,11 +49,12 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
 
     # make sure all input zones have an output row, and where there was no data, consider this a 0 value, assuming
     # the vector data was comprehensive.
+    # also replace values over 100% with 100. Getting a few of these (like 100.0000003) even with a good tolerance.
     all_zones = cu.one_in_one_out(renamed, zone_fc, zone_field, 'all_zones')
     new_fields = [f.name for f in arcpy.ListFields(all_zones) if f.name <> zone_field and f.type not in ('OID', 'Geometry')]
     with arcpy.da.UpdateCursor(all_zones, new_fields) as cursor:
         for row in cursor:
-            row = [val if val else 0 for val in row]
+            row = [min(val, 100) if val else 0 for val in row]
             cursor.updateRow(row)
 
     arcpy.CopyRows_management(all_zones, out_table)

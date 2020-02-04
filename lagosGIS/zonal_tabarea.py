@@ -2,10 +2,8 @@ import csv
 import os
 import arcpy
 from arcpy import management as DM
-from arcpy import analysis as AN
 from arcpy import env
 import csiutils as cu
-import lagosGIS
 from collections import defaultdict
 
 def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',

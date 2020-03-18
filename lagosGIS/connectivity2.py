@@ -2,32 +2,22 @@ import os
 import arcpy
 import nhdplushr_tools as hr
 
-# get the gdb
 def classify_all_lake_conn(nhd_gdb, output_table):
     nhd_network = hr.NHDNetwork(nhd_gdb)
+    nhd_network.define_lakes(strict_minsize=False) # calc conn for a few extra lakes to match LAGOS pop
+    waterbody_ids = nhd_network.lakes_areas.keys()
 
-    # assign connectivity for all lakes and reservoirs, more than LAGOS population
-    all_lakes_reservoirs_filter = '''"FType" IN (390, 436)'''
-    waterbody_ids = [row[0] for row in
-                     arcpy.da.SearchCursor(nhd_network.waterbody, 'Permanent_Identifier', all_lakes_reservoirs_filter)]
-
-    # optional, these would be handled by the classifier but this way progress is measured more clearly
-    arcpy.AddMessage("Preparing network for analysis...")
-    nhd_network.prepare_upstream()
-    nhd_network.prepare_downstream()
-    nhd_network.map_flowlines_to_waterbodies()
-    nhd_network.activate_10ha_lake_stops()
-    nhd_network.deactivate_stops()
-
-    arcpy.AddMessage("Calculating connectivity...")
+    arcpy.AddMessage("Calculating all connectivity...")
     # all connectivity
     conn_class = {id:nhd_network.classify_waterbody_connectivity(id) for id in waterbody_ids}
 
     # permanent only
+    arcpy.AddMessage("Calculating permanent connectivity...")
     nhd_network.drop_intermittent_flow()
     conn_permanent = {id:nhd_network.classify_waterbody_connectivity(id) for id in waterbody_ids}
 
     # make an output table
+    arcpy.AddMessage("Saving output...")
     output = arcpy.CreateTable_management(os.path.dirname(output_table), os.path.basename(output_table))
     arcpy.AddField_management(output, 'lake_connectivity_class', 'TEXT', field_length=10)
     arcpy.AddField_management(output, 'lake_connectivity_permanent', 'TEXT', field_length=10)
@@ -37,6 +27,7 @@ def classify_all_lake_conn(nhd_gdb, output_table):
                      'lake_connectivity_fluctuates']
 
     arcpy.AddMessage("Writing output...")
+
     # if the nhd database has nhd_merge_id (LAGOS de-duplication id) in it, report that, otherwise use permanent_identifier
     if arcpy.ListFields(nhd_network.waterbody, '*nhd_merge_id*'):
         id_name = 'nhd_merge_id'

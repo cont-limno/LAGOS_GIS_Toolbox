@@ -16,12 +16,12 @@ __all__ = ["lake_connectivity_classification",
 
 import os
 import arcpy
-from LakeConnectivity import full_classify as lake_connectivity_classification
+from connectivity2 import classify_all_lake_conn as lake_connectivity_classification
 from zonal_tabarea import handle_overlaps as zonal_attribution_of_raster_data
 from zonal_attribution_of_polygon_data import zonal_attribution_of_polygon_data as zonal_attribution_of_polygon_data
 from color_polygons import colorPolygons as subset_overlapping_zones
 from Export2CSV import TableToCSV as export_to_csv
-from upstream_lakes2 import upstream_lakes
+from upstream2 import count_upstream_lakes as upstream_lakes
 from georeference import spatialize_lakes
 from georeference import georeference_lakes
 from multi_convert_to_raster import multi_convert_to_raster

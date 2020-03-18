@@ -74,6 +74,7 @@ class NHDNetwork:
         self.inlets = []
         self.outlets = []
         self.exclude_intermittent_flow = False
+        self.lakes_areas = {}
 
     def prepare_upstream(self, force=False):
         """Read the geodatabase flow table and collapse into a flow dictionary."""
@@ -152,6 +153,19 @@ class NHDNetwork:
                 if waterbody_id:
                     self.waterbody_flowline[waterbody_id].append(flowline_id)
 
+    def define_lakes(self, strict_minsize=False):
+        """Create an attribute with a dictionary of lakes and their areas.
+        :param strict_minsize: If true, use 0.01 for lower area cutoff. LAGOS originally
+        defined the base lake population using the USGS Albers area, so setting this to False
+        allows slightly more lakes to be included in order to match that population 100%."""
+        lagos_fcode_list = lagosGIS.LAGOS_FCODE_LIST
+        lake_minsize = 0.01 if strict_minsize else 0.009
+        with arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'AreaSqKm', 'FCode']) as cursor:
+            for row in cursor:
+                id, area, fcode = row
+                if area >= lake_minsize and fcode in lagos_fcode_list:
+                    self.lakes_areas[id] = area
+
     def identify_inlets(self):
         """Identify inlets: flowlines that flow in but have no upstream flowline in this gdb."""
         if not self.downstream:
@@ -202,12 +216,10 @@ class NHDNetwork:
     def activate_10ha_lake_stops(self):
         """Activate flow barriers at all lakes (as defined by LAGOS) greater than 10 hectares in size."""
         self.waterbody_stop_ids = []
-        lagos_fcode_list = lagosGIS.LAGOS_FCODE_LIST
-        with arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'AreaSqKm', 'FCode']) as cursor:
-            for row in cursor:
-                id, area, fcode = row
-                if area >= 0.1 and fcode in lagos_fcode_list:
-                    self.waterbody_stop_ids.append(id)
+        if not self.lakes_areas:
+            self.define_lakes()
+
+        self.waterbody_stop_ids = [id for id, area in self.lakes_areas.items() if area >= 0.1]
         # and set the flowlines too
         self.set_stop_ids(self.waterbody_stop_ids)
         # and save stable for re-use by network class
@@ -458,7 +470,7 @@ class NHDNetwork:
         if not self.upstream:
             self.prepare_upstream()
         if not self.downstream:
-            self.prepare_upstream()
+            self.prepare_downstream()
         if not self.waterbody_flowline:
             self.map_flowlines_to_waterbodies()
         if not self.tenha_waterbody_ids:
@@ -487,7 +499,29 @@ class NHDNetwork:
                 connclass = 'DrainageLk'
             else:
                 connclass = 'Drainage'
+
         return connclass
+
+    def find_upstream_lakes(self, waterbody_start_id, result_type='list', area_threshold=0):
+        valid_result_type =  {'list', 'count', 'area_hectares'}
+        if result_type not in valid_result_type:
+            raise ValueError("result_type must be one of {}".format(valid_result_type))
+        if not self.lakes_areas:
+            self.define_lakes()
+
+        countable_lakes = {id for id, area in self.lakes_areas.items() if area >= area_threshold}
+        trace_up = set(self.trace_up_from_a_waterbody(waterbody_start_id)) # includes waterbody ids
+        trace_up_other = trace_up.difference({waterbody_start_id})
+        upstream_lakes = countable_lakes.intersection(trace_up_other)
+
+        if result_type == 'list':
+            return list(upstream_lakes)
+        if result_type == 'count':
+            lake_count = len(upstream_lakes)
+            return lake_count
+        if result_type == 'area_hectares':
+            lake_area = sum([self.lakes_areas[id] for id in upstream_lakes]) * 100 # convert to hectares
+            return lake_area
 
     def trace_up_from_waterbody_starts(self):
         """
@@ -759,7 +793,7 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
 def update_grid_codes(nhdplus_gdb, output_table):
     """Add lakes to gridcode table and save the result as a new table.
 
-    Only lakes over 0.009 sq. km. in area that match the LAGOS lake filter will be added.The features added will be
+    Only lakes over 0.009 sq. km. in area that match the LAGOS lake filter will be added. The features added will be
     slightly more than those that have watersheds created (more inclusive filter) to allow for inadequate precision
     found in the AreaSqKm field.
 

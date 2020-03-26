@@ -5,8 +5,9 @@ import nhdplushr_tools as hr
 def count_upstream_lakes(nhd_gdb, output_table):
     nhd_network = hr.NHDNetwork(nhd_gdb)
 
-    nhd_network.define_lakes()
+    nhd_network.define_lakes(strict_minsize=False, force_lagos=True)
     waterbody_ids = nhd_network.lakes_areas.keys()
+    nhd_network.define_lakes(strict_minsize=False, force_lagos=False)
 
     arcpy.AddMessage("Counting all lakes...")
 
@@ -29,23 +30,23 @@ def count_upstream_lakes(nhd_gdb, output_table):
     # make an output table
     arcpy.AddMessage("Saving output...")
     output = arcpy.CreateTable_management(os.path.dirname(output_table), os.path.basename(output_table))
-    arcpy.AddField_management(output, 'lakes1ha_upstream_n', 'LONG')
-    arcpy.AddField_management(output, 'lakes1ha_upstream_ha', 'DOUBLE')
-    arcpy.AddField_management(output, 'lakes4ha_upstream_n', 'LONG')
-    arcpy.AddField_management(output, 'lakes4ha_upstream_ha', 'DOUBLE')
-    arcpy.AddField_management(output, 'lakes10ha_upstream_n', 'LONG')
-    arcpy.AddField_management(output, 'lakes10ha_upstream_ha', 'DOUBLE')
+    arcpy.AddField_management(output, 'lake_lakes1ha_upstream_n', 'LONG')
+    arcpy.AddField_management(output, 'lake_lakes1ha_upstream_ha', 'DOUBLE')
+    arcpy.AddField_management(output, 'lake_lakes4ha_upstream_n', 'LONG')
+    arcpy.AddField_management(output, 'lake_lakes4ha_upstream_ha', 'DOUBLE')
+    arcpy.AddField_management(output, 'lake_lakes10ha_upstream_n', 'LONG')
+    arcpy.AddField_management(output, 'lake_lakes10ha_upstream_ha', 'DOUBLE')
 
     # this matches order of upstream_data elements, above
-    insert_fields = ['lakes1ha_upstream_n',
-                     'lakes1ha_upstream_ha',
-                     'lakes4ha_upstream_n',
-                     'lakes4ha_upstream_ha',
-                     'lakes10ha_upstream_n',
-                     'lakes10ha_upstream_ha',
+    insert_fields = ['lake_lakes1ha_upstream_n',
+                     'lake_lakes1ha_upstream_ha',
+                     'lake_lakes4ha_upstream_n',
+                     'lake_lakes4ha_upstream_ha',
+                     'lake_lakes10ha_upstream_n',
+                     'lake_lakes10ha_upstream_ha',
                      ]
 
-    # if the nhd database has nhd_merge_id (LAGOS de-duplication id) in it, report that, otherwise use permanent_identifier
+    # get all the ids
     arcpy.AddField_management(output, 'Permanent_Identifier', 'TEXT', field_length=40)
     write_id_names = ['Permanent_Identifier']
     if arcpy.ListFields(nhd_network.waterbody, 'lagoslakeid'):

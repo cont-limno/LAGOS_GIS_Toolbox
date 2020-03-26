@@ -4,8 +4,9 @@ import nhdplushr_tools as hr
 
 def classify_all_lake_conn(nhd_gdb, output_table):
     nhd_network = hr.NHDNetwork(nhd_gdb)
-    nhd_network.define_lakes(strict_minsize=False) # calc conn for a few extra lakes to match LAGOS pop
+    nhd_network.define_lakes(strict_minsize=False, force_lagos=True)
     waterbody_ids = nhd_network.lakes_areas.keys()
+    nhd_network.define_lakes(strict_minsize=False, force_lagos=False)
 
     arcpy.AddMessage("Calculating all connectivity...")
     # all connectivity
@@ -28,32 +29,31 @@ def classify_all_lake_conn(nhd_gdb, output_table):
 
     arcpy.AddMessage("Writing output...")
 
-    # if the nhd database has nhd_merge_id (LAGOS de-duplication id) in it, report that, otherwise use permanent_identifier
-    if arcpy.ListFields(nhd_network.waterbody, '*nhd_merge_id*'):
-        id_name = 'nhd_merge_id'
+    # get all the ids
+    arcpy.AddField_management(output, 'Permanent_Identifier', 'TEXT', field_length=40)
+    write_id_names = ['Permanent_Identifier']
+    if arcpy.ListFields(nhd_network.waterbody, 'lagoslakeid'):
+        write_id_names.append('lagoslakeid')
+        arcpy.AddField_management(output, 'lagoslakeid', 'LONG')
+    if arcpy.ListFields(nhd_network.waterbody, 'nhd_merge_id'):
+        write_id_names.append('nhd_merge_id')
         arcpy.AddField_management(output, 'nhd_merge_id', 'TEXT', field_length=100)
-        lagosid = {r[0]:r[1]
-                   for r in arcpy.da.SearchCursor(nhd_network.waterbody, ['Permanent_Identifier', 'nhd_merge_id'])}
-    else:
-        id_name = 'Permanent_Identifier'
-        arcpy.AddField_management(output, 'Permanent_Identifier', field_length=40)
 
-    insert_fields.append(id_name)
-    rows = arcpy.da.InsertCursor(output, insert_fields)
+    write_id_map = {r[0]: list(r)
+               for r in arcpy.da.SearchCursor(nhd_network.waterbody, write_id_names)}
 
     # write the table
+    cursor_fields = write_id_names + insert_fields
+    rows = arcpy.da.InsertCursor(output, cursor_fields)
+
     for id in waterbody_ids:
+        write_ids = write_id_map[id]
         if conn_class[id] == conn_permanent[id]:
             fluctuates = 'N'
         else:
             fluctuates = 'Y'
 
-        if id_name == 'nhd_merge_id':
-            write_id = lagosid[id]
-        else:
-            write_id = id
-
-        row = (conn_class[id], conn_permanent[id], fluctuates, write_id)
+        row = write_ids + [conn_class[id], conn_permanent[id], fluctuates]
         rows.insertRow(row)
 
 def main():

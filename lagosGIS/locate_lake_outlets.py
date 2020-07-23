@@ -4,6 +4,12 @@ import lagosGIS
 import nhdplushr_tools as ntools
 
 def locate_lake_outlets(nhd_gdb, output_fc):
+    """
+    Creates a point feature class with outlet locations for LAGOS lakes within GDB, based on network connectivity.
+    :param nhd_gdb: NHD-HR geodatabase you want to identify outlets for
+    :param output_fc: Feature class to save the outlet points to
+    :return:
+    """
     arcpy.env.workspace = 'in_memory'
     network = ntools.NHDNetwork(nhd_gdb)
     network.define_lakes(force_lagos=True)
@@ -24,8 +30,9 @@ def locate_lake_outlets(nhd_gdb, output_fc):
         for row in cursor:
             row[1] = network.flowline_waterbody[row[0]]
             cursor.updateRow(row)
-    return(output_fc)
 
     # cleanup
     for item in [outlet_flowlines, outlet_points]:
         arcpy.Delete_management(item)
+
+    return(output_fc)

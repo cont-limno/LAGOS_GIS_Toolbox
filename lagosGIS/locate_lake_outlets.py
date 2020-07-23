@@ -3,6 +3,7 @@ import arcpy
 import lagosGIS
 import nhdplushr_tools as ntools
 
+# this tool has a companion with symmetrical code: locate_lake_inlets.
 def locate_lake_outlets(nhd_gdb, output_fc):
     """
     Creates a point feature class with outlet locations for LAGOS lakes within GDB, based on network connectivity.

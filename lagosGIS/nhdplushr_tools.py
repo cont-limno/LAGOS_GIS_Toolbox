@@ -75,6 +75,10 @@ class NHDNetwork:
         self.outlets = []
         self.exclude_intermittent_flow = False
         self.lakes_areas = {}
+        # the following should have no effect on other users besides LAGOS use,
+        # but will be used to modify .define_lakes so that it includes any permanent_id
+        # found in the LAGOS population, regardless of its size or FType in NHDPlus Plus HR
+        self.lagos_pop_path = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 
     def prepare_upstream(self, force=False):
         """Read the geodatabase flow table and collapse into a flow dictionary."""
@@ -153,18 +157,24 @@ class NHDNetwork:
                 if waterbody_id:
                     self.waterbody_flowline[waterbody_id].append(flowline_id)
 
-    def define_lakes(self, strict_minsize=False):
+    def define_lakes(self, strict_minsize=False, force_lagos=False):
         """Create an attribute with a dictionary of lakes and their areas.
         :param strict_minsize: If true, use 0.01 for lower area cutoff. LAGOS originally
         defined the base lake population using the USGS Albers area, so setting this to False
         allows slightly more lakes to be included in order to match that population 100%."""
+        self.lakes_areas = {} # clear prior definition
         lagos_fcode_list = lagosGIS.LAGOS_FCODE_LIST
         lake_minsize = 0.01 if strict_minsize else 0.009
+        if force_lagos and arcpy.Exists(self.lagos_pop_path):
+            force_ids = {r[0] for r in arcpy.da.SearchCursor(self.lagos_pop_path, 'Permanent_Identifier')}
+        else:
+            force_ids = {}
         with arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'AreaSqKm', 'FCode']) as cursor:
             for row in cursor:
                 id, area, fcode = row
-                if area >= lake_minsize and fcode in lagos_fcode_list:
+                if (area >= lake_minsize and fcode in lagos_fcode_list) or id in force_ids:
                     self.lakes_areas[id] = area
+
 
     def identify_inlets(self):
         """Identify inlets: flowlines that flow in but have no upstream flowline in this gdb."""
@@ -367,6 +377,54 @@ class NHDNetwork:
             outlets = [id for id, n in distinct_net_sizes.items() if n >= .5 * max_net_size]
         self.outlets = outlets
         return outlets
+
+    def identify_lake_outlets(self, waterbody_start_id):
+        # set up the network if necessary
+        if not self.upstream:
+            self.prepare_upstream()
+        if not self.waterbody_flowline:
+            self.map_waterbodies_to_flowlines()
+        flowline_start_ids = set(self.waterbody_flowline[waterbody_start_id])  # one or more
+
+        # identify the lowest start ids
+        next_up = [self.upstream[id] for id in flowline_start_ids]
+        next_up_flat = {id for id_list in next_up for id in id_list}
+        lowest_flowline_start_ids = flowline_start_ids.difference(next_up_flat)  # lakes may have multiple outlets
+        return list(lowest_flowline_start_ids)
+
+    def identify_lake_inlets(self, waterbody_start_id):
+        # set up the network if necessary
+        if not self.downstream:
+            self.prepare_upstream()
+        if not self.waterbody_flowline:
+            self.map_waterbodies_to_flowlines()
+        flowline_start_ids = set(self.waterbody_flowline[waterbody_start_id])  # one or more
+
+        # identify the highest start ids
+        next_down = [self.upstream[id] for id in flowline_start_ids]
+        next_down_flat = {id for id_list in next_down for id in id_list}
+        highest_flowline_start_ids = flowline_start_ids.difference(next_down_flat)  # lakes may have multiple inlets
+        return list(highest_flowline_start_ids)
+
+    def identify_all_lakes_outlets(self):
+        all_outlets = []
+        if not self.lakes_areas():
+            self.define_lakes()
+        waterbody_start_ids = self.lakes_areas.keys()
+        for waterbody_start_id in waterbody_start_ids:
+            outlets = self.identify_lake_outlets(waterbody_start_id)
+            all_outlets.extend(outlets)
+        return all_outlets
+
+    def identify_all_lakes_inlets(self):
+        all_inlets = []
+        if not self.lakes_areas:
+            self.define_lakes()
+        waterbody_start_ids = self.lakes_areas.keys()
+        for waterbody_start_id in waterbody_start_ids:
+            inlets = self.identify_lake_inlets(waterbody_start_id)
+            all_inlets.extend(inlets)
+        return all_inlets
 
     def trace_up_from_a_waterbody(self, waterbody_start_id):
         """
@@ -1072,8 +1130,16 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     arcpy.env.overwriteOutput = True
     arcpy.SetLogHistory(False)
     for lake_id in matching_ids:
+
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
+
+        # KNOWN BUG: 2020-04-27 NJS. Rare--if lake is narrow or configuration allows, sometimes the Artificial Path
+        # flowline generates catchment seed pixels outside the lake bounds and for headwater lakes only
+        # the following logic excludes the portion of the watershed associated with those pixels.
+        # Could fix it here which would slow this tool down a fair bit because skipping them was designed to
+        # speed it up, or could fix upstream at the catseed raster generation step (don't allow
+        # flowlines associated with lakes to generate seed pixels).
         if len(trace_permids) <= 2:  # headwater lakes have trace length = 2 (lake and flowline)
             single_catchment_ids.append(lake_id)
 
@@ -1200,11 +1266,12 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         pass
 
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
-    for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
-                 hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
-                 merged_fc, refined]:
-        DM.Delete(item)
-    DM.Delete(temp_gdb)
+    # for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
+    #              hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
+    #              merged_fc, refined]:
+    #     DM.Delete(item)
+    #DM.Delete(temp_gdb)
+    print(temp_gdb)
 
     # TODO: Delete after confirming none missing
     final_count = int(DM.GetCount(result).getOutput(0))
@@ -1218,7 +1285,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 def watershed_equality(interlake_watershed_fc, network_watershed_fc):
     """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""
     try:
-        DM.AddField(interlake_watershed_fc, 'equalsnetwork', 'TEXT', field_length=1)
+        DM.AddField(interlake_watershed_fc, 'equalsnws', 'TEXT', field_length=1)
     except:
         pass
     try:
@@ -1228,7 +1295,7 @@ def watershed_equality(interlake_watershed_fc, network_watershed_fc):
     iws_area = {r[0]: r[1] for r in
                 arcpy.da.SearchCursor(interlake_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
     net_area = {r[0]: r[1] for r in arcpy.da.SearchCursor(network_watershed_fc, ['Permanent_Identifier', 'SHAPE@area'])}
-    with arcpy.da.UpdateCursor(interlake_watershed_fc, ['Permanent_Identifier', 'equalsnetwork']) as u_cursor:
+    with arcpy.da.UpdateCursor(interlake_watershed_fc, ['Permanent_Identifier', 'equalsnws']) as u_cursor:
         for row in u_cursor:
             permid, flag = row
             if permid in iws_area and permid in net_area:
@@ -1345,7 +1412,7 @@ def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
     interlake_fc_mem = arcpy.Select_analysis(interlake_fc, 'in_memory/interlake_fc', matching_ids_query)
 
     # Pick up watershed equality flag
-    print('read eq flag')
+    print('Reading equality flag...')
     try:
         equalsnetwork = {r[0]: r[1] for r in arcpy.da.SearchCursor(interlake_fc_mem, [permid, eq])}
     except:
@@ -1353,21 +1420,25 @@ def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
         raise
 
     # Run traces
-    print('trace')
+    print('Tracing...')
     nhd_network.set_start_ids(matching_ids)
     traces = nhd_network.trace_up_from_waterbody_starts()
 
+
     # Step 4: Calculate sub-types
-    def label_subtype(trace, equalsnetwork):
-        if len(trace) <= 2:
+    def label_subtype(id, trace, equalsnetwork):
+        inside_ids = nhd_network.waterbody_flowline[id]
+        inside_ids.append(id)
+        nonself_trace_up = set(trace).difference(set(inside_ids))
+        if not nonself_trace_up:
             return 'LC'
         elif equalsnetwork == 'N':
             return 'IDWS'
         else:
             return 'DWS'
 
-    print('calc results')
-    subtype_results = {k: label_subtype(v, equalsnetwork[k]) for k, v in traces.items()}
+    print('Saving results...')
+    subtype_results = {k: label_subtype(k, v, equalsnetwork[k]) for k, v in traces.items()}
 
     if not arcpy.ListFields(interlake_fc, 'ws_subtype'):
         DM.AddField(interlake_fc, 'ws_subtype', 'TEXT', field_length=4)

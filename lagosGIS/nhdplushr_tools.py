@@ -395,13 +395,13 @@ class NHDNetwork:
     def identify_lake_inlets(self, waterbody_start_id):
         # set up the network if necessary
         if not self.downstream:
-            self.prepare_upstream()
+            self.prepare_downstream()
         if not self.waterbody_flowline:
             self.map_waterbodies_to_flowlines()
         flowline_start_ids = set(self.waterbody_flowline[waterbody_start_id])  # one or more
 
         # identify the highest start ids
-        next_down = [self.upstream[id] for id in flowline_start_ids]
+        next_down = [self.downstream[id] for id in flowline_start_ids]
         next_down_flat = {id for id_list in next_down for id in id_list}
         highest_flowline_start_ids = flowline_start_ids.difference(next_down_flat)  # lakes may have multiple inlets
         return list(highest_flowline_start_ids)
@@ -509,7 +509,7 @@ class NHDNetwork:
             reset_stops = False  # use in case all stop ids are erased
 
         # first identify only the highest start ids
-        next_down = [self.upstream[id] for id in flowline_start_ids]
+        next_down = [self.downstream[id] for id in flowline_start_ids]
         next_down_flat = {id for id_list in next_down for id in id_list}
         highest_flowline_start_ids = flowline_start_ids.difference(next_down_flat)  # lakes may have multiple inlets
 

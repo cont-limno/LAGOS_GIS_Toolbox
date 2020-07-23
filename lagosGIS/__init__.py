@@ -12,7 +12,9 @@ __all__ = ["lake_connectivity_classification",
            "aggregate_watersheds_US",
            "subset_overlapping_zones",
            "nhdplushr_tools",
-           "point_attribution_of_raster_data"]
+           "point_attribution_of_raster_data",
+           "locate_lake_outlets",
+           "locate_lake_inlets"]
 
 import os
 import arcpy
@@ -29,6 +31,9 @@ from lake_from_to import lake_from_to
 from polygons_in_zones import polygons_in_zones
 from lakes_in_zones2 import lakes_in_zones
 from interlake2 import aggregate_watersheds as aggregate_watersheds_NE
+from locate_lake_outlets import locate_lake_outlets
+from locate_lake_inlets import locate_lake_inlets
+
 # from nhdplushr_tools import aggregate_watersheds2 as aggregate_watersheds_US
 import nhdplushr_tools
 from point_attribution_of_raster_data import point_attribution_of_raster_data

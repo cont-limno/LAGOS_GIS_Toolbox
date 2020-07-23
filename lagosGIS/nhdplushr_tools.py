@@ -408,7 +408,7 @@ class NHDNetwork:
 
     def identify_all_lakes_outlets(self):
         all_outlets = []
-        if not self.lakes_areas():
+        if not self.lakes_areas:
             self.define_lakes()
         waterbody_start_ids = self.lakes_areas.keys()
         for waterbody_start_id in waterbody_start_ids:

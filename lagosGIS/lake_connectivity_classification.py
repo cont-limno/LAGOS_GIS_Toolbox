@@ -9,6 +9,14 @@ def classify(nhd_gdb, output_table):
     NHDNetwork.classify_waterbody_connectivity to a FileGDB table or other ArcGIS table. Additionally, after calculating
     both the maximum and permanent-only connectivity for the lake, it assigns 'Y' or "N' to
     the lake_connectivity_fluctuates flag.
+
+    This tool will generate the following fields in a new table, using the lagoslakeid as the main identifier:
+    lake_connectivity_class:        maximum hydrologic connectivity class of the focal lake determined from the NHD
+                                    network considering both permanent and intermittent-ephemeral flow
+    lake_connectivity_permanent:    hydrologic connectivity class of the focal lake determined from the NHD network
+                                    considering only permanent flow
+    lake_connectivity_fluctuates:   indicates whether the lake connectivity classification depends on non-permanent flow
+
     :param nhd_gdb: The file path for a high-resolution NHD or NHDPlus geodatabase for a single subregion/HU4.
     :param output_table: The path to save the output table to (suggested: FileGDB table)
     :return: The output table path

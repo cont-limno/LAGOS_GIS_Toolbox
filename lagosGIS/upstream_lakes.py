@@ -6,7 +6,8 @@ import NHDNetwork
 def count(nhd_gdb, output_table):
     """
     This tool calculates the number and area of upstream lakes for each focal lake in the input data. The results are
-    calculated for 3 size classes: all lakes (lakes1ha), lakes >= 4ha, and lakes >= 10ha. This tool relies on
+    calculated for 3 size classes: all lakes (lakes1ha), lakes >= 4ha, and lakes >= 10ha. Network analysis is used
+    to search upstream and is limited to the area included in the input NHD GDB. This tool relies on
     NHDNetwork.find_upstream_lakes to do the calculations.
     This tool will generate the following fields in a new table, using the lagoslakeid as the main identifier:
     lake_lakes1ha_upstream_n:   count of lakes greater than or equal to 1 ha upstream of the focal lake, connected via

@@ -4,6 +4,28 @@ import arcpy
 import NHDNetwork
 
 def count(nhd_gdb, output_table):
+    """
+    This tool calculates the number and area of upstream lakes for each focal lake in the input data. The results are
+    calculated for 3 size classes: all lakes (lakes1ha), lakes >= 4ha, and lakes >= 10ha. This tool relies on
+    NHDNetwork.find_upstream_lakes to do the calculations.
+    This tool will generate the following fields in a new table, using the lagoslakeid as the main identifier:
+    lake_lakes1ha_upstream_n:   count of lakes greater than or equal to 1 ha upstream of the focal lake, connected via
+                                surface streams
+    lake_lakes1ha_upstream_ha:  total area of lakes greater than or equal to 1 ha upstream of the focal lake, connected
+                                via surface streams
+    lake_lakes4ha_upstream_n:   count of lakes greater than or equal to 4 ha upstream of the focal lake, connected via
+                                surface streams
+    lake_lakes4ha_upstream_ha:  total area of lakes greater than or equal to 4 ha upstream of the focal lake, connected
+                                via surface streams
+    lake_lakes10ha_upstream_n:  count of lakes greater than or equal to 10 ha upstream of the focal lake, connected via
+                                surface streams
+    lake_lakes10ha_upstream_ha: total area of lakes greater than or equal to 10 ha upstream of the focal lake, connected
+                                via surface streams
+
+    :param nhd_gdb: The file path for a high-resolution NHD or NHDPlus geodatabase for a single subregion/HU4.
+    :param output_table: The path to save the output table to (suggested: FileGDB table)
+    :return: The output table path
+    """
     nhd_network = NHDNetwork.NHDNetwork(nhd_gdb)
 
     nhd_network.define_lakes(strict_minsize=False, force_lagos=True)

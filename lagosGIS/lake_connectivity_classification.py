@@ -5,10 +5,19 @@ import NHDNetwork
 
 def classify(nhd_gdb, output_table):
     """
-    This is a wrapper tool for classifying the freshwater network connectivity of a lake. It saves the results of
-    NHDNetwork.classify_waterbody_connectivity to a FileGDB table or other ArcGIS table. Additionally, after calculating
-    both the maximum and permanent-only connectivity for the lake, it assigns 'Y' or "N' to
-    the lake_connectivity_fluctuates flag.
+    Classifies lakes based on freshwater hydrologic connectivity. The classification is performed twice to obtain both
+    the maximum and the permanent-only (intermittent & ephemeral flowlines excluded) connectivity. Additionally, after
+    calculating both the maximum and permanent-only connectivity for the lake, it assigns 'Y' or "N' to the
+    lake_connectivity_fluctuates flag. This tool relies on NHDNetwork.classify_waterbody_connectivity.
+
+    The four lake connectivity classifications:
+        Isolated--traces in both directions were empty (no network connectivity)
+        Headwater--only the downstream trace contains network connectivity
+        DrainageLk--traces either in both directions or only the upstream trace has network connectivity, and the
+        upstream trace contains the identifier of one or more lakes over 10 hectares (as defined by the NHDNetwork
+        class)
+        Drainage--all lakes that do not meet one of the prior three criteria; traces either in both directions or only
+        the upstream trace has network connectivity
 
     This tool will generate the following fields in a new table, using the lagoslakeid as the main identifier:
     lake_connectivity_class:        maximum hydrologic connectivity class of the focal lake determined from the NHD

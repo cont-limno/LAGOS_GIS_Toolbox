@@ -4,6 +4,15 @@ import NHDNetwork
 
 
 def classify(nhd_gdb, output_table):
+    """
+    This is a wrapper tool for classifying the freshwater network connectivity of a lake. It saves the results of
+    NHDNetwork.classify_waterbody_connectivity to a FileGDB table or other ArcGIS table. Additionally, after calculating
+    both the maximum and permanent-only connectivity for the lake, it assigns 'Y' or "N' to
+    the lake_connectivity_fluctuates flag.
+    :param nhd_gdb: The file path for a high-resolution NHD or NHDPlus geodatabase for a single subregion/HU4.
+    :param output_table: The path to save the output table to (suggested: FileGDB table)
+    :return: The output table path
+    """
     nhd_network = NHDNetwork.NHDNetwork(nhd_gdb)
     nhd_network.define_lakes(strict_minsize=False, force_lagos=True)
     waterbody_ids = nhd_network.lakes_areas.keys()
@@ -56,6 +65,7 @@ def classify(nhd_gdb, output_table):
 
         row = write_ids + [conn_class[id], conn_permanent[id], fluctuates]
         rows.insertRow(row)
+    return output
 
 def main():
     nhd_gdb = arcpy.GetParameterAsText(0)

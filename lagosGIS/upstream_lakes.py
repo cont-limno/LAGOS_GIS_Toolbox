@@ -1,9 +1,10 @@
 import os
 import arcpy
-import nhdplushr_tools as hr
 
-def count_upstream_lakes(nhd_gdb, output_table):
-    nhd_network = hr.NHDNetwork(nhd_gdb)
+import NHDNetwork
+
+def count(nhd_gdb, output_table):
+    nhd_network = NHDNetwork.NHDNetwork(nhd_gdb)
 
     nhd_network.define_lakes(strict_minsize=False, force_lagos=True)
     waterbody_ids = nhd_network.lakes_areas.keys()
@@ -71,7 +72,7 @@ def main():
     nhd_gdb = arcpy.GetParameterAsText(0)
     output_table = arcpy.GetParameterAsText(1)
 
-    count_upstream_lakes(nhd_gdb, output_table)
+    count(nhd_gdb, output_table)
 
 if __name__ == '__main__':
     main()

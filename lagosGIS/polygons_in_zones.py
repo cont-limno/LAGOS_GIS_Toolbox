@@ -35,16 +35,30 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
                                         'tabulate_intersection_table')
 
     # area was calculated in map units which was m2 so convert to hectares
-    arcpy.AddField_management(tab_table, 'Poly_Ha', 'DOUBLE')
-    arcpy.CalculateField_management(tab_table, 'Poly_Ha', '!AREA!/10000', 'PYTHON')
+    arcpy.AddField_management(tab_table, 'Poly_ha', 'DOUBLE')
+    arcpy.CalculateField_management(tab_table, 'Poly_ha', '!AREA!/10000', 'PYTHON')
 
 
     # just change the name of the percent field
-    arcpy.AlterField_management(tab_table, 'PERCENTAGE', 'Poly_Pct')
+    arcpy.AlterField_management(tab_table, 'PERCENTAGE', 'Poly_pct')
+    arcpy.CalculateField_management(tab_table, 'Poly_pct', 'min(!Poly_pct!, 100)', 'PYTHON') # fix rar val slightly 100+
 
     # Now just get the count as there is no other area metric anymore
+
+    # stupid bit of code that allows at least a few pre-existing "Join_Count" fields to
+    # not mess up the next bit in which we re-name that output field
+    join_count_fnames = ['Join_Count', 'Join_Count_1', 'Join_Count_12']
+
+    for fname in join_count_fnames:
+        if arcpy.ListFields(selected_polys, fname):
+            continue
+        else:
+            join_count_field_name = fname
+            break
+
+    # and now we proceed with said join
     spjoin_fc = arcpy.SpatialJoin_analysis(zone_fc, selected_polys, 'spatial_join_output')
-    arcpy.AlterField_management(spjoin_fc, 'Join_Count', 'Poly_n')
+    arcpy.AlterField_management(spjoin_fc, join_count_field_name, 'Poly_n')
 
     # Add the density
     arcpy.AddField_management(spjoin_fc, 'Poly_nperha', 'DOUBLE')
@@ -52,11 +66,11 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
 
     arcpy.AddMessage('Refining output...')
     arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_n", 'Poly_nperha'])
-    final_fields = ['Poly_Ha', 'Poly_Pct', 'Poly_n', 'Poly_nperha']
+    final_fields = ['Poly_ha', 'Poly_pct', 'Poly_n', 'Poly_nperha']
 
     # make output nice
     arcpy.env.overwriteOutput = False
-    cu.one_in_one_out(tab_table, final_fields, zone_fc, zone_field, output_table)
+    cu.one_in_one_out(tab_table, zone_fc, zone_field, output_table)
 
     cu.redefine_nulls(output_table, final_fields, [0, 0, 0, 0])
 

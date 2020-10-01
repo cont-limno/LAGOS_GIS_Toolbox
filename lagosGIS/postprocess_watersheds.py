@@ -11,7 +11,7 @@ STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\
 MASTER_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 
 # ---POSTPROCESSING FUNCTIONS-------------------------------------------------------------------------------------------
-def watershed_equality(interlake_watershed_fc, network_watershed_fc):
+def calc_watershed_equality(interlake_watershed_fc, network_watershed_fc):
     """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""
     try:
         DM.AddField(interlake_watershed_fc, 'equalsnws', 'TEXT', field_length=1)
@@ -40,7 +40,7 @@ def watershed_equality(interlake_watershed_fc, network_watershed_fc):
             u_cursor.updateRow((permid, flag))
 
 
-def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
+def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
     if fits_naming_standard:
         permid = 'ws_permanent_identifier'
         eq = 'ws_equalsnws'
@@ -103,6 +103,32 @@ def calc_subtype_flag(nhd_gdb, interlake_fc, fits_naming_standard=True):
     DM.Delete('in_memory/interlake_fc')
     return (subtype_results)
 
+# Not called anymore
+def qa_shape_metrics(interlake_watershed_fc, network_watershed_fc, lakes_fc):
+    for fc in [interlake_watershed_fc, network_watershed_fc]:
+        try:
+            DM.AddField(fc, 'isoperimetric', 'DOUBLE')
+        except:
+            pass
+        try:
+            DM.AddField(fc, 'perim_area_ratio', 'DOUBLE')
+        except:
+            pass
+        try:
+            DM.AddField(fc, 'lake_shed_area_ratio', 'DOUBLE')
+        except:
+            pass
+        lake_areas = {r[0]: r[1] for r in
+                      arcpy.da.SearchCursor(lakes_fc, ['Permanent_Identifier', 'lake_waterarea_ha'])}
+        with arcpy.da.UpdateCursor(fc, ['isoperimetric', 'perim_area_ratio',
+                                        'lake_shed_area_ratio', 'Permanent_Identifier', 'SHAPE@']) as u_cursor:
+            for row in u_cursor:
+                iso, pa, lakeshed, id, shape = row
+                iso = (4 * 3.14159 * shape.area) / (shape.length ** 2)
+                pa = shape.length / shape.area
+                lakeshed = lake_areas[id] * 10000 / shape.area  # convert lake area to m2
+                u_cursor.updateRow((iso, pa, lakeshed, id, shape))
+
 
 # ---MAIN FUNCTION------------------------------------------------------------------------------------------------------
 def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_standard=True):
@@ -162,8 +188,8 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     #------ calculations --------
     # equality and subtype flags
     if zone_name == 'ws':
-        watershed_equality(sheds_fc, network_fc)
-        calc_subtype_flag(nhd_gdb, sheds_fc, fits_naming_standard)
+        calc_watershed_equality(sheds_fc, network_fc)
+        calc_watershed_subtype(nhd_gdb, sheds_fc, fits_naming_standard)
 
     # add lagoslakeid and copy to zoneid
     permid_lagosid = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['Permanent_Identifier', 'lagoslakeid'])}

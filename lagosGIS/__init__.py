@@ -1,6 +1,7 @@
 __all__ = ["lake_connectivity_classification",
            "zonal_attribution_of_raster_data",
-           "efficient_merge", "export_to_csv",
+           "efficient_merge",
+           "export_to_csv",
            "upstream_lakes",
            "spatialize_lakes",
            "georeference_lakes",
@@ -8,31 +9,29 @@ __all__ = ["lake_connectivity_classification",
            "lake_from_to",
            "polygons_in_zones",
            "lakes_in_zones",
-           "aggregate_watersheds_NE",
-           "aggregate_watersheds_US",
-           "subset_overlapping_zones",
            "nhdplushr_tools",
            "point_attribution_of_raster_data",
            "locate_lake_outlets",
-           "locate_lake_inlets"]
+           "locate_lake_inlets",
+           "calc_watershed_subtype",
+           "calc_watershed_equality"]
 
 import os
 import arcpy
-from connectivity2 import classify_all_lake_conn as lake_connectivity_classification
+from lake_connectivity_classification import classify as lake_connectivity_classification
 from zonal_tabarea import handle_overlaps as zonal_attribution_of_raster_data
-from zonal_attribution_of_polygon_data import zonal_attribution_of_polygon_data as zonal_attribution_of_polygon_data
-from color_polygons import colorPolygons as subset_overlapping_zones
 from Export2CSV import TableToCSV as export_to_csv
-from upstream2 import count_upstream_lakes as upstream_lakes
+from upstream_lakes import count as upstream_lakes
 from georeference import spatialize_lakes
 from georeference import georeference_lakes
 from multi_convert_to_raster import multi_convert_to_raster
 from lake_from_to import lake_from_to
 from polygons_in_zones import polygons_in_zones
 from lakes_in_zones2 import lakes_in_zones
-from interlake2 import aggregate_watersheds as aggregate_watersheds_NE
 from locate_lake_outlets import locate_lake_outlets
 from locate_lake_inlets import locate_lake_inlets
+from postprocess_watersheds import calc_watershed_subtype
+from postprocess_watersheds import calc_watershed_equality
 
 # from nhdplushr_tools import aggregate_watersheds2 as aggregate_watersheds_US
 import nhdplushr_tools

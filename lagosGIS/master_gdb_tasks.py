@@ -61,9 +61,13 @@ import lagosGIS
 #         add_lat_long(fc)
 
 # 2) populate "states" field
-def find_states(fc, state_fc):
+def find_states(fc, state_fc, zone_name=''):
     """Populate *_states field. States fc must have field 'states' with length 255 and state abbreviations within."""
-    states_field = '{}_states'.format(os.path.basename(fc))
+    if zone_name:
+        zone_name = zone_name
+    else:
+        zone_name = os.path.basename(fc)
+    states_field = '{}_states'.format(zone_name)
     if arcpy.ListFields(fc, states_field):
         DM.DeleteField(fc, states_field)
 
@@ -155,9 +159,13 @@ GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogr
 #         if 'Lakes' in dirpath or 'Spatial_Classifications' in dirpath or 'Ecoregions' in dirpath:
 #             fcs.append(os.path.join(dirpath, filename))
 #
-def calc_glaciation(fc, zone_field):
+def calc_glaciation(fc, zone_field, zone_name=''):
     # tab area
-    g_field = '{}_glaciatedlatewisc'.format(os.path.basename(fc))
+    if zone_name:
+        zone_name = zone_name
+    else:
+        zone_name = os.path.basename(fc)
+    g_field = '{}_glaciatedlatewisc'.format(zone_name)
     AN.TabulateIntersection(fc, zone_field, GLACIAL_EXTENT, 'in_memory/glacial_tab')
     glacial_pct = {r[0]:r[1] for r in arcpy.da.SearchCursor('in_memory/glacial_tab', [zone_field, 'PERCENTAGE'])}
     DM.AddField(fc, g_field, 'TEXT', field_length=20)
@@ -355,12 +363,12 @@ def calc_glaciation(fc, zone_field):
 #
 # # and then I need to get the zones into the MGD and add their zone flags
 #
-# LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\Derived_Land_Borders'
-# COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\TIGER_Coastline'
-# STATE_FC = r'D:\Continental_Limnology\Data_Downloaded\LAGOS_ZONES_ALL\TIGER_Boundaries\Unzipped Original\tl_2016_us_state.shp'
-# STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Spatial_Classifications\state'
-# GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
-#
+LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\Derived_Land_Borders'
+COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\TIGER_Coastline'
+STATE_FC = r'D:\Continental_Limnology\Data_Downloaded\LAGOS_ZONES_ALL\TIGER_Boundaries\Unzipped Original\tl_2016_us_state.shp'
+STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Spatial_Classifications\state'
+GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
+
 def process_ws(ws_fc, zone_name):
 
     # generate new zone ids
@@ -588,20 +596,36 @@ def add_templinkid(fc):
 #
 #     DM.Delete('in_memory')
 
-# update the main lakes layer
-lakes_poly = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
-lakes_point = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha_points'
+# # update the main lakes layer
+# lakes_poly = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+# lakes_point = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha_points'
+#
+# #zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'epanutr4', 'wwf', 'mlra', 'bailey', 'neon']
+# zones = ['omernik3', 'epanutr']
+# zoneids = ['{}_zoneid'.format(z) for z in zones]
+#
+# point_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(lakes_point, ['lagoslakeid'] + zoneids)}
+#
+# for z in zoneids:
+#     if not arcpy.ListFields(lakes_poly, z):
+#         DM.AddField(lakes_poly, z, 'TEXT', field_length=20)
+# with arcpy.da.UpdateCursor(lakes_poly, ['lagoslakeid'] + zoneids) as u_cursor:
+#     for row in u_cursor:
+#         row[1:] = point_dict[row[0]]
+#         u_cursor.updateRow(row)
 
-#zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'epanutr4', 'wwf', 'mlra', 'bailey', 'neon']
-zones = ['omernik3', 'epanutr']
-zoneids = ['{}_zoneid'.format(z) for z in zones]
+# # 2020-04-30 Try the lake state thing again, I just set the old one to lake_state_OLD20200430
+# # for some reason last time it missed some lakes
+#
+# print('lake states')
+# lakes_fc = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+# states = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\state'
+# find_states(lakes_fc, states, zone_name='lake')
 
-point_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(lakes_point, ['lagoslakeid'] + zoneids)}
-
-for z in zoneids:
-    if not arcpy.ListFields(lakes_poly, z):
-        DM.AddField(lakes_poly, z, 'TEXT', field_length=20)
-with arcpy.da.UpdateCursor(lakes_poly, ['lagoslakeid'] + zoneids) as u_cursor:
-    for row in u_cursor:
-        row[1:] = point_dict[row[0]]
-        u_cursor.updateRow(row)
+# 2020-05-05 Try the lake state thing again, I just set the old one to lake_state_OLD20200430
+# for some reason last time it missed some lakes
+#
+# print('ws states')
+# ws = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Spatial_Classifications\ws'
+# states = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\state'
+# find_states(ws, states, zone_name='ws')

@@ -10,11 +10,13 @@
 #-------------------------------------------------------------------------------
 import os
 import arcpy
-from lagosGIS import nhdplushr_tools as nt
+
+import NHDNetwork
+from lagosGIS import nhd_plus_watersheds_tools as nt
 
 def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
     #define paths in nhd geodatabase
-    network = nt.NHDNetwork(nhd_gdb)
+    network = NHDNetwork.NHDNetwork(nhd_gdb)
     # nhd_waterbody = os.path.join(nhd_gdb, 'NHDWaterbody')
     nhd_junctions = os.path.join(nhd_gdb, 'HYDRO_NET_Junctions')
     hydro_net = os.path.join(nhd_gdb, 'Hydrography', 'HYDRO_NET')

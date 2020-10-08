@@ -1,4 +1,9 @@
-# Filename: Export2CSV.py
+# filename: Export2CSV.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS, GEO, CONN
+# tool type: re-usable (ArcGIS Toolbox)
+
 import csv
 import datetime
 import os

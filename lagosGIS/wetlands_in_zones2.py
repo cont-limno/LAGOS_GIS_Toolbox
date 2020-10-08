@@ -2,8 +2,9 @@
 # this does all the wetland stuff at once for a given extent
 import os
 import arcpy
+
+import lagosGIS
 import polygons_in_zones
-import csiutils as cu
 
 def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_wetlands = True):
 
@@ -69,7 +70,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 arcpy.AddField_management(dissolved_temp_table, avg_size_field , 'DOUBLE')
                 arcpy.CalculateField_management(dissolved_temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
                 for f in new_fields:
-                    cu.rename_field(dissolved_temp_table, f, f.replace('Poly', dissolved_temp_table), True)
+                    lagosGIS.rename_field(dissolved_temp_table, f, f.replace('Poly', dissolved_temp_table), True)
 
         polygons_in_zones.polygons_in_zones(zones_fc, zone_field, selected_wetlands, temp_table, '')
         new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
@@ -77,7 +78,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
         arcpy.AddField_management(temp_table, avg_size_field , 'DOUBLE')
         arcpy.CalculateField_management(temp_table, avg_size_field, '!Poly_Contributing_AREA_ha!/!Poly_Count!', 'PYTHON')
         for f in new_fields:
-            cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
+            lagosGIS.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
 
 

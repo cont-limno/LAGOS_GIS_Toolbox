@@ -1,6 +1,5 @@
 import arcpy
 from arcpy import management as DM
-import nhdplushr_tools as nt
 import master_gdb_tasks
 import csiutils
 from NHDNetwork import NHDNetwork

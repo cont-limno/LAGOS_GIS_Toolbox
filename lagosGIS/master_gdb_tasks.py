@@ -1,3 +1,10 @@
+# filename: master_gdb_tasks.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): GEO
+# tool type: code journal
+# status: functions provided are working but code needs re-organization for GEO module publication
+
 import os
 import arcpy
 from arcpy import management as DM

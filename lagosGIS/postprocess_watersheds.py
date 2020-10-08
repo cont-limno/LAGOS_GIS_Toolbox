@@ -1,3 +1,9 @@
+# filename: postprocess_watersheds.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: code journal (no ArcGIS Toolbox)
+
 import arcpy
 from arcpy import management as DM
 import master_gdb_tasks
@@ -10,6 +16,8 @@ STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\
 MASTER_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 
 # ---POSTPROCESSING FUNCTIONS-------------------------------------------------------------------------------------------
+
+
 def calc_watershed_equality(interlake_watershed_fc, network_watershed_fc):
     """Tests whether the interlake and network watersheds are equal and stores result in a flag field for each fc."""
     try:
@@ -40,6 +48,8 @@ def calc_watershed_equality(interlake_watershed_fc, network_watershed_fc):
 
 
 def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
+    """Assigns a watershed subtype: local catchment (LC)--isolated and headwater lakes, drainage watershed (DWS)--no
+    10ha lakes draining in, or interlake drainage watershed (IDWS)--10 lakes drain in, network watershed is provided."""
     if fits_naming_standard:
         permid = 'ws_permanent_identifier'
         eq = 'ws_equalsnws'
@@ -59,7 +69,7 @@ def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
     matching_ids_query = '{} IN ({})'.format(permid, ','.join(['\'{}\''.format(id) for id in matching_ids]))
     interlake_fc_mem = arcpy.Select_analysis(interlake_fc, 'in_memory/interlake_fc', matching_ids_query)
 
-    # Pick up watershed equality flag
+    # Pick up watershed equality flag indicating whether network watershed and "interlake" watershed were equal
     print('Reading equality flag...')
     try:
         equalsnetwork = {r[0]: r[1] for r in arcpy.da.SearchCursor(interlake_fc_mem, [permid, eq])}
@@ -67,7 +77,7 @@ def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
         print('Run the watershed_equality function to calculate the equalsnetwork flag before using this tool.')
         raise
 
-    # Run traces
+    # Run traces to check for local catchment type (no upstream trace)
     print('Tracing...')
     nhd_network.set_start_ids(matching_ids)
     traces = nhd_network.trace_up_from_waterbody_starts()
@@ -99,11 +109,13 @@ def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
                 row[2] = new_result
             u_cursor.updateRow(row)
 
+    # cleanup
     DM.Delete('in_memory/interlake_fc')
     return (subtype_results)
 
-# Not called anymore
+# Not called anymore!
 def qa_shape_metrics(interlake_watershed_fc, network_watershed_fc, lakes_fc):
+    """This function was used to create shape metrics for sliver watershed investigation."""
     for fc in [interlake_watershed_fc, network_watershed_fc]:
         try:
             DM.AddField(fc, 'isoperimetric', 'DOUBLE')
@@ -202,12 +214,12 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     print("Calculating shape metrics...")
     lake_area_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['lagoslakeid', 'lake_waterarea_ha'])}
     shape_fields = ['lagoslakeid',
-              ismultipart,
-              focallakewaterarea_ha,
-              area_ha,
-              perimeter_m,
-              lake_arearatio,
-              'SHAPE@']
+                    ismultipart,
+                    focallakewaterarea_ha,
+                    area_ha,
+                    perimeter_m,
+                    lake_arearatio,
+                    'SHAPE@']
     with arcpy.da.UpdateCursor(sheds_fc, shape_fields) as u_cursor:
         for row in u_cursor:
             id, multi, lake_area, area, perim, ratio, shape = row
@@ -230,7 +242,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     DM.SelectLayerByLocation(sheds_fc_lyr, 'INTERSECT', border_lyr)
     DM.CalculateField(sheds_fc_lyr, onlandborder, "'Y'", 'PYTHON')
     DM.SelectLayerByAttribute(sheds_fc_lyr, 'SWITCH_SELECTION')
-    DM.CalculateField(sheds_fc_lyr, onlandborder ,"'N'", 'PYTHON')
+    DM.CalculateField(sheds_fc_lyr, onlandborder,"'N'", 'PYTHON')
 
     # identify coastal zones
     coastal_lyr = DM.MakeFeatureLayer(COASTLINE, 'coastal_lyr')
@@ -280,7 +292,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
             row = [id, length, width, orientation, area, meanwidth]
             u_cursor.updateRow(row)
 
-    # set sliverflag to no--the final values of sliverflag are set elsewhere but this is the default value
+    # set sliverflag
     if zone_name == 'ws':
         sliver_fields = ['ws_lake_arearatio',
                          'ws_area_ha',
@@ -310,7 +322,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
                 u_cursor.updateRow(row)
 
     # rename some more fields
-    if fits_naming_standard == False:
+    if not fits_naming_standard:
 
         csiutils.rename_field(sheds_fc, 'Permanent_Identifier', '{}_permanent_identifier'.format(zone_name),
                               deleteOld=False)
@@ -335,4 +347,4 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     DM.Delete('in_memory/tabarea')
     DM.Delete('in_memory/mbg')
 
-    return(sheds_fc)
+    return sheds_fc

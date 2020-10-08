@@ -1,3 +1,9 @@
+# filename: lake_connectivity_classification.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox)
+
 import os
 import arcpy
 import NHDNetwork
@@ -36,7 +42,7 @@ def classify(nhd_gdb, output_table):
     nhd_network.define_lakes(strict_minsize=False, force_lagos=False)
 
     arcpy.AddMessage("Calculating all connectivity...")
-    # all connectivity
+    # calc all connectivity, see NHDNetwork script for details
     conn_class = {id:nhd_network.classify_waterbody_connectivity(id) for id in waterbody_ids}
 
     # permanent only
@@ -67,7 +73,7 @@ def classify(nhd_gdb, output_table):
         arcpy.AddField_management(output, 'nhd_merge_id', 'TEXT', field_length=100)
 
     write_id_map = {r[0]: list(r)
-               for r in arcpy.da.SearchCursor(nhd_network.waterbody, write_id_names)}
+                    for r in arcpy.da.SearchCursor(nhd_network.waterbody, write_id_names)}
 
     # write the table
     cursor_fields = write_id_names + insert_fields
@@ -84,11 +90,13 @@ def classify(nhd_gdb, output_table):
         rows.insertRow(row)
     return output
 
+
 def main():
     nhd_gdb = arcpy.GetParameterAsText(0)
     output_table = arcpy.GetParameterAsText(1)
 
     classify(nhd_gdb, output_table)
+
 
 if __name__ == '__main__':
     main()

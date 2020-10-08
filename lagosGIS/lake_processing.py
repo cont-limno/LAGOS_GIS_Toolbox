@@ -1,3 +1,9 @@
+# filename: lake_processing.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS, GEO
+# tool type: code journal (no ArcGIS Toolbox)
+
 import os
 import arcpy
 from arcpy import management as DM
@@ -10,13 +16,18 @@ LAKES_POINT = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb
 LAKES_POLY = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 MGDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
 STATES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\state'
-GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
-LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\NonPublished\Derived_Land_Borders'
+GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\
+                    DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
+LAND_BORDER = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\NonPublished\Derived_Land_Borders'
 COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\NonPublished\TIGER_Coastline'
 STATES_NEGATIVE_BUFFER = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\state_negative_100m_buffer'
 
 def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
-    zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'epanutr4', 'wwf', 'mlra', 'bailey', 'neon', 'omernik3', 'epanutr']
+    """Add the LAGOS spatial division ZoneIDs that correspond to the
+    lake's central point (= the point representation.)"""
+    zones = ['hu12', 'hu8', 'hu4',
+             'county', 'state',
+             'epanutr4', 'wwf', 'mlra', 'bailey', 'neon', 'omernik3', 'epanutr']
     for z in zones:
         print z
         zone = os.path.join(mgdb, z)
@@ -24,9 +35,12 @@ def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
         if not arcpy.ListFields(lakes_points_fc, zoneid):
             DM.AddField(lakes_points_fc, zoneid, 'TEXT', '20')
 
-        join_fc = arcpy.SpatialJoin_analysis(lakes_points_fc, zone, 'in_memory/join_fc', 'JOIN_ONE_TO_ONE', match_option='INTERSECT')
+        join_fc = arcpy.SpatialJoin_analysis(lakes_points_fc,
+                                             zone, 'in_memory/join_fc', 'JOIN_ONE_TO_ONE', match_option='INTERSECT')
         zoneid1 = '{}_1'.format(zoneid)
-        join_missing = arcpy.Select_analysis(join_fc, 'in_memory/join_missing', '{} is null'.format(zoneid1)) # joined always gets _1 suffix bc same name in lakes
+        # joined always gets _1 suffix bc same name in lakes
+        join_missing = arcpy.Select_analysis(join_fc,
+                                             'in_memory/join_missing', '{} is null'.format(zoneid1))
         arcpy.DeleteField_management(join_missing, zoneid1)
         update_vals = {}
 
@@ -37,10 +51,10 @@ def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
             print("Using CLOSEST join...")
             join_fc2 = arcpy.SpatialJoin_analysis(join_missing, zone, 'in_memory/join_fc2', 'JOIN_ONE_TO_ONE',
                                                   match_option='CLOSEST')
-            update_vals = {r[0]:r[1] for r in arcpy.da.SearchCursor(join_fc2, ['lagoslakeid', zoneid1])}
+            update_vals = {r[0]: r[1] for r in arcpy.da.SearchCursor(join_fc2, ['lagoslakeid', zoneid1])}
 
         # make a dict from combining the INTERSECT and CLOSEST results
-        zone_dict = {r[0]:r[1] for r in arcpy.da.SearchCursor(join_fc, ['lagoslakeid', zoneid1])}
+        zone_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(join_fc, ['lagoslakeid', zoneid1])}
         for k, v in zone_dict.items():
             if not v:
                 zone_dict[k] = update_vals[k]
@@ -66,6 +80,7 @@ def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
 
 
 def calc_glaciation(fc, zone_field, zone_name=''):
+    """Calculate whether the lake or zone was glaciated in the Late Wisconsin glaciation."""
     # tab area
     if zone_name:
         zone_name = zone_name
@@ -81,7 +96,7 @@ def calc_glaciation(fc, zone_field, zone_name=''):
             if zoneid not in glacial_pct:
                 glaciation = 'Not_Glaciated'
             else:
-                if glacial_pct[zoneid] >=99.99:
+                if glacial_pct[zoneid] >= 99.99:
                     glaciation = 'Glaciated'
                 elif glacial_pct[zoneid] < 0.01:
                     glaciation = 'Not_Glaciated'
@@ -90,8 +105,10 @@ def calc_glaciation(fc, zone_field, zone_name=''):
             u_cursor.updateRow((zoneid, glaciation))
     DM.Delete('in_memory/glacial_tab')
 
+
 def find_states(fc, state_fc, zone_name=''):
-    """Populate *_states field. States fc must have field 'states' with length 255 and state abbreviations within."""
+    """Populate *_states field. States fc must have field 'states' with length 255 and state abbreviations within.
+    Creates a concatenated list of all states that intersect the zone or lake separated by semi-colons."""
     if zone_name:
         zone_name = zone_name
     else:
@@ -100,11 +117,8 @@ def find_states(fc, state_fc, zone_name=''):
     if arcpy.ListFields(fc, states_field):
         DM.DeleteField(fc, states_field)
 
-    # reverse buffer the states slightly to avoid "D", "I", "J"  situations in "INTERSECT" illustration
-    # from graphic examples of ArcGIS join types "Select polygon using polygon" section in Help
-
     # make a field mapping that gathers all the intersecting states into one new value
-    field_list = [f.name for f in arcpy.ListFields(fc) if f.type <> 'OID' and f.type <> 'Geometry']
+    field_list = [f.name for f in arcpy.ListFields(fc) if f.type != 'OID' and f.type != 'Geometry']
     field_mapping = arcpy.FieldMappings()
     for f in field_list:
         map = arcpy.FieldMap()
@@ -124,8 +138,11 @@ def find_states(fc, state_fc, zone_name=''):
     DM.CopyFeatures(spjoin, fc)
     DM.Delete(spjoin)
 
-# Need to add some of the zone flags to lakes
+
 def lake_zone_flags():
+    """Calculates assorted LAGOS spatial interpretation flags for zones and lakes.
+    Flags: multipart, onlandborder (with Canada or Mexico), oncoast.
+    """
     print("multipart")
     trimmed = LAKES_POLY
     DM.AddField(trimmed, 'multipart', 'TEXT', field_length=1)
@@ -161,9 +178,6 @@ def lake_zone_flags():
     DM.CalculateField(trimmed_lyr, 'oncoast', "'Y'", 'PYTHON')
     DM.SelectLayerByAttribute(trimmed_lyr, 'SWITCH_SELECTION')
     DM.CalculateField(trimmed_lyr, 'oncoast', "'N'", 'PYTHON')
-
-    print("State assignment...")
-    find_states(trimmed, STATES_NEGATIVE_BUFFER)
 
 
 #---MAKE THE LAKES AND ADD ALL FIELDS-----------------------------------------------------------------------------------

@@ -1,7 +1,14 @@
+# filename: upstream_lakes.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox)
+
 import os
 import arcpy
 
 import NHDNetwork
+
 
 def count(nhd_gdb, output_table):
     """
@@ -35,7 +42,7 @@ def count(nhd_gdb, output_table):
 
     arcpy.AddMessage("Counting all lakes...")
 
-    # all lakes count
+    # all lakes count, see NHDNetwork script for more details
     upstream_data = {}
     for wb_id in waterbody_ids:
         uplakes = nhd_network.find_upstream_lakes(wb_id, 'list', area_threshold=0.01)
@@ -81,7 +88,7 @@ def count(nhd_gdb, output_table):
         arcpy.AddField_management(output, 'nhd_merge_id', 'TEXT', field_length=100)
 
     write_id_map = {r[0]: list(r)
-               for r in arcpy.da.SearchCursor(nhd_network.waterbody, write_id_names)}
+                    for r in arcpy.da.SearchCursor(nhd_network.waterbody, write_id_names)}
 
     # write the table
     cursor_fields = write_id_names + insert_fields
@@ -91,11 +98,13 @@ def count(nhd_gdb, output_table):
         row = write_ids + upstream_data[id]
         rows.insertRow(row)
 
+
 def main():
     nhd_gdb = arcpy.GetParameterAsText(0)
     output_table = arcpy.GetParameterAsText(1)
 
     count(nhd_gdb, output_table)
+
 
 if __name__ == '__main__':
     main()

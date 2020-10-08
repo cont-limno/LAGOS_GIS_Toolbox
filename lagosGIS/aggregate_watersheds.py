@@ -1,3 +1,9 @@
+# filename: aggregate_watersheds.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox
+
 import os
 import re
 
@@ -240,14 +246,14 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         DM.Delete(item)
     DM.Delete(temp_gdb)
 
-
-    # TODO: Delete after confirming none missing
+    # Add warning if any missing
     final_count = int(DM.GetCount(result).getOutput(0))
     if final_count < len(matching_ids):
         output_ids = {r[0] for r in arcpy.da.SearchCursor(output_fc, 'Permanent_Identifier')}
         missing = list(set(matching_ids).difference(output_ids))
         arcpy.AddWarning("The following lakes do not have watersheds in the output: {}".format('\n'.join(missing)))
     return result
+
 
 def main():
     catchments_fc = arcpy.GetParameterAsText(0)
@@ -257,6 +263,7 @@ def main():
     mode = arcpy.GetParameterAsText(4)
     aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
                          mode)
+
 
 if __name__ == '__main__':
     main()

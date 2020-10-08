@@ -26,7 +26,7 @@ from upstream_lakes import count as upstream_lakes
 from georeference import spatialize_lakes
 from georeference import georeference_lakes
 from multi_convert_to_raster import multi_convert_to_raster
-from lake_from_to import lake_from_to
+from deprecated.lake_from_to import lake_from_to
 from polygons_in_zones import polygons_in_zones
 from lakes_in_zones2 import lakes_in_zones
 from locate_lake_outlets import locate_lake_outlets

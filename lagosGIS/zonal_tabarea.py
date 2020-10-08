@@ -3,15 +3,17 @@ import os
 import arcpy
 from arcpy import management as DM
 from arcpy import env
-import csiutils as cu
 from collections import defaultdict
+
+import lagosGIS
+
 
 def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',
                     rename_tag='', units='', debug_mode=False):
     orig_env = env.workspace
     if debug_mode:
         env.overwriteOutput = True
-        temp_gdb = cu.create_temp_GDB('zonal_tabarea')
+        temp_gdb = lagosGIS.create_temp_GDB('zonal_tabarea')
         env.workspace = temp_gdb
         arcpy.AddMessage('Debugging workspace located at {}'.format(temp_gdb))
     else:
@@ -153,7 +155,7 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
 
         # in order to add vector capabilities back, need to do something with this
         # right now we just can't fill in polygon zones that didn't convert to raster in our system
-        stats_result = cu.one_in_one_out(temp_entire_table, zone_fc, zone_field, out_table)
+        stats_result = lagosGIS.one_in_one_out(temp_entire_table, zone_fc, zone_field, out_table)
 
         # Convert "datacoveragepct" and "ORIGINAL_COUNT" values to 0 for zones with no metrics calculated
         with arcpy.da.UpdateCursor(out_table,
@@ -266,11 +268,11 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         arcpy.AddMessage("Renaming.")
         # datacoverage just gets tag
         new_datacov_name = '{}_datacoveragepct'.format(rename_tag)
-        cu.rename_field(table, 'datacoveragepct', new_datacov_name, deleteOld=True)
+        lagosGIS.rename_field(table, 'datacoveragepct', new_datacov_name, deleteOld=True)
         # DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
         if not is_thematic:
             new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_')  # if no units, just rename_tag
-            cu.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
+            lagosGIS.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
             # DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
         else:
             # look up the values based on the rename tag
@@ -290,7 +292,7 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
                         # same problem with AlterField limit of 31 characters here.
                         DM.AlterField(table, old_fname, new_fname, clear_field_alias=True)
                     except:
-                        cu.rename_field(table, old_fname, new_fname, deleteOld=True)
+                        lagosGIS.rename_field(table, old_fname, new_fname, deleteOld=True)
         return table
     
     if unflat_table:

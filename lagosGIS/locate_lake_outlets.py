@@ -1,3 +1,9 @@
+# filename: locate_lake_outlets.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): CONN
+# tool type: re-usable (ArcGIS Toolbox)
+
 import arcpy
 
 import NHDNetwork

@@ -1,3 +1,10 @@
+# filename: NHDNetwork.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (NOT IN ArcGIS Toolbox)
+
+
 import os
 import re
 from collections import defaultdict
@@ -11,7 +18,10 @@ import lagosGIS
 class NHDNetwork:
     """
 
-    Class for assessing network connectivity within an NHD HR or NHDPlus HR geodatabase.
+    Class for rapidly assessing network connectivity within an NHD HR or NHDPlus HR geodatabase. This class provides a
+    set of methods for working with NHD HR and NHDPlus HR features for multiple applications beyond the LAGOS database
+    creation. Most of the methods return Python objects for future work rather than GIS files saved on disk, with the
+    exception of save_trace_catchments. Most operations run in less than 2 minutes per subregion.
 
     :param str nhd_gdb: An NHD or NHDPlus HR geodatabase containing the network information.
 

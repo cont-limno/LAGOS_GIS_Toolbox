@@ -1,5 +1,10 @@
-#!/usr/bin/env python
-import os, time
+# filename: nhd_merge_helpers.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (NO ArcGIS Toolbox)
+
+import os
 import arcpy
 
 

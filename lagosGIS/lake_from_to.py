@@ -13,6 +13,14 @@ from arcpy import management as DM
 LAGOS_LAKE_FILTER = "AreaSqKm >= .01 AND FCode IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)"
 
 def lake_from_to(nhd_subregion_gdb, output_table):
+    """
+    Produce a flow table with a row for each lake that flows into another lake. The complexity of the network is
+    simplified to show only which lakes are upstream or downstream of other lakes.
+    :param nhd_subregion_gdb: The NHD HR subregion to summarize
+    :param output_table: The output table to save the results to.
+    :return:
+    """
+
     arcpy.env.workspace = 'in_memory'
     waterbody0 = os.path.join(nhd_subregion_gdb, 'NHDWaterbody')
     network = os.path.join(nhd_subregion_gdb, 'Hydrography','HYDRO_NET')

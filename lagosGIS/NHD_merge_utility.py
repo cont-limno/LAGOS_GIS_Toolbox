@@ -18,8 +18,8 @@
 # do not delete any duplicates
 import os
 import arcpy
-import assumptions
-import csiutils as cu
+import lagosGIS
+
 
 def nhd_merge(gdb_list, example_feature_class_name, out_fc, selection = ''):
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039) # USA_Contiguous_Albers_Equal_Area_Conic_USGS_version
@@ -28,45 +28,24 @@ def nhd_merge(gdb_list, example_feature_class_name, out_fc, selection = ''):
     gdb_list = [os.path.join(gdb, os.path.basename(example_feature_class_name)) for gdb in gdb_list]
     gdb0 = gdb_list.pop(0)
     desc = arcpy.Describe(gdb0)
-    cu.multi_msg('Merging all features together...')
+    lagosGIS.multi_msg('Merging all features together...')
     arcpy.CopyFeatures_management(gdb0, 'temp_merged')
-    cu.lengthen_field('temp_merged', 'Permanent_Identifier', 255)
-    cu.merge_many(gdb_list, 'in_memory/the_rest_merged')
+    lagosGIS.lengthen_field('temp_merged', 'Permanent_Identifier', 255)
+    lagosGIS.merge_many(gdb_list, 'in_memory/the_rest_merged')
     arcpy.Append_management('in_memory/the_rest_merged', 'temp_merged', 'NO_TEST')
     # use in_memory explicitly here because i haven't figured out how to pass arcgis environments to my functions :(
     fc_temp = 'in_memory/temp_merged'
     fcount1 = int(arcpy.GetCount_management(fc_temp).getOutput(0))
-    cu.multi_msg('Before selection and cleaning, feature count is {0}'.format(fcount1))
+    lagosGIS.multi_msg('Before selection and cleaning, feature count is {0}'.format(fcount1))
     if selection:
-        cu.multi_msg('Selecting features...')
+        lagosGIS.multi_msg('Selecting features...')
         arcpy.Select_analysis('temp_merged', 'in_memory/merged_select', selection)
         fc_temp = 'in_memory/merged_select'
 
     fcount2 = int(arcpy.GetCount_management(fc_temp).getOutput(0))
-    cu.multi_msg('After selection and before cleaning, feature count is {0}'.format(fcount2))
+    lagosGIS.multi_msg('After selection and before cleaning, feature count is {0}'.format(fcount2))
 
     arcpy.CopyFeatures_management(fc_temp, out_fc)
-
-    # cu.multi_msg('Removing complete duplicates...')
-    # fc_temp_fields = [f.name for f in arcpy.ListFields(fc_temp) if f.type <> 'OID']
-    # arcpy.DeleteIdentical_management(fc_temp, fields = [f.name for f in arcpy.ListFields(fc_temp) if f.type <> 'OID'])
-    #
-    # fcount3 = int(arcpy.GetCount_management(fc_temp).getOutput(0))
-    # cu.multi_msg('After removing complete duplicates only, feature count is {0}'.format(fcount3))
-    #
-    # cu.multi_msg('Removing remaining ID duplicates...')
-    # assumptions.remove_nhd_duplicates(fc_temp, 'Permanent_Identifier', 'in_memory/no_id_dupes')
-    #
-    # fcount4 = int(arcpy.GetCount_management(fc_temp).getOutput(0))
-    # cu.multi_msg('After removing all ID duplicates, feature count is {0}'.format(fcount4))
-    #
-    # if desc.shapeType == 'Polygon':
-    #     cu.multi_msg('Removing geographic duplicates and substantially overlapping features...')
-    #     assumptions.remove_geographic_doubles('in_memory/no_id_dupes', out_fc, 'Permanent_Identifier', percent_overlap_allowed = 10)
-    # cu.multi_msg('nhd_merge complete.')
-    #
-    # fcount5 = int(arcpy.GetCount_management(fc_temp).getOutput(0))
-    # cu.multi_msg('Final feature count is {0}'.format(fcount5))
 
 def test():
     mgd = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver4.gdb'

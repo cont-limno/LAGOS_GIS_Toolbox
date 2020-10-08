@@ -22,10 +22,13 @@
 #
 #-------------------------------------------------------------------------------
 
-import fnmatch, os, shutil, re, zipfile
+import os
+import shutil
+import re
+import zipfile
 import arcpy
 from arcpy import env
-import csiutils as cu
+
 
 def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     env.workspace = 'in_memory'

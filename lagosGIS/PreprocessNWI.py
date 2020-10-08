@@ -2,8 +2,9 @@
 # Makes a feature class of wetlands that conform to the CSI definition of
 # of wetlands and can merge seamlessly without duplicates near state borders
 
-import arcpy, os
-import csiutils as cu
+import arcpy
+import lagosGIS
+
 
 def InsideState(state, nwi, lakes, outfc):
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
@@ -13,7 +14,7 @@ def InsideState(state, nwi, lakes, outfc):
 
     arcpy.env.workspace = 'in_memory'
     arcpy.MakeFeatureLayer_management(nwi, "nwi_lyr")
-    cu.multi_msg('Selecting wetlands with their center in the state.')
+    lagosGIS.multi_msg('Selecting wetlands with their center in the state.')
     arcpy.SelectLayerByLocation_management("nwi_lyr", 'HAVE_THEIR_CENTER_IN', state,'','NEW_SELECTION')
 
     # Two things to make wetlands conform to the CSI definition
@@ -21,9 +22,9 @@ def InsideState(state, nwi, lakes, outfc):
     # and make it impossible for wetlands to be inside lakes
     wetland_type_field = arcpy.ListFields("nwi_lyr", "WETLAND_TY*")[0].name
     filter = """"ATTRIBUTE" LIKE 'P%' AND {} <> 'Freshwater Pond'""".format(wetland_type_field)
-    cu.multi_msg("Selecting only palustrine wetlands...")
+    lagosGIS.multi_msg("Selecting only palustrine wetlands...")
     arcpy.SelectLayerByAttribute_management("nwi_lyr", "SUBSET_SELECTION", filter)
-    cu.multi_msg('Erasing lakes from wetlands layer.')
+    lagosGIS.multi_msg('Erasing lakes from wetlands layer.')
     arcpy.Erase_analysis("nwi_lyr", lakes, outfc)
 
     # Add two fields we will use, an ID field and the area in hectares

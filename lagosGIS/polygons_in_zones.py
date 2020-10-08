@@ -8,11 +8,13 @@
 # Copyright:   (c) smithn78 2014
 # Licence:     <your licence>
 #-------------------------------------------------------------------------------
-import os
 import arcpy
-import csiutils as cu
+
 
 # requires higher than ArcGIS 10.1--uses in_memory workspace that allows access to the geometry
+import lagosGIS
+
+
 def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
     old_workspace = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
@@ -70,9 +72,9 @@ def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, i
 
     # make output nice
     arcpy.env.overwriteOutput = False
-    cu.one_in_one_out(tab_table, zone_fc, zone_field, output_table)
+    lagosGIS.one_in_one_out(tab_table, zone_fc, zone_field, output_table)
 
-    cu.redefine_nulls(output_table, final_fields, [0, 0, 0, 0])
+    lagosGIS.redefine_nulls(output_table, final_fields, [0, 0, 0, 0])
 
     # clean up
     # can't delete all of in_memory because this function is meant to be called from another one that uses in_memory

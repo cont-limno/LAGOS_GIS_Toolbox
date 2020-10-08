@@ -1,8 +1,5 @@
-import csv
-import os
 import arcpy
 import lagosGIS
-import csiutils as cu
 
 
 def point_attribution_of_raster_data(zone_points, zone_field, in_value_raster, out_table, rename_tag='', units=''):
@@ -22,7 +19,7 @@ def point_attribution_of_raster_data(zone_points, zone_field, in_value_raster, o
 
     if rename_tag:
         new_field_name = '{}_{}'.format(rename_tag, units)
-        cu.rename_field(point_stats, 'RASTERVALU', new_field_name, deleteOld=True)
+        lagosGIS.rename_field(point_stats, 'RASTERVALU', new_field_name, deleteOld=True)
     arcpy.CopyRows_management(point_stats, out_table)
     return out_table
 

@@ -1,7 +1,15 @@
-import math
+# filename: lake_from_to.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): CONN
+# tool type: re-usable (not ArcGIS Toolbox)
+# status: This code was a PROTOTYPE and was replaced with alternate Python code for the CONN database. It produces
+# a very similar result with differences in complicated flow situations.
+
 import os
 import arcpy
 from arcpy import management as DM
+
 LAGOS_LAKE_FILTER = "AreaSqKm >= .01 AND FCode IN (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)"
 
 def lake_from_to(nhd_subregion_gdb, output_table):

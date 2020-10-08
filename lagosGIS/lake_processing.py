@@ -15,7 +15,7 @@ LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gd
 COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\NonPublished\TIGER_Coastline'
 STATES_NEGATIVE_BUFFER = r'C:\Users\smithn78\Documents\ArcGIS\Default.gdb\state_negative_100m_buffer'
 
-def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb)
+def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
     zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'epanutr4', 'wwf', 'mlra', 'bailey', 'neon', 'omernik3', 'epanutr']
     for z in zones:
         print z

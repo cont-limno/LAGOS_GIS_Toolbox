@@ -6,6 +6,8 @@ import arcpy
 from arcpy import env
 from arcpy.sa import *
 import csiutils as cu
+import lagosGIS
+
 
 def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 
@@ -20,8 +22,8 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     huc4_code = re.search('\d{4}', os.path.basename(nhd_gdb)).group()
 
     # create temp directory because we need shape geometry
-    temp_gdb = cu.create_temp_GDB('watersheds' + huc4_code)
-    cu.multi_msg("Temp geodatabase is located at {}".format(temp_gdb))
+    temp_gdb = lagosGIS.create_temp_GDB('watersheds' + huc4_code)
+    lagosGIS.multi_msg("Temp geodatabase is located at {}".format(temp_gdb))
     env.workspace = temp_gdb
 
     wbd_hu8 = os.path.join(nhd_gdb, "WBD_HU8")
@@ -35,12 +37,12 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     pour_points = os.path.join(pour_dir, 'pour_points.tif')
     arcpy.Clip_management(pour_points, '', "pour_points_clipped", "hu8_buffered", '0', 'ClippingGeometry')
     raw_watersheds = os.path.join(out_gdb, 'huc{}_watersheds_precursors'.format(huc8_code))
-    cu.multi_msg("Calculating preliminary watersheds...")
+    lagosGIS.multi_msg("Calculating preliminary watersheds...")
     outWatershed = Watershed(flowdir, "pour_points_clipped")
     outWatershed.save(raw_watersheds)
 
 
-    cu.multi_msg("Clipping watersheds to subregion boundaries and filtering spurious watersheds...")
+    lagosGIS.multi_msg("Clipping watersheds to subregion boundaries and filtering spurious watersheds...")
 
     # Watershed raster to polygons
     arcpy.RasterToPolygon_conversion(raw_watersheds, "wspoly1", 'NO_SIMPLIFY', "Value")
@@ -64,7 +66,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     arcpy.SelectLayerByAttribute_management("wsclip1_lyr", "SUBSET_SELECTION",'''"Shape_Area" >= 10000''')
 
 
-    cu.multi_msg("Reshaping watersheds...")
+    lagosGIS.multi_msg("Reshaping watersheds...")
     # Polygon back to raster
     grid_code = arcpy.ListFields("wsclip1_lyr", "grid*")[0].name
     arcpy.PolygonToRaster_conversion("wsclip1_lyr", grid_code, "ws_legit_ras")
@@ -94,7 +96,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 ##    prews.save("prews.tif")
 
     # Nibble masked values (null values along boundary).
-    cu.multi_msg('Nibbling watersheds as part of reshaping...')
+    lagosGIS.multi_msg('Nibbling watersheds as part of reshaping...')
     nibble = Nibble("pre_watersheds", "mask", "DATA_ONLY")
     nibble.save("nibble")
     # Use HU8 buffer so that watersheds will overrun HU8 boundaries and get
@@ -104,7 +106,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     # Convert watershed raster to polygon.
     # Setting simplify keyword to TRUE in RasterToPolygon_conversion
     # is not working reliably so need to do this in two steps, unfortunately
-    cu.multi_msg("Converted reshaped watersheds raster to polygons. If you experience problems with this step, please read Known and Outstanding Bugs.txt")
+    lagosGIS.multi_msg("Converted reshaped watersheds raster to polygons. If you experience problems with this step, please read Known and Outstanding Bugs.txt")
     arcpy.RasterToPolygon_conversion("watersheds_ras", "nibble_sheds",'SIMPLIFY', "Value") #simplify okay
 
 ##    # I'm using 15 as the tolerance
@@ -146,7 +148,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
     arcpy.CalculateField_management('update_lyr', 'dissolve_id', '!OBJECTID!', 'PYTHON')
     arcpy.SelectLayerByAttribute_management('update_lyr', 'CLEAR_SELECTION')
     arcpy.Dissolve_management('update_lyr', "final_watersheds_bumped", 'dissolve_id', 'Permanent_Identifier FIRST')
-    cu.rename_field("final_watersheds_bumped", "FIRST_Permanent_Identifier", "Permanent_Identifier", deleteOld = True)
+    lagosGIS.rename_field("final_watersheds_bumped", "FIRST_Permanent_Identifier", "Permanent_Identifier", deleteOld = True)
     arcpy.DeleteField_management('final_watersheds_bumped', 'dissolve_id')
 
     arcpy.Clip_analysis('final_watersheds_bumped', 'hu8', 'final_watersheds_clipped')
@@ -162,7 +164,7 @@ def create_csi_watersheds(flowdir, pour_dir, nhd_gdb, out_gdb):
 
     arcpy.ResetEnvironments()
     arcpy.CheckInExtension('Spatial')
-    cu.multi_msg("Complete.")
+    lagosGIS.multi_msg("Complete.")
 
 
 def main():

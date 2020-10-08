@@ -6,14 +6,14 @@
 import os
 import arcpy
 from arcpy import management as DM
-import csiutils as cu
+import lagosGIS
 
 XY_TOLERANCE = '1 Meters'
 
 def classify_lakes(nhd, out_feature_class, exclude_intermit_flowlines = False, debug_mode=False):
     if debug_mode:
         arcpy.env.overwriteOutput = True
-        temp_gdb = cu.create_temp_GDB('classify_lake_connectivity')
+        temp_gdb = lagosGIS.create_temp_GDB('classify_lake_connectivity')
         arcpy.env.workspace = temp_gdb
         arcpy.AddMessage('Debugging workspace located at {}'.format(temp_gdb))
 

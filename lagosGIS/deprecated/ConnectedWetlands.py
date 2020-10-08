@@ -18,7 +18,7 @@
 import os
 import arcpy
 from arcpy import env
-import csiutils as cu
+import lagosGIS
 from polygons_in_zones import polygons_in_zones
 
 def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
@@ -49,18 +49,18 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
 
         # make good field names now rather than later
         for f in new_fields:
-            cu.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
+            lagosGIS.rename_field(temp_table, f, f.replace('Poly', temp_table), True)
 
         # shoreline calculation
         # using the Shape_Length field so can't do this part in memory
-        shoreline_gdb = cu.create_temp_GDB('shoreline')
+        shoreline_gdb = lagosGIS.create_temp_GDB('shoreline')
         selected_wetlands = os.path.join(shoreline_gdb, 'wetlands')
         arcpy.Select_analysis(wetlands_fc, selected_wetlands, sel)
         intersect_output = os.path.join(shoreline_gdb, "intersect")
         arcpy.Intersect_analysis(['shorelines', selected_wetlands], intersect_output)
         arcpy.Statistics_analysis(intersect_output, 'intersect_stats', [['Shape_Length', 'SUM']], lake_id_field)
-        cu.one_in_one_out('intersect_stats', ['SUM_Shape_Length'], lakes_fc, lake_id_field, 'temp_shoreline_table')
-        cu.redefine_nulls('temp_shoreline_table', ['SUM_Shape_Length'], [0])
+        lagosGIS.one_in_one_out('intersect_stats', ['SUM_Shape_Length'], lakes_fc, lake_id_field, 'temp_shoreline_table')
+        lagosGIS.redefine_nulls('temp_shoreline_table', ['SUM_Shape_Length'], [0])
         shoreline_field = temp_table + "_Shoreline_Km"
         arcpy.AddField_management('temp_shoreline_table', shoreline_field, 'DOUBLE')
         arcpy.CalculateField_management('temp_shoreline_table', shoreline_field, '!SUM_Shape_Length!/1000', 'PYTHON')

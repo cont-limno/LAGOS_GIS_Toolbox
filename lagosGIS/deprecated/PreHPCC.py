@@ -5,10 +5,11 @@ import os, shutil
 import arcpy
 from arcpy.sa import *
 from arcpy import env
-import csiutils as cu
 
 #################################################################################################################################################
 # Burning Streams
+import lagosGIS
+
 
 def burn(subregion_ned, nhd_gdb, burnt_out, projection = arcpy.SpatialReference(102039)):
     env.snapRaster = subregion_ned
@@ -21,25 +22,25 @@ def burn(subregion_ned, nhd_gdb, burnt_out, projection = arcpy.SpatialReference(
     if not arcpy.Exists(flow_line):
         arcpy.FeatureClassToFeatureClass_conversion("NHDFlowline", nhd_gdb, flow_line)
 
-    cu.multi_msg("Prepared NHDFlowline for rasterizing.")
+    lagosGIS.multi_msg("Prepared NHDFlowline for rasterizing.")
 
     # Feature to Raster- rasterize the NHDFlowline
     flow_line_raster = "in_memory/flow_line_raster"
     arcpy.FeatureToRaster_conversion(flow_line, "OBJECTID", flow_line_raster, "10")
-    cu.multi_msg("Converted flowlines to raster.")
+    lagosGIS.multi_msg("Converted flowlines to raster.")
 
     # Raster Calculator- burns in streams, beveling in from 500m
-    cu.multi_msg("Burning streams into raster, 10m deep and beveling in from 500m out. This may take a while....")
+    lagosGIS.multi_msg("Burning streams into raster, 10m deep and beveling in from 500m out. This may take a while....")
     distance = EucDistance(flow_line, cell_size = "10")
     streams = Reclassify(Raster(flow_line_raster) > 0, "Value", "1 1; NoData 0")
     burnt = Raster(subregion_ned) - (10 * streams) - (0.02 * (500 - distance) * (distance < 500))
 
-    cu.multi_msg("Saving output raster...")
+    lagosGIS.multi_msg("Saving output raster...")
     burnt.save(burnt_out)
 
     # Delete intermediate rasters and shapefiles
-    cu.cleanup([flow_line, flow_line_raster])
-    cu.multi_msg("Burn process completed")
+    lagosGIS.cleanup([flow_line, flow_line_raster])
+    lagosGIS.multi_msg("Burn process completed")
 
 ###############################################################################################################################################
 
@@ -77,17 +78,17 @@ def clip(raster, nhd_gdb, projection, outfolder):
     for fc, fc_buffered in zip(fcs, fcs_buffered):
         arcpy.Buffer_analysis(fc, fc_buffered, "5000 meters")
 
-    cu.multi_msg("Created HUC8 buffers.")
+    lagosGIS.multi_msg("Created HUC8 buffers.")
     arcpy.RefreshCatalog(nhd)
 
     # Clips rasters
-    cu.multi_msg("Starting HUC8 clips...")
+    lagosGIS.multi_msg("Starting HUC8 clips...")
     for fc_buffered, out_clip in zip(fcs_buffered, out_clips):
         arcpy.Clip_management(raster, '', out_clip, fc_buffered, "0", "ClippingGeometry")
 
     arcpy.Compact_management(nhd)
 
-    cu.multi_msg("Clipping complete.")
+    lagosGIS.multi_msg("Clipping complete.")
 
 #END OF DEF clip
 
@@ -106,15 +107,15 @@ def main():
     try:
         clip(input_burnt, nhd_gdb, projection, outfolder)
         arcpy.Delete_management(input_burnt)
-        cu.multi_msg("Complete. HUC8 burned clips are now ready for flow direction.")
+        lagosGIS.multi_msg("Complete. HUC8 burned clips are now ready for flow direction.")
     except arcpy.ExecuteError:
-        cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
-        (subregion_ned, burnt_ned))
+        lagosGIS.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
+                           (subregion_ned, burnt_ned))
         arcpy.AddError(arcpy.GetMessages(2))
     except Exception as e:
-        cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
-        (subregion_ned, burnt_ned))
-        cu.multi_msg(e.message)
+        lagosGIS.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
+                           (subregion_ned, burnt_ned))
+        lagosGIS.multi_msg(e.message)
     finally:
         arcpy.CheckInExtension("Spatial")
 
@@ -132,15 +133,15 @@ def test():
 ##    try:
 ##        clip(input_burnt, nhd_gdb, projection, outfolder)
 ##        arcpy.Delete_management(input_burnt)
-##        cu.multi_msg("Complete. HUC8 burned clips are now ready for flow direction.")
+##        lagosGIS.multi_msg("Complete. HUC8 burned clips are now ready for flow direction.")
 ##    except arcpy.ExecuteError:
-##        cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
+##        lagosGIS.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
 ##        (subregion_ned, burnt_ned))
 ##        arcpy.AddError(arcpy.GetMessages(2))
 ##    except Exception as e:
-##        cu.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
+##        lagosGIS.multi_msg("Clip failed, try again. Mosaic file is %s and burnt NED file is %s" %
 ##        (subregion_ned, burnt_ned))
-##        cu.multi_msg(e.message)
+##        lagosGIS.multi_msg(e.message)
 ##    finally:
 ##        arcpy.CheckInExtension("Spatial")
 

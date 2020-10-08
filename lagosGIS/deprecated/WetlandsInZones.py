@@ -8,7 +8,8 @@
 
 import os
 import arcpy
-import csiutils as cu
+import lagosGIS
+
 
 def wetlands_in_zones(infolder, idfield, wetlands, top_outfolder):
 
@@ -45,7 +46,7 @@ def wetlands_in_zones(infolder, idfield, wetlands, top_outfolder):
     # Spatial Join the wetlands to each extent
     out_fcs = []
     for fc in fcs:
-        cu.multi_msg("Creating results for %s" % fc)
+        lagosGIS.multi_msg("Creating results for %s" % fc)
         name = os.path.basename(fc)
         fms = arcpy.FieldMappings()
         fmid = arcpy.FieldMap()

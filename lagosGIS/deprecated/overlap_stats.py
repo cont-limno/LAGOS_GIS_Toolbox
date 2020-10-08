@@ -1,7 +1,6 @@
 import os
 import arcpy
-from arcpy import env
-import csiutils as cu
+import lagosGIS
 import zonal_tabarea
 
 def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic):
@@ -9,7 +8,7 @@ def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_t
 
     arcpy.CheckOutExtension("Spatial")
     for zones, temp_table in zip(non_overlapping_zones_list, temp_out_tables):
-        cu.multi_msg('Calculating statistics for layer {0}'.format(zones))
+        lagosGIS.multi_msg('Calculating statistics for layer {0}'.format(zones))
         zonal_tabarea.stats_area_table(zones, zone_field, in_value_raster, temp_table, is_thematic)
     arcpy.CheckInExtension("Spatial")
 

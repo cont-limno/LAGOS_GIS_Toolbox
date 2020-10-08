@@ -1,6 +1,7 @@
 import os, re, shutil
 import arcpy
-import csiutils as cu
+import lagosGIS
+
 
 def aggregate_watersheds(watersheds_fc, nhd_gdb, eligible_lakes,
                             output_fc, mode = ['interlake', 'cumulative']):
@@ -91,7 +92,7 @@ def aggregate_watersheds(watersheds_fc, nhd_gdb, eligible_lakes,
             if not arcpy.Exists("output_fc"):
                 arcpy.CopyFeatures_management('lakeless_watershed', "output_fc")
                 # to avoid append mismatch due to permanent_identifier
-                cu.lengthen_field("output_fc", 'Permanent_Identifier', 255)
+                lagosGIS.lengthen_field("output_fc", 'Permanent_Identifier', 255)
             else:
                 arcpy.Append_management('lakeless_watershed', "output_fc", 'NO_TEST')
             for item in ['this_lake', 'this_watershed', 'this_lake_jxns', 'upstream', 'lakeless_watershed', 'other_tenha_junctions']:

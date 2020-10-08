@@ -1,8 +1,7 @@
 import os, re
 import arcpy
 from arcpy import env
-from arcpy.sa import *
-import csiutils as cu
+import lagosGIS
 
 
 def clip_to_hu8(raster, nhd_gdb, out_dir,
@@ -45,7 +44,7 @@ def clip_to_hu8(raster, nhd_gdb, out_dir,
 
                 # clip the raster
                 out_raster = os.path.join(clips_dir, 'NED{0}.tif'.format(row[0]))
-                cu.multi_msg('Creating output {0}'.format(out_raster))
+                lagosGIS.multi_msg('Creating output {0}'.format(out_raster))
 
                 # use a small buffer here because otherwise the walls get
                 # cut off in slivers

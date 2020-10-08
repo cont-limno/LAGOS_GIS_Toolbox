@@ -1,6 +1,7 @@
 import os, re
 import arcpy
-import csiutils as cu
+import lagosGIS
+
 
 def merge_watersheds(watershed_fcs_list, nhd_gdb, out_fc):
     """Merges watershed fcs that are at HU8 level to subregion level. Checks
@@ -32,7 +33,7 @@ def merge_watersheds(watershed_fcs_list, nhd_gdb, out_fc):
     # This typically works out faster than merging when there are LOTS of features
     first_fc = watershed_fcs_list.pop(0)
     arcpy.CopyFeatures_management(first_fc, out_fc)
-    cu.lengthen_field(out_fc, 'Permanent_Identifier', 255)
+    lagosGIS.lengthen_field(out_fc, 'Permanent_Identifier', 255)
     for fc in watershed_fcs_list:
         arcpy.Append_management(watershed_fcs_list, out_fc, 'NO_TEST')
 

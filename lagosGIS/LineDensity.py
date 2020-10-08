@@ -5,8 +5,10 @@
 # Distributed under the terms of GNU GPL
 #____________________________________________________________________________________________________________________________________
 import os
+import sys
 import arcpy
-import csiutils as cu
+import lagosGIS
+from lagosGIS import select_fields as lagosGIS_select_fields
 
 
 def line_density(zones, zonefield, lines, out_table, interest_selection_expr):
@@ -40,9 +42,9 @@ def line_density(zones, zonefield, lines, out_table, interest_selection_expr):
     arcpy.CalculateField_management("zones_temp", "ZoneAreaHa", "!shape.area@hectares!", "PYTHON")
 
     # Perform identity analysis to join fields and crack lines at polygon boundaries
-    cu.multi_msg("Cracking lines at polygon boundaries...")
+    lagosGIS.multi_msg("Cracking lines at polygon boundaries...")
     arcpy.Identity_analysis("selected_lines", "zones_temp", "lines_identity")
-    cu.multi_msg("Cracking lines complete.")
+    lagosGIS.multi_msg("Cracking lines complete.")
 
     # Recalculate lengths
     arcpy.AddField_management("lines_identity", "LengthM", "DOUBLE")
@@ -61,38 +63,22 @@ def line_density(zones, zonefield, lines, out_table, interest_selection_expr):
 ##            if row[0] is None:
 ##                cursor.deleteRow()
 
+    # Rename length field
+    arcpy.AlterField_management("length_in_zone", "SUM_LengthM", "m", clear_field_alias=True)
+
     # Add Density field and calc
-    arcpy.AddField_management("length_in_zone", "Density_MperHA", "DOUBLE",'','','','',"NULLABLE")
-    exp = "!SUM_LengthM! / !ZONEAREAHA!"
-    arcpy.CalculateField_management("length_in_zone", "Density_MperHA", exp, "PYTHON")
+    arcpy.AddField_management("length_in_zone", "mperha", "DOUBLE")
+    exp = "!m! / !ZONEAREAHA!"
+    arcpy.CalculateField_management("length_in_zone", "mperha", exp, "PYTHON")
 
-    cu.one_in_one_out("length_in_zone", ['SUM_LengthM', 'Density_MperHA'], zones, zonefield, out_table)
-    cu.redefine_nulls(out_table, ['SUM_LengthM', 'Density_MperHA'], [0, 0])
+    # Clean up the table--one row per input zone, nulls do mean 0 here, exclude streams outside zones
+    lagosGIS.one_in_one_out("length_in_zone", zones, zonefield, "one_in_one_out")
+    arcpy.TableSelect_analysis("one_in_one_out", "selected_fields", "{} <> ''".format(zonefield))
+    lagosGIS_select_fields("selected_fields", out_table, [zonefield, 'm', 'mperha'])
+
+    lagosGIS.redefine_nulls(out_table, ['m', 'mperha'], [0, 0])
 
 
-##    # Join to the original table
-##    keep_fields = ["ZoneID", "SUM_LengthM", "Density_MperHA"]
-##    arcpy.JoinField_management('zones_temp', zonefield, "length_in_zone", zonefield, keep_fields[1:])
-##
-##    # Select only null records and change to 0
-##    arcpy.MakeFeatureLayer_management('zones_temp', 'zones_temp_lyr')
-##    arcpy.SelectLayerByAttribute_management('zones_temp_lyr', "NEW_SELECTION", '''"SUM_LengthM" is null''')
-##    fields_to_calc = ["SUM_LengthM", "Density_MperHA"]
-##    for f in fields_to_calc:
-##        arcpy.CalculateField_management('zones_temp_lyr', f, 0, "PYTHON")
-##
-##    #Delete all the fields that aren't the ones I need
-##    keep_fields = ["ZoneID", "SUM_LengthM", "Density_MperHA"]
-##    all_fields = [f.name for f in arcpy.ListFields('zones_temp_lyr')]
-##    for f in all_fields:
-##        if f not in keep_fields:
-##            try:
-##                arcpy.DeleteField_management('zones_temp_lyr', f)
-##            except:
-##                continue
-##    arcpy.SelectLayerByAttribute_management('zones_temp_lyr', 'CLEAR_SELECTION')
-##
-##    arcpy.CopyRows_management('zones_temp_lyr', out_table)
 
     for tempitem in ['zones_temp', 'lines_identity', 'length_in_zone']:
         arcpy.Delete_management(tempitem)

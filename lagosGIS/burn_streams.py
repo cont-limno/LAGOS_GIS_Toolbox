@@ -2,7 +2,6 @@ import os
 import arcpy
 from arcpy.sa import *
 from arcpy import env
-import csiutils as cu
 
 def burn_streams(subregion_ned, nhd_gdb, burnt_out,
                 projection = arcpy.SpatialReference(102039)):

@@ -10,7 +10,6 @@ import re
 import arcpy
 from arcpy import analysis as AN, management as DM
 
-import csiutils
 import lagosGIS
 from NHDNetwork import NHDNetwork
 
@@ -43,7 +42,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     # setup
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(5070)
     arcpy.env.workspace = 'in_memory'
-    temp_gdb = csiutils.create_temp_GDB('aggregate_watersheds')
+    temp_gdb = lagosGIS.create_temp_GDB('aggregate_watersheds')
 
     arcpy.AddMessage("Copying selections from inputs...")
     # extract only this HU4 to use for final clip

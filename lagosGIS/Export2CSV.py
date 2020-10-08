@@ -1,11 +1,12 @@
 # Filename: Export2CSV.py
-import csv, datetime, os, math, re
+import csv
+import datetime
+import os
+import math
 from tempfile import NamedTemporaryFile
 import shutil
-import fileinput
 import arcpy
-import csiutils as cu
-from decimal import Decimal
+
 
 def describe_arcgis_table_csv(in_table, out_path, field_list = [], rename_fields = True):
     """

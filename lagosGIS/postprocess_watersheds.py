@@ -6,8 +6,9 @@
 
 import arcpy
 from arcpy import management as DM
+
+import lagosGIS
 import master_gdb_tasks
-import csiutils
 from NHDNetwork import NHDNetwork
 
 LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\Derived_Land_Borders'
@@ -324,18 +325,18 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     # rename some more fields
     if not fits_naming_standard:
 
-        csiutils.rename_field(sheds_fc, 'Permanent_Identifier', '{}_permanent_identifier'.format(zone_name),
+        lagosGIS.rename_field(sheds_fc, 'Permanent_Identifier', '{}_permanent_identifier'.format(zone_name),
                               deleteOld=False)
-        csiutils.rename_field(sheds_fc, 'includeshu4inlet', '{}_includeshu4inlet'.format(zone_name), deleteOld=False)
+        lagosGIS.rename_field(sheds_fc, 'includeshu4inlet', '{}_includeshu4inlet'.format(zone_name), deleteOld=False)
         if arcpy.ListFields(sheds_fc, 'watershedprocess'):
-            csiutils.rename_field(sheds_fc, 'watershedprocess', '{}_watershedprocess'.format(zone_name),
+            lagosGIS.rename_field(sheds_fc, 'watershedprocess', '{}_watershedprocess'.format(zone_name),
                                   deleteOld=False)
-            csiutils.rename_field(sheds_fc, 'VPUID', '{}_vpuid'.format(zone_name), deleteOld=False)
+            lagosGIS.rename_field(sheds_fc, 'VPUID', '{}_vpuid'.format(zone_name), deleteOld=False)
 
         if zone_name == 'ws':
-            csiutils.rename_field(sheds_fc, 'equalsnws', 'ws_equalsnws', deleteOld=False)
+            lagosGIS.rename_field(sheds_fc, 'equalsnws', 'ws_equalsnws', deleteOld=False)
         if zone_name == 'nws':
-            csiutils.rename_field(sheds_fc, 'equalsiws', 'nws_equalsiws', deleteOld=False)
+            lagosGIS.rename_field(sheds_fc, 'equalsiws', 'nws_equalsiws', deleteOld=False)
 
     # cleanup
     for f in ['ORIG_FID', 'Join_Count', 'Target_FID']:

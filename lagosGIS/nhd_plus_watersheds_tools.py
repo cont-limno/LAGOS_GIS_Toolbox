@@ -1,3 +1,9 @@
+# filename: aggregate_watersheds.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox)--tools called in individual scripts to make tools
+
 import os
 from collections import defaultdict
 from arcpy import management as DM

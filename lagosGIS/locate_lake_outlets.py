@@ -1,7 +1,7 @@
-import os
 import arcpy
+
+import NHDNetwork
 import lagosGIS
-import nhdplushr_tools as ntools
 
 # this tool has a companion with symmetrical code: locate_lake_inlets.
 def locate_lake_outlets(nhd_gdb, output_fc):
@@ -12,7 +12,7 @@ def locate_lake_outlets(nhd_gdb, output_fc):
     :return:
     """
     arcpy.env.workspace = 'in_memory'
-    network = ntools.NHDNetwork(nhd_gdb)
+    network = NHDNetwork.NHDNetwork(nhd_gdb)
     network.define_lakes(force_lagos=True)
 
     # get lake outlet flowline IDs

@@ -1,7 +1,14 @@
-import os, zipfile
+# filename: make_lagos_lakes.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: code journal (no ArcGIS Toolbox)
+
+import os
+import zipfile
 import arcpy
-import assumptions # in this repo
-import lakes_us  # in this repo
+
+import nhd_merge_helpers
 
 
 # Locations. Change these for your system. To re-run this code, you can always run this whole section.
@@ -45,7 +52,7 @@ def make_lagos_lakes():
     # Step 2: Add the nhd_merge_id. It just concatenates Permanent_Identifier and FDate together so that we can
     # de-duplicate merged NHD features and output features from tools that need to be run with the network data
     # with methods that won't cause any misalignment.
-    lakes_us.batch_add_merge_ids(NHD_UNZIPPED_DIR)
+    nhd_merge_helpers.batch_add_merge_ids(NHD_UNZIPPED_DIR)
 
 
     # Step 3: Merge all the lakes and remove full duplicates. Also delete duplicate Permanent_Identifiers by keeping
@@ -87,7 +94,7 @@ def make_lagos_lakes():
         print("ERROR: One or more waterbody paths is not valid. Merged waterbody feature class not created.")
 
     # TODO: Switch back
-    lakes_us.deduplicate_nhd(ALL_LAKES_FC)
+    nhd_merge_helpers.deduplicate_nhd(ALL_LAKES_FC)
 
     # TEST IT
     # Check that at least some duplicates were removed

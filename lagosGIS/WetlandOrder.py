@@ -1,11 +1,10 @@
 # Filename: WetlandOrder.py
 # Purpose: Assigns a class to wetlands based on their connectivity to the landscape.
-import os, shutil
 import arcpy
 from arcpy import env
-from arcpy.da import *
 from arcpy.sa import *
-import csiutils as cu
+import lagosGIS
+
 
 def split_strahler(stream_area_fc, streams, out_area_fc):
     """This function splits up the NHDArea feature class, which does not
@@ -20,21 +19,21 @@ def split_strahler(stream_area_fc, streams, out_area_fc):
     #    allocation polygon boundaries, and add the Strahler values
     old_workspace = env.workspace
     env.workspace = 'in_memory'
-    cu.multi_msg("Splitting stream area polygons between confluences and joining 1) Strahler order to them...")
-    cu.multi_msg('next messages for testing')
+    lagosGIS.multi_msg("Splitting stream area polygons between confluences and joining 1) Strahler order to them...")
+    lagosGIS.multi_msg('next messages for testing')
     arcpy.CheckOutExtension('Spatial')
-    cu.multi_msg('euc')
+    lagosGIS.multi_msg('euc')
     euc = EucAllocation(streams, cell_size = '50', source_field = 'OBJECTID')
     arcpy.CheckInExtension('Spatial')
-    cu.multi_msg('conversion')
+    lagosGIS.multi_msg('conversion')
     arcpy.RasterToPolygon_conversion(euc, 'allocation_polys')
     stream_id_field = arcpy.ListFields(streams, 'Permanent_')[0].name
-    cu.multi_msg('join')
+    lagosGIS.multi_msg('join')
     arcpy.JoinField_management('allocation_polys', 'grid_code', streams, 'OBJECTID', ['Strahler', 'LengthKm', stream_id_field])
-    cu.multi_msg('identity')
+    lagosGIS.multi_msg('identity')
     arcpy.Identity_analysis(stream_area_fc, 'allocation_polys', out_area_fc)
     env.workspace = old_workspace
-    cu.multi_msg("Splitting strema area polygons finished.")
+    lagosGIS.multi_msg("Splitting strema area polygons finished.")
 
 def wetland_order(rivex, stream_area_fc, nwi, out_fc):
     arcpy.env.workspace = 'in_memory'
@@ -42,11 +41,11 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
     arcpy.env.extent = nwi
 
     # Buffer the wetland perimeters by 30 meters
-    cu.multi_msg('Creating 30m wetland buffers...')
+    lagosGIS.multi_msg('Creating 30m wetland buffers...')
     arcpy.Buffer_analysis(nwi, "wetland_buffers", "30 meters", "OUTSIDE_ONLY")
     arcpy.env.extent = "wetland_buffers"
 
-    cu.multi_msg('Preparing for river line and area merge...')
+    lagosGIS.multi_msg('Preparing for river line and area merge...')
     arcpy.CopyFeatures_management(rivex, 'rivex_extent')
     arcpy.CopyFeatures_management(stream_area_fc, 'stream_area_extent')
     arcpy.MakeFeatureLayer_management('rivex_extent', 'rivex_lyr')
@@ -104,7 +103,7 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
     arcpy.SpatialJoin_analysis("wetland_buffers", 'merged_rivers', "wetland_spjoin_streams", '', '', fms)
 
     # Get the stream count from the join count
-    cu.rename_field("wetland_spjoin_streams", 'Join_Count', "StreamCnt", True)
+    lagosGIS.rename_field("wetland_spjoin_streams", 'Join_Count', "StreamCnt", True)
 
     # Join the new fields back to the original feature class based on WET_ID
     join_fields = ['StrOrdMax', 'StrOrdSum', 'StreamKm', 'StreamCnt']
@@ -112,7 +111,7 @@ def wetland_order(rivex, stream_area_fc, nwi, out_fc):
     arcpy.JoinField_management(out_fc, 'WET_ID', 'wetland_spjoin_streams', 'WET_ID', join_fields)
 
     # Set these to 0 where there is no connection
-    cu.redefine_nulls(out_fc, join_fields, [0,0,0,0])
+    lagosGIS.redefine_nulls(out_fc, join_fields, [0, 0, 0, 0])
 
     # Classify VegType: 4 options based on class code in ATTRIBUTE field
     arcpy.AddField_management(out_fc, "VegType", "TEXT")

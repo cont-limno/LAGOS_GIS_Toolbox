@@ -1,7 +1,7 @@
 import csv
 import os
 import arcpy
-import csiutils as cu
+import lagosGIS
 
 
 def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=''):
@@ -30,7 +30,7 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
                     # same problem with AlterField limit of 31 characters here.
                     arcpy.AlterField_management(table, old_fname, new_fname, clear_field_alias=True)
                 except:
-                    cu.rename_field(table, old_fname, new_fname, deleteOld=True)
+                    lagosGIS.rename_field(table, old_fname, new_fname, deleteOld=True)
         return table
 
 
@@ -50,7 +50,7 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
     # make sure all input zones have an output row, and where there was no data, consider this a 0 value, assuming
     # the vector data was comprehensive.
     # also replace values over 100% with 100. Getting a few of these (like 100.0000003) even with a good tolerance.
-    all_zones = cu.one_in_one_out(renamed, zone_fc, zone_field, 'all_zones')
+    all_zones = lagosGIS.one_in_one_out(renamed, zone_fc, zone_field, 'all_zones')
     new_fields = [f.name for f in arcpy.ListFields(all_zones) if f.name <> zone_field and f.type not in ('OID', 'Geometry')]
     with arcpy.da.UpdateCursor(all_zones, new_fields) as cursor:
         for row in cursor:

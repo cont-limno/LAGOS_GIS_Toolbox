@@ -1,8 +1,10 @@
-# filename: aggregate_watersheds.py
+# filename: watersheds_toolchain.py
 # author: Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS
 # tool type: code journal (no ArcGIS Toolbox, workstation-specific paths)
+# purpose: This code was used to string together the watersheds tools in the correct order for LAGOS, as well as
+# manage which subregions would be processed with the NHDPlus-based tools vs with the bare NHD HR tools
 
 from datetime import datetime as dt
 from os import path

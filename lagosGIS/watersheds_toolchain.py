@@ -1,3 +1,9 @@
+# filename: aggregate_watersheds.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: code journal (no ArcGIS Toolbox, workstation-specific paths)
+
 from datetime import datetime as dt
 from os import path
 import os
@@ -5,7 +11,10 @@ import subprocess as sp
 from time import sleep
 from zipfile import ZipFile
 import arcpy
-import nhdplushr_tools as nt
+
+import NHDNetwork
+import aggregate_watersheds
+import nhd_plus_watersheds_tools as nt
 import lagosGIS
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'fix_hydrodem', 'fel', 'fdr',
@@ -15,7 +24,7 @@ ALT_TOOL_ORDER = ('mosaic_dem', 'burn_dem', 'make_hydrodem', 'make_catseed', 'fd
                   'delineate_catchments', 'interlake', 'network')
 # Locations of main directories (unique to machine)
 
-# this is the result of the lakes_in_the_us/doit.py
+# this is the result of the lakes_in_the_us/make_lagos_lakes.py
 LAGOS_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 HU4 = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\Spatial_Classifications\hu4'
 
@@ -259,7 +268,7 @@ def run(huc4, last_tool='network', wait = False, burn_override=True):
                 sleep(10)
         arcpy.AddMessage(
             'Interlake watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
+        aggregate_watersheds.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
         tool_count += 1
 
     # network watersheds
@@ -273,7 +282,7 @@ def run(huc4, last_tool='network', wait = False, burn_override=True):
                 sleep(10)
         arcpy.AddMessage(
             'Network watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
+        aggregate_watersheds.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
         tool_count += 1
 
     time_diff = dt.now() - start_time
@@ -346,7 +355,7 @@ def patch_on_network_flag():
         huc4 = cat[-4:]
         print(huc4)
         p = Paths(huc4)
-        nhd_network = nt.NHDNetwork(p.gdb)
+        nhd_network = NHDNetwork.NHDNetwork(p.gdb)
         on_network = set(nhd_network.trace_up_from_hu4_outlets())
         with arcpy.da.UpdateCursor(cat, ['Permanent_Identifier', 'On_Main_Network']) as u_cursor:
             for row in u_cursor:
@@ -360,7 +369,7 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
     arcpy.env.overwriteOutput = True
     import Ned2Subregion as mosaic
     from burn_streams import burn_streams
-    from WallsHU8 import wall as add_walls
+    import make_gridcode
     from GenerateSeeds import select_pour_points as make_catseed
 
     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
@@ -395,7 +404,7 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
     # Create hydrodem burn
     if not arcpy.Exists(paths.lagos_burn) and stop_index >= 1 and not burn_override:
         arcpy.AddMessage('Burning DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        burn_temp = burn_streams(paths.dem, paths.gdb, paths.lagos_burn) #TODO: Modify tool to protect lakes from fill
+        burn_temp = burn_streams(paths.dem, paths.gdb, paths.lagos_burn)
         tool_count += 1
 
     # Fill and wall hydrodem
@@ -408,7 +417,7 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
 
     # Create catseed
     if not arcpy.Exists(paths.lagos_gridcode) and stop_index >=3:
-        nt.make_gridcode(paths.gdb, paths.lagos_gridcode)
+        make_gridcode.make_gridcode(paths.gdb, paths.lagos_gridcode)
 
     paths.lagos_catseed = path.join(paths.out_dir, 'pourpoints{}'.format(huc4), 'lagos_catseed.tif')
     if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 3:
@@ -450,7 +459,7 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
                 sleep(10)
         arcpy.AddMessage(
             'Interlake watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
+        aggregate_watersheds.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
         tool_count += 1
 
     # network watersheds
@@ -464,7 +473,7 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
                 sleep(10)
         arcpy.AddMessage(
             'Network watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-        nt.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
+        aggregate_watersheds.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
         tool_count += 1
     return tool_count
 

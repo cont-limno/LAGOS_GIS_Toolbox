@@ -27,6 +27,11 @@ LAGOS_LAKE_FILTER = "AreaSqKm > .009 AND AreaHa >= 1 AND FCode IN (39000,39004,3
 LAGOS_LAKES_FC = 'D:/Continental_Limnology/Data_Working/LAGOS_US_Predecessors.gdb/NHDWaterbody_LAGOS'
 
 def make_lagos_lakes():
+    """This function contains multiple steps used to merge NHDWaterbody layers from 202 subregions comprising the
+    continental United States, deduplicate the lakes after merging, create a supplemental merged
+    NHDReachCrossReference table to accompany the lakes layer, filter to lakes within the US only, repair geometry so
+    lakes can be used in non-ArcGIS software, remove Great Lakes, project the features to Albers USGS, and apply
+    the LAGOS lakes/reservoirs filter and the LAGOS size filter (>=1 hectare)."""
     # Step 1: Download the NHD by subregion and unzip. You WILL need the HYDRO_NET to do the connectivity analyses so you cannot
     # use the national snapshot. We only downloaded regions 01-20 to cover the contiguous United States.
 

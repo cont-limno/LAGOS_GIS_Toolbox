@@ -1,8 +1,4 @@
-import os, zipfile
 import arcpy
-import assumptions # in this repo
-import lakes_us # in this repo
-
 
 # Locations. Change these for your system. To re-run this code, you can always run this whole section.
 NHD_DOWNLOAD_DIR = r"D:\Continental_Limnology\Data_Downloaded\National_Hydrography_Dataset\Zipped"

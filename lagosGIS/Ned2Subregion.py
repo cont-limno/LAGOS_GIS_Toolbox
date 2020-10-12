@@ -15,6 +15,18 @@ from arcpy import env
 
 
 def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
+    """
+    Gather files to a common location on hard disk and prepare them for mosaicking.
+    :param nhd_gdb: The NHD subregion for which the DEMs are being mosaicked
+    :param ned_dir: Directory containing all the NED DEMs needed to create mosaic (more files can be in this directory,
+    for instance all DEMS for US)
+    :param ned_footprints_fc: The NED footprints polygon feature class (packaged with all NED file downloads)
+    :param out_dir: The directory being used to hold ALL subregion mosaicking folders, a subdirectory for
+    this subregion will be created
+    :param bool is_zipped: True if NED files are stored as zips, False if they are unzipped first
+    :return: The subdirectory created in the out_dir
+    """
+
     env.workspace = 'in_memory'
 
     #####################################################################
@@ -84,36 +96,52 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     return out_subdir
 
 def unzip_ned(file_id, ned_dir, out_dir):
-                # clunky but this works in USA: zipped files sometimes called
-                # something like n36w87 instead of n36w087 so try all 3
-                # plus two filename patterns
-                tag_variants = [file_id, file_id[0:4] + file_id[5:], file_id[0:4] + file_id[5:]]
-                pattern_variants = ['{}.zip', 'USGS_NED_13_{}_IMG.zip']
-                filename_variants = []
-                for t in tag_variants:
-                    for p in pattern_variants:
-                        f = os.path.join(ned_dir, p.format(t))
-                        filename_variants.append(f)
-                filename_to_use = ''
-                for f in filename_variants:
-                    if not os.path.exists(f):
-                        continue
-                    else:
-                        filename_to_use = f
+    """
+    Unzips NED files
+    :param file_id: The file identifier code, looks like "n36w87" or "n36w087" for example
+    :param ned_dir: The directory containing the NED DEM files to unzip
+    :param out_dir: The directory to unzip the files to
+    :return: True if file_id finds a matching file that is unzipped successfully, False when this
+    function fails to create a valid unzipped file
+    """
 
-                if filename_to_use:
-                    arcpy.AddMessage("Unzipping file %s" % filename_to_use)
-                    zf = zipfile.ZipFile(filename_to_use)
-                    zf.extractall(out_dir)
-                    return True
-                else:
-                    arcpy.AddMessage("ERROR: A tile for %s does not exist in the specified location" % file_id)
-                    return False
+    # clunky but this works in USA: zipped files sometimes called
+    # something like n36w87 instead of n36w087 so try all 3
+    # plus two filename patterns
+    tag_variants = [file_id, file_id[0:4] + file_id[5:], file_id[0:4] + file_id[5:]]
+    pattern_variants = ['{}.zip', 'USGS_NED_13_{}_IMG.zip']
+    filename_variants = []
+    for t in tag_variants:
+        for p in pattern_variants:
+            f = os.path.join(ned_dir, p.format(t))
+            filename_variants.append(f)
+    filename_to_use = ''
+    for f in filename_variants:
+        if not os.path.exists(f):
+            continue
+        else:
+            filename_to_use = f
+
+    if filename_to_use:
+        arcpy.AddMessage("Unzipping file %s" % filename_to_use)
+        zf = zipfile.ZipFile(filename_to_use)
+        zf.extractall(out_dir)
+        return True
+    else:
+        arcpy.AddMessage("ERROR: A tile for %s does not exist in the specified location" % file_id)
+        return False
 
 
 ####################################################################################################################################################
-# Mosiac NED tiles and clip to subregion.
-def mosaic(in_workspace, nhd_gdb, out_dir, available_ram = 4, projection = arcpy.SpatialReference(102039)) :
+def mosaic(in_workspace, nhd_gdb, out_dir, available_ram=4, projection=arcpy.SpatialReference(102039)):
+    """ Mosaic the NED DEM tiles and clip to subregion.
+    :param in_workspace: The result of stage_files, the workspace containing all the unzipped NED files for mosaicking
+    :param nhd_gdb: The subregion for which the mosaic is being created
+    :param out_dir: The directory to save the mosaic to
+    :param available_ram: Optional, if workstation has greater thn 4GB increase this value for faster processing
+    :param projection: Optional, default is USGS Albers (102039)
+    :return: Path to the mosaicked DEM
+    """
 
     # Set up environments
     env.terrainMemoryUsage = True
@@ -196,22 +224,8 @@ def mosaic(in_workspace, nhd_gdb, out_dir, available_ram = 4, projection = arcpy
         arcpy.Delete_management(item)
     arcpy.AddMessage("Mosaicked NED tiles and clipped to HUC4 extent.")
 
-    # for raster in mosaic_rasters:
-    #     arcpy.Delete_management(raster)
-
     env.extent = orig_extent
     return out_mosaic
-
-
-# END OF DEF mosaic
-
-# def delete_neds(workspace):
-#     os.chdir(workspace)
-#     for root, dirs, files in os.walk(workspace):
-#         for d in dirs:
-#             if re.match('n\d+w\d+', d):
-#                 print("Deleting NED folder %s" % d)
-#                 shutil.rmtree(d)
 
 
 def main():
@@ -224,26 +238,6 @@ def main():
 
     available_ram = arcpy.GetParameterAsText(5)
     mosaic(mosaic_workspace, mosaic_workspace, available_ram)
-    #delete_neds(mosaic_workspace)
-
-
-#######################################
-#TESTING
-########################################
-def test():
-    """Tests the tool. Call from another module to test."""
-    nhd_gdb = 'E:/RawNHD_byHUC/NHDH0415.gdb'
-    ned_dir = 'E:/Downloaded_NED'
-    ned_footprints_fc = 'C:/GISData/NED_FootPrint_Subregions.gdb/nedfootprints'
-    out_dir = 'C:/GISData/Scratch'
-    is_zipped = True
-    available_ram = '12'
-
-    mosaic_workspace = stage_files(nhd_gdb, ned_dir, ned_footprints_fc,
-                        out_dir, is_zipped)
-    mosaic(mosaic_workspace, mosaic_workspace, available_ram)
-    #delete_neds(mosaic_workspace)
-    arcpy.ResetEnvironments()
 
 
 if __name__ == '__main__':

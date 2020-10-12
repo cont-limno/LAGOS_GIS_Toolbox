@@ -54,3 +54,13 @@ def make_gridcode(nhd_gdb, output_table):
     del i_cursor
 
     return result
+
+
+def main():
+    nhd_gdb = arcpy.GetParameterAsText(0)
+    output_table = arcpy.GetParameterAsText(1)
+    make_gridcode(nhd_gdb, output_table)
+
+
+if __name__ == "__main__":
+    main()

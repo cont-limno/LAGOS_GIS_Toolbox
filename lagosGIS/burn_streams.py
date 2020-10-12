@@ -13,7 +13,7 @@ from arcpy import env
 def burn_streams(subregion_ned, nhd_gdb, burnt_out,
                 projection = arcpy.SpatialReference(102039)):
     """
-    Enforce stream linework in hydrologic conditioning of DEM.
+    Enforce stream linework in hydrologic conditioning of DEM and add walls at the HU12 boundaries.
     :param subregion_ned: A mosaicked (NED) DEM covering the subregion being processed
     :param nhd_gdb: The NHD HR subregion geodatabase being processed
     :param burnt_out: Path of the output raster with burned streams

@@ -403,13 +403,13 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
         tool_count += 1
     #TODO: Remove any originals, NED but maybe also NHD, did we modify that at all?
 
-    # Create hydrodem burn
+    # Create hydrodem burn and add walls
     if not arcpy.Exists(paths.lagos_burn) and stop_index >= 1 and not burn_override:
         arcpy.AddMessage('Burning DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         burn_temp = burn_streams(paths.dem, paths.gdb, paths.lagos_burn)
         tool_count += 1
 
-    # Fill and wall hydrodem
+    # Fill  hydrodem
     if not arcpy.Exists(paths.lagos_fel) and stop_index >= 2:
         arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)

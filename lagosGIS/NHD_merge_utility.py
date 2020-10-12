@@ -47,20 +47,6 @@ def nhd_merge(gdb_list, example_feature_class_name, out_fc, selection = ''):
 
     arcpy.CopyFeatures_management(fc_temp, out_fc)
 
-def test():
-    mgd = 'C:/GISData/Master_Geodata/MasterGeodatabase2014_ver4.gdb'
-    hu4 = os.path.join(mgd, 'HU4')
-    subregions = []
-    with arcpy.da.SearchCursor(hu4, 'HUC4') as cursor:
-        for row in cursor:
-            subregions.append(row[0])
-    print subregions
-    nhd_dir = 'E:/nhd/fgdb'
-    gdb_list = [os.path.join(nhd_dir, 'NHDH{}.gdb'.format(s)) for s in subregions]
-    feature_class_name = 'NHDArea'
-    selection = """"FType" = 460"""
-    out_fc = 'C:/GISData/Scratch/Scratch.gdb/nhd_merge_test_ALL'
-    nhd_merge(gdb_list, feature_class_name, out_fc, selection)
 
 def main():
     gdb_list = arcpy.GetParameterAsText(0).split(';') # list

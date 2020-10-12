@@ -28,7 +28,7 @@ from georeference import georeference_lakes
 from multi_convert_to_raster import multi_convert_to_raster
 from deprecated.lake_from_to import lake_from_to
 from polygons_in_zones import polygons_in_zones
-from lakes_in_zones2 import lakes_in_zones
+from lakes_in_zones import lakes_in_zones
 from locate_lake_outlets import locate_lake_outlets
 from locate_lake_inlets import locate_lake_inlets
 from postprocess_watersheds import calc_watershed_subtype

@@ -372,7 +372,7 @@ def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_over
     import Ned2Subregion as mosaic
     from burn_streams import burn_streams
     import make_gridcode
-    from GenerateSeeds import select_pour_points as make_catseed
+    from GenerateSeeds import generate_seeds as make_catseed
 
     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
     NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'

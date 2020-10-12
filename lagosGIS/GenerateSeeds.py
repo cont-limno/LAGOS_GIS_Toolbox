@@ -1,7 +1,8 @@
-# Filename: GenerateSeeds.py
-# Purpose: Generate seeds for watershed delineation
-# from a 24k NHD file geodatabase. Seeds are generated from selected NHDFLowline
-# and NHDWaterbody features
+# filename: GenerateSeeds.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox)
 
 import os, re, shutil
 import arcpy
@@ -9,8 +10,19 @@ from arcpy import env
 from arcpy import analysis as AN
 
 
-def select_pour_points(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc,
-                        projection = arcpy.SpatialReference(102039)):
+def generate_seeds(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc,
+                   projection = arcpy.SpatialReference(102039)):
+    """
+    Generate the outlets/pour points/catchment seeds for LAGOS watershed delineation.
+    :param nhd_gdb:
+    :param subregion_dem:
+    :param out_dir:
+    :param gridcode_table:
+    :param eligible_lakes_fc:
+    :param projection:
+    :return:
+    """
+
     # Preliminary environmental settings:
     env.snapRaster = subregion_dem
     env.extent = subregion_dem
@@ -75,13 +87,8 @@ def main():
     nhd_gdb = arcpy.GetParameterAsText(0) # User selects a NHD 24k file geodatabase.
     subregion_dem = arcpy.GetParameterAsText(1) # User selects the corresponding subregion elevation raster.
     out_dir = arcpy.GetParameterAsText(2) # User selects the output folder.
-    select_pour_points(nhd_gdb, subregion_dem, out_dir)
+    generate_seeds(nhd_gdb, subregion_dem, out_dir)
 
-def test():
-    nhd_gdb = 'C:/GISData/Scratch/NHD0411/NHD0411/NHDH0411.gdb'
-    subregion_dem = r'E:\ESRI_FlowDirs\NHD_0411\D8FDR04110001p.tif'
-    out_dir = 'C:/GISData/Scratch/NHD0411/NHD0411'
-    select_pour_points(nhd_gdb, subregion_dem, out_dir)
 
 if __name__ == '__main__':
     main()

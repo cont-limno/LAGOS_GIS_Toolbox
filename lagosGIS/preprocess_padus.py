@@ -6,6 +6,16 @@ from lagosGIS import select_fields
 
 
 def preprocess(padus_combined_fc, output_fc):
+    """
+    The Protected Areas Database of the U.S. feature class contains overlapping polygons representing multiple protection types. This tool "flattens" the Combined dataset so that the Own_Type (-> agency), GAP_Sts (-> gap), and IUCN_Cat (->iucn) fields are values are retained, renamed, and filtered for one primary value per region according to the following rules:
+    Own_Type -> "agency". "Fee" type > "Easement" > "Marine" > "Designation
+    GAP_Sts -> "gap" . Highest GAP status preferentially retained.
+    IUCN_Cat -> "iucn". Lowest number codes preferentially retained, then "Other", last "Unassigned".
+    :param padus_combined_fc:
+    :param output_fc:
+    :return:
+    """
+
     arcpy.env.workspace = 'in_memory'
 
     # Prep: Select only the fields needed, remove curves (densify) which prevents problems with geometry

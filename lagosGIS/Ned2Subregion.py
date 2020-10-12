@@ -1,26 +1,10 @@
-#--------------------------------------------------------------------------------
-#Name:     Ned2Subregion
-# Purpose:  The purpose of this script is to create a directory of NED tiles for a NHD subregion and
+# filename: Ned2Subregion.py
+# author: Ed Bissell, Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox)
+# purpose:  The purpose of this script is to create a directory of NED tiles for a NHD subregion and
 #           copy in an NHD subregion file geodatabase for the purpose of HPCC processing
-#
-# Reqs:     1) nhdPath => file directory path of NHD subregion gdbs
-#           2) nedPath => file directory path of NED tiles
-#           3) finalOutPath => file directory path where output will be created
-#           3) nedFootprints => fc path of projected NED tile footprint polygons
-#           4) wbd => fc path to NHD subregion polygons
-#
-# Steps:    1) Create the output directory
-#           2) Get WBD poly for subregion and Buffer it by 5000m to make sure we get enough data
-#           3) Clip NED footprints wtih bufferd NHD subregion
-#           4) Read list of clipped NED footprints and copy them from nedPath to finalOutPath
-#           5) Copy NHD subregion gdb to finalOutPath
-#
-# Author:   Ed Bissell
-#
-# Created:   4/2/2013
-#
-#
-#-------------------------------------------------------------------------------
 
 import os
 import shutil

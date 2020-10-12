@@ -7,7 +7,7 @@
 import os
 import arcpy
 import lake_connectivity_classification as conn
-from watersheds_toolchain import make_run_list
+from watershed_delineations.watersheds_toolchain import make_run_list
 import merge_subregion_outputs
 
 HU4 = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Spatial_Classifications\hu4'

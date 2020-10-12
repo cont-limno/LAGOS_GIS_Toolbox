@@ -1,5 +1,5 @@
 # filename: GenerateSeeds.py
-# author: Nicole J Smith
+# author: Scott Stopyak, Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS
 # tool type: re-usable (ArcGIS Toolbox)
@@ -14,13 +14,13 @@ def generate_seeds(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lak
                    projection = arcpy.SpatialReference(102039)):
     """
     Generate the outlets/pour points/catchment seeds for LAGOS watershed delineation.
-    :param nhd_gdb:
-    :param subregion_dem:
-    :param out_dir:
-    :param gridcode_table:
-    :param eligible_lakes_fc:
-    :param projection:
-    :return:
+    :param nhd_gdb: The NHD HR subregion to process
+    :param subregion_dem: A hydrologically conditioned DEM (TauDEM "fel") covering the entire subregion
+    :param out_dir: The directory to save the outlets/pour points to
+    :param gridcode_table: The table containing the mapping of NHD waterbody identifiers to "Gridcode" values
+    :param eligible_lakes_fc: A feature class containing the lakes to generate outlets/pour points for
+    :param projection: Optional. Default is Albers USGS (102039)
+    :return: None
     """
 
     # Preliminary environmental settings:
@@ -84,10 +84,12 @@ def generate_seeds(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lak
 
 def main():
     # User inputs parameters:
-    nhd_gdb = arcpy.GetParameterAsText(0) # User selects a NHD 24k file geodatabase.
-    subregion_dem = arcpy.GetParameterAsText(1) # User selects the corresponding subregion elevation raster.
-    out_dir = arcpy.GetParameterAsText(2) # User selects the output folder.
-    generate_seeds(nhd_gdb, subregion_dem, out_dir)
+    nhd_gdb = arcpy.GetParameterAsText(0)
+    subregion_dem = arcpy.GetParameterAsText(1)
+    out_dir = arcpy.GetParameterAsText(2)
+    gridcode_table = arcpy.GetParameterAsText(3)
+    eligible_lakes_fc = arcpy.GetParameterAsText(4)
+    generate_seeds(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc)
 
 
 if __name__ == '__main__':

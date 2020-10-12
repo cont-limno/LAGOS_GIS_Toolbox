@@ -10,8 +10,8 @@ from arcpy import env
 from arcpy import analysis as AN
 
 
-def generate_seeds(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc,
-                   projection = arcpy.SpatialReference(102039)):
+def make_catseed(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc,
+                 projection = arcpy.SpatialReference(102039)):
     """
     Generate the outlets/pour points/catchment seeds for LAGOS watershed delineation.
     :param nhd_gdb: The NHD HR subregion to process
@@ -89,7 +89,7 @@ def main():
     out_dir = arcpy.GetParameterAsText(2)
     gridcode_table = arcpy.GetParameterAsText(3)
     eligible_lakes_fc = arcpy.GetParameterAsText(4)
-    generate_seeds(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc)
+    make_catseed(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes_fc)
 
 
 if __name__ == '__main__':

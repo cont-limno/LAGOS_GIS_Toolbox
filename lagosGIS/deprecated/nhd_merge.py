@@ -1,7 +1,7 @@
 # Merge any of the NHD-based layers into a seamless layer and apply a selection if desired
 import os
 import arcpy
-import assumptions
+from deprecated import assumptions
 import lagosGIS
 
 

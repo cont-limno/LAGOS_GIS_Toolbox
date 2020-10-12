@@ -1,4 +1,4 @@
-# filename: Ned2Subregion.py
+# filename: stage_and_mosaic.py
 # author: Ed Bissell, Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS

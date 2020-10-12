@@ -1,4 +1,4 @@
-# filename: GenerateSeeds.py
+# filename: create_outlet_pourpoints.py
 # author: Scott Stopyak, Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS

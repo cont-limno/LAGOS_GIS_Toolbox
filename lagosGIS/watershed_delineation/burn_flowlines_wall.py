@@ -1,4 +1,4 @@
-# filename: burn_streams.py
+# filename: burn_flowlines_wall.py
 # author: Scott Stopyak, Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS

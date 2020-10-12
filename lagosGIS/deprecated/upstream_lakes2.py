@@ -12,7 +12,7 @@ import os
 import arcpy
 
 import NHDNetwork
-from lagosGIS import nhd_plus_watersheds_tools as nt
+
 
 def upstream_lakes(nhd_gdb, output_table, unique_id = 'lagoslakeid'):
     #define paths in nhd geodatabase

@@ -2,7 +2,7 @@
 # author: Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS
-# tool type: re-usable (ArcGIS Toolbox
+# tool type: re-usable (ArcGIS Toolbox)
 
 import os
 import re

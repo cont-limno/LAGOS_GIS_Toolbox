@@ -1,4 +1,4 @@
-# filename: create_outlet_pourpoints.py
+# filename: make_catseed.py
 # author: Scott Stopyak, Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS

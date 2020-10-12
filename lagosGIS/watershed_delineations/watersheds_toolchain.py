@@ -46,7 +46,8 @@ arcpy.env.scratchWorkspace = r'D:\Continental_Limnology\Data_Working\Tool_Execut
 SEVENZ = r'''"C:\Program Files\7-Zip\7z.exe"'''
 
 # ArcGIS map template path
-MXD = "C:\Program Files (x86)\ArcGIS\Desktop10.3\MapTemplates\Standard Page Sizes\North American (ANSI) Page Sizes\Letter (ANSI A) Portrait.mxd"
+MXD="C:\Program Files (x86)\ArcGIS\Desktop10.3\MapTemplates\Standard Page Sizes\North American (ANSI) Page Sizes\Letter (ANSI A) Portrait.mxd"
+
 
 class Paths:
     """
@@ -368,9 +369,9 @@ def patch_on_network_flag():
 
 def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_override=True):
     arcpy.env.overwriteOutput = True
-    from watershed_delineation import stage_and_mosaic as mosaic
-    from watershed_delineation.burn_flowlines_wall import burn_streams
-    from watershed_delineation.create_outlet_pourpoints import make_catseed as make_catseed
+    from watershed_delineation import mosaic_dems as mosaic
+    from watershed_delineation.burn_dems import burn_streams
+    from watershed_delineation.make_catseed import make_catseed as make_catseed
 
     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
     NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'

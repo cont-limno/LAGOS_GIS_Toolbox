@@ -1,4 +1,4 @@
-# filename: stage_and_mosaic.py
+# filename: mosaic_dems.py
 # author: Ed Bissell, Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS

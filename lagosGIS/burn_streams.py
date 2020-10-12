@@ -1,10 +1,26 @@
+# filename: burn_streams.py
+# author: Scott Stopyak, Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: re-usable (ArcGIS Toolbox)
+
 import os
 import arcpy
 from arcpy.sa import *
 from arcpy import env
 
+
 def burn_streams(subregion_ned, nhd_gdb, burnt_out,
                 projection = arcpy.SpatialReference(102039)):
+    """
+    Enforce stream linework in hydrologic conditioning of DEM.
+    :param subregion_ned: A mosaicked (NED) DEM covering the subregion being processed
+    :param nhd_gdb: The NHD HR subregion geodatabase being processed
+    :param burnt_out: Path of the output raster with burned streams
+    :param projection: Optional, default is USGS Albers (102039)
+    :return: Raster object with burned streams
+    """
+
     env.snapRaster = subregion_ned
     env.outputCoordinateSystem = projection
     env.compression = "LZ77" # compress temp tifs for speed
@@ -81,11 +97,13 @@ def burn_streams(subregion_ned, nhd_gdb, burnt_out,
     arcpy.ResetEnvironments()
     return burnt_out
 
+
 def main():
     subregion_ned = arcpy.GetParameterAsText(0)
     nhd_gdb = arcpy.GetParameterAsText(1)
     burnt_out = arcpy.GetParameterAsText(2)
     burn_streams(subregion_ned, nhd_gdb, burnt_out)
+
 
 if __name__ == "__main__":
     main()

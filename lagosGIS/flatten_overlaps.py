@@ -1,3 +1,10 @@
+# filename: flatten_overlaps.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+# status: working, tested in Beta
+
 import os
 import arcpy
 from arcpy import management as DM

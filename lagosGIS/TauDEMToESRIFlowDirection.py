@@ -4,7 +4,6 @@
 import os
 import arcpy
 from arcpy.sa import *
-import csiutils as cu
 arcpy.CheckOutExtension("Spatial")
 
 def taudem_to_esri_flowdir(raster_list, out_dir):

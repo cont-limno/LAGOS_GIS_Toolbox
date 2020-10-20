@@ -1,11 +1,17 @@
-# Filename: Export2CSV.py
-import csv, datetime, os, math, re
+# filename: Export2CSV.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS, GEO, CONN
+# tool type: re-usable (ArcGIS Toolbox)
+
+import csv
+import datetime
+import os
+import math
 from tempfile import NamedTemporaryFile
 import shutil
-import fileinput
 import arcpy
-import csiutils as cu
-from decimal import Decimal
+
 
 def describe_arcgis_table_csv(in_table, out_path, field_list = [], rename_fields = True):
     """
@@ -65,9 +71,9 @@ def rename_variables(file, prefix = ''):
         header = reader.fieldnames
 
         #update the header
-        desired_header = ['{}_{}'.format(short_f, name).lower() for name in header]
+        desired_header = ['{}_{}'.format(short_f, name).lower() if 'zoneid' not in name else name for name in header]
         update_dict = dict(zip(header, desired_header))
-        filtered_header = [name for name in desired_header if 'OBJECT' not in name and 'zoneid' not in name]
+        filtered_header = [name for name in desired_header if 'OBJECT' not in name]
 
         # write out selected fields with new names
         with tempfile:

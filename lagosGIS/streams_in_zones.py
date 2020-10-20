@@ -8,18 +8,10 @@
 # Copyright:   (c) smithn78 2014
 # Licence:     <your licence>
 #-------------------------------------------------------------------------------
-
-def main():
-    pass
-
-if __name__ == '__main__':
-    main()
-# Lakes in Zones, the new one
-# this does all the lake stuff at once for a given extent
+import lagosGIS
 import os
 import arcpy
 import LineDensity
-import csiutils as cu
 
 def streams_in_zones(zones_fc, zone_field, streams_fc, output_table):
 
@@ -38,45 +30,50 @@ def streams_in_zones(zones_fc, zone_field, streams_fc, output_table):
 
     if need_selection:
         whereClause = """"FType" <> 566"""
-        arcpy.Select_analysis(temp_lakes, "no_coastlines", whereClause)
+        arcpy.Select_analysis(streams_fc, "no_coastlines", whereClause)
         streams_fc = os.path.join(arcpy.env.workspace, "no_coastlines")
 
+    # # Commented out because the selections have changed for LAGOS-US
+    # selections = ['',
+    #             """"Strahler" <= 3""",
+    #             """"Strahler" > 3 AND "Strahler" <= 6""",
+    #             """"Strahler" > 6""",
+    #             ]
+    # temp_tables = ['Streams', 'Headwaters', 'Midreaches', 'Rivers']
 
+    # New LAGOS-US selections
     selections = ['',
-                """"Strahler" <= 3""",
-                """"Strahler" > 3 AND "Strahler" <= 6""",
-                """"Strahler" > 6""",
-                ]
-    temp_tables = ['Streams', 'Headwaters', 'Midreaches', 'Rivers']
+                  """"FCode" NOT IN  (46003, 46007)"""] #
+    temp_tables = ['streams_all', 'streams_allperm']
 
     for sel, temp_table in zip(selections, temp_tables):
-        cu.multi_msg("Creating temporary table called {0} for streams where {1}".format(temp_table, sel))
+        lagosGIS.multi_msg("Creating temporary table called {0} for streams where {1}".format(temp_table, sel))
         LineDensity.line_density(zones_fc, zone_field, streams_fc, temp_table, sel)
-        new_fields = ['SUM_LengthM', 'Density_MperHA']
+        new_fields = ['m', 'mperha']
         for f in new_fields:
-            cu.rename_field(temp_table, f, temp_table + '_' + f, True)
+            lagosGIS.rename_field(temp_table, f, temp_table + '_' + f, True)
 
     # join em up and copy to final
-    temp_tables.remove('Streams')
+    temp_tables.remove('streams_all')
     for t in temp_tables:
         try:
-            arcpy.JoinField_management('Streams', zone_field, t, zone_field)
+            arcpy.JoinField_management('streams_all', zone_field, t, zone_field)
         #sometimes there's no table if it was an empty selection
         except:
             empty_fields = [temp_table + '_' + f for f in new_fields]
             for ef in empty_fields:
-                arcpy.AddField_management('Streams', ef, 'Double')
-                arcpy.CalculateField_management('Streams', ef, '0', 'PYTHON')
+                arcpy.AddField_management('streams_all', ef, 'Double')
+                arcpy.CalculateField_management('streams_all', ef, '0', 'PYTHON')
             continue
 
     # remove all the extra zoneID fields, which have underscore in name
-    drop_fields = [f.name for f in arcpy.ListFields('Streams', zone_field + '_*')]
+    drop_fields = [f.name for f in arcpy.ListFields('streams_all', zone_field + '_*')]
     for f in drop_fields:
-        arcpy.DeleteField_management('Streams', f)
-    arcpy.CopyRows_management('Streams', output_table)
+        arcpy.DeleteField_management('streams_all', f)
+    arcpy.CopyRows_management('streams_all', output_table)
 
     # clean up
-    for item in ['Streams', 'no_coastlines'] + temp_tables:
+    for item in ['streams_all', 'no_coastlines'] + temp_tables:
         try:
             arcpy.Delete_management(item)
         except:

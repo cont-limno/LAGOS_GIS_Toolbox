@@ -1,9 +1,16 @@
+# filename: create_zones_log.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): GEO
+# tool type: code journal
+# status: working and re-usable internally, minor edits needed for GEO publication
+
 import csv
 import os
 import arcpy
 from arcpy import management as DM
 from arcpy import analysis as AN
-from csiutils import create_temp_GDB
+from lagosGIS import create_temp_GDB
 import lagosGIS
 
 # files accessed by this script
@@ -233,7 +240,8 @@ for line in lines:
 
 
 # delete hu12 with SHAPE_Area < 5000 and (hu12_onlandborder = 'Y' or hu12_oncoast = 'Y')
-# TODO: 2019-11-20 add the code to do this, because you deleted 15 sliver hu12 by hand on this date.
+# TODO: 2019-11-20 add the code to do this, because you deleted 16 sliver hu12 ( area < 0.5) by hand on this date.
+# Don't let the zoneids change!!
 
 
 # # Add 100% open water designation to HU12

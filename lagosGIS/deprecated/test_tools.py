@@ -12,7 +12,8 @@
 import time
 from arcpy import env
 
-import interlake2 as tool
+from deprecated import interlake2 as tool
+
 
 def main():
     t = time.time()

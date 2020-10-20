@@ -1,3 +1,10 @@
+# filename: master_gdb_tasks.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): GEO
+# tool type: code journal
+# status: functions provided are working but code needs re-organization for GEO module publication
+
 import os
 import arcpy
 from arcpy import management as DM
@@ -30,26 +37,26 @@ import lagosGIS
 # lakes = os.path.join(mgdb, 'LAGOS_US_All_Lakes_1ha_No_Islands')
 #
 # # 1) add lat/long to all fcs except lakes
-# def add_lat_long(fc):
-#     """Add fields for lat and long, per LAGOS naming standard. Only works when fc path is short (use env.workspace.)"""
-#     lat = '{}_lat_decdeg'.format(fc)
-#     long = '{}_long_decdeg'.format(fc)
-#     if not arcpy.ListFields(fc, lat):
-#         DM.AddField(fc, lat, 'DOUBLE')
-#     if not arcpy.ListFields(fc, long):
-#         DM.AddField(fc, long, 'DOUBLE')
-#     orig_crs = arcpy.SpatialReference(5070)
-#     new_crs = arcpy.SpatialReference(4326) # NAD83
-#
-#     with arcpy.da.UpdateCursor(fc, [lat, long, 'SHAPE@']) as u_cursor:
-#         counter = 0
-#         for row in u_cursor:
-#             centroid = arcpy.PointGeometry(row[2].centroid, orig_crs)
-#             centroid_nad83 = centroid.projectAs(new_crs)
-#             row[0] = centroid_nad83.firstPoint.Y
-#             row[1] = centroid_nad83.firstPoint.X
-#             u_cursor.updateRow(row)
-#
+def add_lat_long(fc):
+    """Add fields for lat and long, per LAGOS naming standard. Only works when fc path is short (use env.workspace.)"""
+    lat = '{}_lat_decdeg'.format(fc)
+    long = '{}_long_decdeg'.format(fc)
+    if not arcpy.ListFields(fc, lat):
+        DM.AddField(fc, lat, 'DOUBLE')
+    if not arcpy.ListFields(fc, long):
+        DM.AddField(fc, long, 'DOUBLE')
+    orig_crs = arcpy.SpatialReference(5070)
+    new_crs = arcpy.SpatialReference(4326) # NAD83
+
+    with arcpy.da.UpdateCursor(fc, [lat, long, 'SHAPE@']) as u_cursor:
+        counter = 0
+        for row in u_cursor:
+            centroid = arcpy.PointGeometry(row[2].centroid, orig_crs)
+            centroid_nad83 = centroid.projectAs(new_crs)
+            row[0] = centroid_nad83.firstPoint.Y
+            row[1] = centroid_nad83.firstPoint.X
+            u_cursor.updateRow(row)
+
 # arcpy.env.workspace = mgdb
 # ecoregions = arcpy.ListFeatureClasses('*', feature_dataset='Ecoregions')
 # zones = arcpy.ListFeatureClasses('*', feature_dataset='Spatial_Classifications')
@@ -61,9 +68,13 @@ import lagosGIS
 #         add_lat_long(fc)
 
 # 2) populate "states" field
-def find_states(fc, state_fc):
+def find_states(fc, state_fc, zone_name=''):
     """Populate *_states field. States fc must have field 'states' with length 255 and state abbreviations within."""
-    states_field = '{}_states'.format(os.path.basename(fc))
+    if zone_name:
+        zone_name = zone_name
+    else:
+        zone_name = os.path.basename(fc)
+    states_field = '{}_states'.format(zone_name)
     if arcpy.ListFields(fc, states_field):
         DM.DeleteField(fc, states_field)
 
@@ -155,9 +166,13 @@ GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogr
 #         if 'Lakes' in dirpath or 'Spatial_Classifications' in dirpath or 'Ecoregions' in dirpath:
 #             fcs.append(os.path.join(dirpath, filename))
 #
-def calc_glaciation(fc, zone_field):
+def calc_glaciation(fc, zone_field, zone_name=''):
     # tab area
-    g_field = '{}_glaciatedlatewisc'.format(os.path.basename(fc))
+    if zone_name:
+        zone_name = zone_name
+    else:
+        zone_name = os.path.basename(fc)
+    g_field = '{}_glaciatedlatewisc'.format(zone_name)
     AN.TabulateIntersection(fc, zone_field, GLACIAL_EXTENT, 'in_memory/glacial_tab')
     glacial_pct = {r[0]:r[1] for r in arcpy.da.SearchCursor('in_memory/glacial_tab', [zone_field, 'PERCENTAGE'])}
     DM.AddField(fc, g_field, 'TEXT', field_length=20)
@@ -355,75 +370,6 @@ def calc_glaciation(fc, zone_field):
 #
 # # and then I need to get the zones into the MGD and add their zone flags
 #
-# LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\Derived_Land_Borders'
-# COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\TIGER_Coastline'
-# STATE_FC = r'D:\Continental_Limnology\Data_Downloaded\LAGOS_ZONES_ALL\TIGER_Boundaries\Unzipped Original\tl_2016_us_state.shp'
-# STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Spatial_Classifications\state'
-# GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
-#
-def process_ws(ws_fc, zone_name):
-
-    # generate new zone ids
-    DM.AddField(ws_fc, 'zoneid', 'TEXT', field_length=10)
-    DM.CalculateField(ws_fc, 'zoneid', '!lagoslakeid!', 'PYTHON')
-    ws_fc_lyr = DM.MakeFeatureLayer(ws_fc)
-
-    # multipart
-    DM.AddField(ws_fc, 'ismultipart', 'TEXT', field_length=2)
-    with arcpy.da.UpdateCursor(ws_fc, ['ismultipart', 'SHAPE@']) as u_cursor:
-        for row in u_cursor:
-            if row[1].isMultipart:
-                row[0] = 'Y'
-            else:
-                row[0] = 'N'
-            u_cursor.updateRow(row)
-
-
-    print("Edge flags...")
-    # add flag fields
-    DM.AddField(ws_fc, 'onlandborder', 'TEXT', field_length = 2)
-    DM.AddField(ws_fc, 'oncoast', 'TEXT', field_length = 2)
-
-    # identify border zones
-    border_lyr = DM.MakeFeatureLayer(LAND_BORDER, 'border_lyr')
-    DM.SelectLayerByLocation(ws_fc_lyr, 'INTERSECT', border_lyr)
-    DM.CalculateField(ws_fc_lyr, 'onlandborder', "'Y'", 'PYTHON')
-    DM.SelectLayerByAttribute(ws_fc_lyr, 'SWITCH_SELECTION')
-    DM.CalculateField(ws_fc_lyr, 'onlandborder' ,"'N'", 'PYTHON')
-
-    # identify coastal zones
-    coastal_lyr = DM.MakeFeatureLayer(COASTLINE, 'coastal_lyr')
-    DM.SelectLayerByLocation(ws_fc_lyr, 'INTERSECT', coastal_lyr)
-    DM.CalculateField(ws_fc_lyr, 'oncoast', "'Y'", 'PYTHON')
-    DM.SelectLayerByAttribute(ws_fc_lyr, 'SWITCH_SELECTION')
-    DM.CalculateField(ws_fc_lyr, 'oncoast' ,"'N'", 'PYTHON')
-
-    print("State assignment...")
-    # States
-    state_geo = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Spatial_Classifications\state'
-    find_states(ws_fc, STATES_GEO)
-    # glaciation status?
-    calc_glaciation(ws_fc, 'zoneid')
-
-    # preface the names with the zones
-    DM.DeleteField(ws_fc, 'ORIG_FID')
-    fields = [f.name for f in arcpy.ListFields(ws_fc, '*') if f.type not in ('OID', 'Geometry') and not f.name.startswith('Shape_')]
-    for f in fields:
-        new_fname = '{zn}_{orig}'.format(zn=zone_name, orig = f).lower()
-        try:
-            DM.AlterField(ws_fc, f, new_fname, clear_field_alias = 'TRUE')
-        # sick of debugging the required field message-I don't want to change required fields anyway
-        except:
-            pass
-
-    # cleanup
-    lyr_objects = [lyr_object for var_name, lyr_object in locals().items() if var_name.endswith('lyr')]
-    for l in lyr_objects:
-        DM.Delete(l)
-
-# process_ws(nws, 'nws')
-# process_ws(ws, 'ws')
-#
 # # 2019-08-22
 # # add Kath watershed flags
 # nws = r'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds\LAGOS_watersheds.gdb\nws'
@@ -588,20 +534,36 @@ def add_templinkid(fc):
 #
 #     DM.Delete('in_memory')
 
-# update the main lakes layer
-lakes_poly = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
-lakes_point = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha_points'
+# # update the main lakes layer
+# lakes_poly = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+# lakes_point = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha_points'
+#
+# #zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'epanutr4', 'wwf', 'mlra', 'bailey', 'neon']
+# zones = ['omernik3', 'epanutr']
+# zoneids = ['{}_zoneid'.format(z) for z in zones]
+#
+# point_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(lakes_point, ['lagoslakeid'] + zoneids)}
+#
+# for z in zoneids:
+#     if not arcpy.ListFields(lakes_poly, z):
+#         DM.AddField(lakes_poly, z, 'TEXT', field_length=20)
+# with arcpy.da.UpdateCursor(lakes_poly, ['lagoslakeid'] + zoneids) as u_cursor:
+#     for row in u_cursor:
+#         row[1:] = point_dict[row[0]]
+#         u_cursor.updateRow(row)
 
-#zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'epanutr4', 'wwf', 'mlra', 'bailey', 'neon']
-zones = ['omernik3', 'epanutr']
-zoneids = ['{}_zoneid'.format(z) for z in zones]
+# # 2020-04-30 Try the lake state thing again, I just set the old one to lake_state_OLD20200430
+# # for some reason last time it missed some lakes
+#
+# print('lake states')
+# lakes_fc = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+# states = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\state'
+# find_states(lakes_fc, states, zone_name='lake')
 
-point_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(lakes_point, ['lagoslakeid'] + zoneids)}
-
-for z in zoneids:
-    if not arcpy.ListFields(lakes_poly, z):
-        DM.AddField(lakes_poly, z, 'TEXT', field_length=20)
-with arcpy.da.UpdateCursor(lakes_poly, ['lagoslakeid'] + zoneids) as u_cursor:
-    for row in u_cursor:
-        row[1:] = point_dict[row[0]]
-        u_cursor.updateRow(row)
+# 2020-05-05 Try the lake state thing again, I just set the old one to lake_state_OLD20200430
+# for some reason last time it missed some lakes
+#
+# print('ws states')
+# ws = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Spatial_Classifications\ws'
+# states = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\state'
+# find_states(ws, states, zone_name='ws')

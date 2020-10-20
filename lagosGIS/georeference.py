@@ -1,3 +1,9 @@
+# filename: georeference.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LIMNO
+# tool type: limited re-usability as code (change constants by hand for your computer)
+
 import os
 import arcpy
 from collections import Counter

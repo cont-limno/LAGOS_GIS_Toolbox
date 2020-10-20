@@ -150,6 +150,14 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
 
 
 def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
+    """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them.
+
+    :param hydrodem_raster: The hydro-conditioned DEM to be updated
+    :param lagos_catseed_raster: The modified "catseed" raster created with the Add Lake Seeds tool
+    :param out_raster: The output raster
+    :return:
+    """
+
     """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them."""
     arcpy.env.workspace = 'in_memory'
     # per suggestion by Price here
@@ -170,6 +178,12 @@ def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
     arcpy.env.overwriteOutput = False
 
 def make_hydrodem(burned_raster, hydrodem_raster_out):
+    """
+    Remove pits from hydro-enforced raster and fill using TauDEM tools.
+    :param burned_raster: Output of Burn Streams or Fix HydroDEM
+    :param hydrodem_raster_out: The final "hydrodem" raster output to save
+    :return:
+    """
     arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
     pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(burned_raster, hydrodem_raster_out)
     print(pitremove_cmd)
@@ -179,6 +193,12 @@ def make_hydrodem(burned_raster, hydrodem_raster_out):
         arcpy.AddMessage("Tool did not run. Check for correct installation of TauDEM tools.")
 
 def flow_direction(hydrodem_raster, flow_direction_raster_out):
+    """
+    Create the flow direction raster for the subregion.
+    :param hydrodem_raster: The modified or final hydrodem raster
+    :param flow_direction_raster_out: The output raster containing the flow directions
+    :return:
+    """
     arcpy.CheckOutExtension('Spatial')
     arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
     flow_dir = arcpy.sa.FlowDirection(hydrodem_raster)

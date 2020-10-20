@@ -169,15 +169,28 @@ def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
     arcpy.CheckInExtension('Spatial')
     arcpy.env.overwriteOutput = False
 
-def make_hydrodem(burned_raster, filled_raster_output):
+def make_hydrodem(burned_raster, hydrodem_raster_out):
     arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(burned_raster, filled_raster_output)
+    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(burned_raster, hydrodem_raster_out)
     print(pitremove_cmd)
     try:
         sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
     except:
         arcpy.AddMessage("Tool did not run. Check for correct installation of TauDEM tools.")
 
+def flow_direction(hydrodem_raster, flow_direction_raster_out):
+    arcpy.CheckOutExtension('Spatial')
+    arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+    flow_dir = arcpy.sa.FlowDirection(hydrodem_raster)
+    # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
+    # TODO: For non-hr, clip to HU4 instead
+    print(arcpy.Describe(flow_dir).spatialReference.name)
+    print(arcpy.Describe(hydrodem_raster).spatialReference.name)
+    print(arcpy.Describe(flow_dir).extent)
+    print(arcpy.Describe(hydrodem_raster).extent)
+    flow_dir_clipped = arcpy.sa.Con(arcpy.sa.IsNull(hydrodem_raster), hydrodem_raster, flow_dir)
+    flow_dir_clipped.save(flow_direction_raster_out)
+    arcpy.CheckInExtension('Spatial')
 
 def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_table, output_fc):
     """

@@ -5,6 +5,8 @@
 # tool type: re-usable (ArcGIS Toolbox)--tools called in individual scripts to make tools
 
 import os
+import datetime as dt
+import subprocess as sp
 from collections import defaultdict
 from arcpy import management as DM
 from arcpy import analysis as AN
@@ -166,6 +168,15 @@ def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
     # cleanup
     arcpy.CheckInExtension('Spatial')
     arcpy.env.overwriteOutput = False
+
+def make_hydrodem(burned_raster, filled_raster_output):
+    arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(burned_raster, filled_raster_output)
+    print(pitremove_cmd)
+    try:
+        sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
+    except:
+        arcpy.AddMessage("Tool did not run. Check for correct installation of TauDEM tools.")
 
 
 def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_table, output_fc):

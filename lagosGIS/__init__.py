@@ -33,7 +33,7 @@ from locate_lake_outlets import locate_lake_outlets
 from locate_lake_inlets import locate_lake_inlets
 from postprocess_watersheds import calc_watershed_subtype
 from postprocess_watersheds import calc_watershed_equality
-import nhd_plus_watersheds_tools
+import watershed_delineation.nhd_plus_watersheds_tools
 from point_attribution_of_raster_data import point_attribution_of_raster_data
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)

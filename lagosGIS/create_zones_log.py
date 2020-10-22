@@ -11,19 +11,26 @@ import arcpy
 from arcpy import management as DM
 from arcpy import analysis as AN
 from lagosGIS import create_temp_GDB
-import lagosGIS
 
 # files accessed by this script
+import zone_prep
+
 MASTER_CLIPPING_POLY = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\US_Countybased_Clip_Polygon'
 LAGOSNE_GDB = r'C:\Users\smithn78\Dropbox\CSI\CSI_LAGOS-exports\LAGOS-NE-EDI\LAGOS-NE-GIS\FileGDB\LAGOS_NE_GIS_Data_v1.0.gdb'
 LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\Derived_Land_Borders'
 COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\TIGER_Coastline'
-STATE_FC = r'D:\Continental_Limnology\Data_Downloaded\LAGOS_ZONES_ALL\TIGER_Boundaries\Unzipped Original\tl_2016_us_state.shp'
 LAGOS_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\LAGOS_US_All_Lakes_1ha'
+GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
+STATE_FC = r'D:\Continental_Limnology\Data_Downloaded\LAGOS_ZONES_ALL\TIGER_Boundaries\Unzipped Original\tl_2016_us_state.shp'
 
 # files to control this script
 ZONE_CONTROL_CSV = r"C:\Users\smithn78\Dropbox\CL_HUB_GEO\Reprocessing_LAGOS_Zones.csv"
 TEMP_GDB = create_temp_GDB('process_zones')
+
+# --- HELPER FUNCTIONS--------------------------------------------------------------------------------------------------
+
+
+#---SETUP---------------------------------------------------------------------------------------------------------------
 
 arcpy.env.workspace = TEMP_GDB
 arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(5070)
@@ -97,8 +104,8 @@ def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, oth
 
     # gather up a few calculations into one cursor because this is taking too long over the HU12 layer
     DM.AddField(trimmed, 'perimeter_m', 'DOUBLE')
-    DM.AddField(trimmed, 'multipart', 'TEXT', field_length = 1)
-    uCursor_fields = ['area_ha', 'originalarea_pct', 'originalarea', 'perimeter_m', 'multipart', 'SHAPE@']
+    DM.AddField(trimmed, 'ismultipart', 'TEXT', field_length = 1)
+    uCursor_fields = ['area_ha', 'originalarea_pct', 'originalarea', 'perimeter_m', 'ismultipart', 'SHAPE@']
     with arcpy.da.UpdateCursor(trimmed, uCursor_fields) as uCursor:
         for row in uCursor:
             area, orig_area_pct, orig_area, perim, multipart, shape = row
@@ -170,29 +177,25 @@ def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, oth
     DM.SelectLayerByAttribute(trimmed_lyr, 'SWITCH_SELECTION')
     DM.CalculateField(trimmed_lyr, 'oncoast' ,"'N'", 'PYTHON')
 
+    # label sourcezoneid
+    arcpy.AlterField(trimmed, zone_id_field, 'sourcezoneid', clear_field_alias=True)
+
+    # add lat long
+    zone_prep.add_lat_lon(trimmed)
+
     print("State assignment...")
     # State?
-    DM.AddField(trimmed, "state", 'text', field_length = '2')
-    state_center = arcpy.SpatialJoin_analysis(trimmed, STATE_FC, 'state_center', join_type = 'KEEP_COMMON',
-                                              match_option = 'HAVE_THEIR_CENTER_IN')
-    state_intersect = arcpy.SpatialJoin_analysis(trimmed, STATE_FC, 'state_intersect', match_option = 'INTERSECT')
-    state_center_dict = {row[0]:row[1] for row in arcpy.da.SearchCursor(state_center, ['ZoneID', 'STUSPS'])}
-    state_intersect_dict = {row[0]:row[1] for row in arcpy.da.SearchCursor(state_intersect, ['ZoneID', 'STUSPS'])}
-    with arcpy.da.UpdateCursor(trimmed, ['ZoneID', 'state']) as cursor:
-        for updateRow in cursor:
-            keyValue = updateRow[0]
-            if keyValue in state_center_dict:
-                updateRow[1] = state_center_dict[keyValue]
-            else:
-                updateRow[1] = state_intersect_dict[keyValue]
-            cursor.updateRow(updateRow)
+    zone_prep.find_states(trimmed, STATE_FC)
 
-    # glaciation status?
-    # TODO as version 0.6
+    # glaciation status
+    zone_prep.calc_glaciation(trimmed, GLACIAL_EXTENT, 'ZoneID')
 
-    # preface the names with the zones
+    # preface the names with the division prefix if needed
     DM.DeleteField(trimmed, 'ORIG_FID')
-    fields = [f.name for f in arcpy.ListFields(trimmed, '*') if f.type not in ('OID', 'Geometry') and not f.name.startswith('Shape_')]
+    fields = [f.name for f in arcpy.ListFields(trimmed, '*')
+              if f.type not in ('OID', 'Geometry')
+              and not f.name.startswith('Shape_')
+              and not f.name.startswith(zone_name)]
     for f in fields:
         new_fname = '{zn}_{orig}'.format(zn=zone_name, orig = f).lower()
         try:
@@ -212,31 +215,32 @@ def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, oth
 # COUNTY was originally processed by hand due to the need for manual editing
 # Then it was used the make the clipping poly that is used in this script
 
-# Then process HU8 because it will be used to clip HU4 and HU12 also
-hu8 = [line for line in lines if line['LAGOS Zone Name'] == 'hu8'][0]
-print('hu8')
-process_zone(hu8['Original'],
-             hu8['Output'],
-             hu8['LAGOS Zone Name'],
-             hu8['Zone Field'],
-             hu8['Name Field'],
-             hu8['Other Keep Fields'],
-             hu8['Clip to HU8'],
-             hu8['LAGOS-NE Name'])
+# # Then process HU8 because it will be used to clip HU4 and HU12 also
+# hu8 = [line for line in lines if line['LAGOS Zone Name'] == 'hu8'][0]
+# print('hu8')
+# process_zone(hu8['Original'],
+#              hu8['Output'],
+#              hu8['LAGOS Zone Name'],
+#              hu8['Zone Field'],
+#              hu8['Name Field'],
+#              hu8['Other Keep Fields'],
+#              hu8['Clip to HU8'],
+#              hu8['LAGOS-NE Name'])
+#
+# # Then loop through everything else
+# # County is included just to make it easier to reproduce and prove it's consistent with the others
+# lines = [line for line in lines if line['LAGOS Zone Name'] not in ('hu8')]
+# for line in lines:
+#     print(line['LAGOS Zone Name'])
+#     process_zone(line['Original'],
+#                  line['Output'],
+#                  line['LAGOS Zone Name'],
+#                  line['Zone Field'],
+#                  line['Name Field'],
+#                  line['Other Keep Fields'],
+#                  line['Clip to HU8'],
+#                  line['LAGOS-NE Name'])
 
-# Then loop through everything else
-# County is included just to make it easier to reproduce and prove it's consistent with the others
-lines = [line for line in lines if line['LAGOS Zone Name'] not in ('hu8')]
-for line in lines:
-    print(line['LAGOS Zone Name'])
-    process_zone(line['Original'],
-                 line['Output'],
-                 line['LAGOS Zone Name'],
-                 line['Zone Field'],
-                 line['Name Field'],
-                 line['Other Keep Fields'],
-                 line['Clip to HU8'],
-                 line['LAGOS-NE Name'])
 
 
 # delete hu12 with SHAPE_Area < 5000 and (hu12_onlandborder = 'Y' or hu12_oncoast = 'Y')
@@ -276,6 +280,48 @@ for line in lines:
 # # 	Border slivers as detected by compactness (something like this query original_area_pct < 0.1 AND compactness < .2 AND area_ha < 60)
 # # 	Belongs to a HU8 not found in LAGOS (true for just one HU12: 040602000000)
 
+#scratch
 
+def update_zone(zone_fc, zone_name):
+    for fname in [name.format(zone_name) for name in ['{}_states',
+                                                   '{}_lat_decdeg',
+                                                   '{}_lon_decdeg']]:
+        arcpy.DeleteField(zone_fc, fname)
 
+    # add lat long
+    zone_prep.add_lat_lon(zone_fc)
 
+    print("State assignment...")
+    # State?
+    zone_prep.find_states(zone_fc, STATE_FC)
+
+    # preface the names with the division prefix if needed
+    fields = [f.name for f in arcpy.ListFields(zone_fc, '*')
+              if f.type not in ('OID', 'Geometry')
+              and not f.name.startswith('Shape_')
+              and not f.name.startswith(zone_name)]
+    for f in fields:
+        new_fname = '{zn}_{orig}'.format(zn=zone_name, orig=f).lower()
+        try:
+            DM.AlterField(zone_fc, f, new_fname, clear_field_alias='TRUE')
+        # sick of debugging the required field message-I don't want to change required fields anyway
+        except:
+            pass
+
+# zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'wwf', 'mlra', 'bailey', 'neon', 'omernik3', 'epanutr']
+# sourcezoneid = ['hu12_huc12', 'hu8_huc8', 'hu4_huc4', 'county_geoid', 'state_geoid', 'wwf_feow_id', 'mlra_mlrarsym',
+#                 'bailey_ecocode', 'neon_domainid', 'omernik3_us_l3code', 'epanutr_wsa9']
+#
+# mgdb = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
+#
+# for z, s in zip(zones, sourcezoneid):
+#     zone_fc = os.path.join(mgdb, z)
+#     f = arcpy.ListFields(zone_fc, s)[0]
+#     print f.name
+#     print f.length
+#
+#
+# mgdb = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
+#
+# for z in zones:
+#     update_zone(os.path.join(mgdb, z), z)

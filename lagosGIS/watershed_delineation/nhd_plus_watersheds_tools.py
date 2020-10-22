@@ -12,7 +12,7 @@ from arcpy import management as DM
 from arcpy import analysis as AN
 import arcpy
 import lagosGIS
-from NHDNetwork import NHDNetwork
+from lagosGIS.NHDNetwork import NHDNetwork
 
 
 def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):

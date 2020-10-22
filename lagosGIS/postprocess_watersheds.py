@@ -8,7 +8,7 @@ import arcpy
 from arcpy import management as DM
 
 import lagosGIS
-import master_gdb_tasks
+import create_zones_log
 from NHDNetwork import NHDNetwork
 
 LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\Derived_Land_Borders'
@@ -266,9 +266,9 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
 
     # assign states to zone
     print('State assignment...')
-    master_gdb_tasks.find_states(sheds_fc, STATES_GEO, zone_name)
+    create_zones_log.find_states(sheds_fc, STATES_GEO, zone_name)
     # glaciation status
-    master_gdb_tasks.calc_glaciation(sheds_fc, zoneid, zone_name)
+    create_zones_log.calc_glaciation(sheds_fc, zoneid, zone_name)
 
     # mbgconhull metrics
     print('Adding convex hull metrics...')

@@ -251,7 +251,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     DM.CalculateField(sheds_fc_lyr, oncoast, "'Y'", 'PYTHON')
     DM.SelectLayerByAttribute(sheds_fc_lyr, 'SWITCH_SELECTION')
     DM.CalculateField(sheds_fc_lyr, oncoast, "'N'", 'PYTHON')
-
+    oncoast = '{}_oncoast'.format(zone_name)
     # percent in USA
     arcpy.TabulateIntersection_analysis(sheds_fc, zoneid, STATES_GEO, 'in_memory/tabarea')
 

@@ -9,30 +9,32 @@ def calc_glaciation(fc, glacial_extent_fc, zone_field, zone_name=''):
         zone_name = zone_name
     else:
         zone_name = os.path.basename(fc)
-    g_field = '{}_glaciatedlatewisc'.format(zone_name)
+    g_field = '{}_glaciatedlatewisc_pct'.format(zone_name)
     AN.TabulateIntersection(fc, zone_field, glacial_extent_fc, 'in_memory/glacial_tab')
     glacial_pct = {r[0]:r[1] for r in arcpy.da.SearchCursor('in_memory/glacial_tab', [zone_field, 'PERCENTAGE'])}
-    DM.AddField(fc, g_field, 'TEXT', field_length=20)
+    DM.AddField(fc, g_field, 'DOUBLE')
     with arcpy.da.UpdateCursor(fc, [zone_field, g_field]) as u_cursor:
         for row in u_cursor:
             zoneid, glaciation = row
             if zoneid not in glacial_pct:
-                glaciation = 'Not_Glaciated'
+                glaciation = 0
             else:
-                if glacial_pct[zoneid] >=99.99:
-                    glaciation = 'Glaciated'
+                if glacial_pct[zoneid] >= 99.99:
+                    glaciation = 100
                 elif glacial_pct[zoneid] < 0.01:
-                    glaciation = 'Not_Glaciated'
+                    glaciation = 0
                 else:
-                    glaciation = 'Partially_Glaciated'
+                    glaciation = glacial_pct[zoneid]
             u_cursor.updateRow((zoneid, glaciation))
     DM.Delete('in_memory/glacial_tab')
 
 
-def add_lat_lon(fc):
+def add_lat_lon(fc, zone_name=''):
     """Add fields for lat and long, per LAGOS naming standard. Only works when fc path is short (use env.workspace.)"""
-    lat = '{}_lat_decdeg'.format(fc)
-    lon = '{}_lon_decdeg'.format(fc)
+    if not zone_name:
+        zone_name = fc
+    lat = '{}_lat_decdeg'.format(zone_name)
+    lon = '{}_lon_decdeg'.format(zone_name)
     if not arcpy.ListFields(fc, lat):
         DM.AddField(fc, lat, 'DOUBLE')
     if not arcpy.ListFields(fc, lon):
@@ -83,3 +85,20 @@ def find_states(fc, state_fc, zone_name=''):
     DM.Delete(fc)
     DM.CopyFeatures(spjoin, fc)
     DM.Delete(spjoin)
+
+def inusa_pct(zone_fc, zoneid, states_fc, zone_name=''):
+    DM.AddField(zone_fc, '{}_inusa_pct'.format(zone_name), 'DOUBLE')
+    # percent in USA
+    arcpy.AddMessage('Tabulating intersection...')
+    arcpy.TabulateIntersection_analysis(zone_fc, zoneid, states_fc, 'in_memory/tabarea')
+
+    # round to 2 digits and don't let values exceed 100
+    inusa_dict = {r[0]:min(round(r[1],2), 100)
+                  for r in arcpy.da.SearchCursor('in_memory/tabarea', [zoneid, 'PERCENTAGE'])}
+
+    with arcpy.da.UpdateCursor(zone_fc, [zoneid, 'inusa_pct']) as u_cursor:
+        for row in u_cursor:
+            row[1] = inusa_dict[row[0]]
+            u_cursor.updateRow(row)
+
+    DM.Delete('in_memory/tabarea')

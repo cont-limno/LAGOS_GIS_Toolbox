@@ -7,6 +7,7 @@
 
 import csv
 import os
+import sys
 import arcpy
 from arcpy import management as DM
 from arcpy import analysis as AN
@@ -15,13 +16,14 @@ from lagosGIS import create_temp_GDB
 # files accessed by this script
 import zone_prep
 
-MASTER_CLIPPING_POLY = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\US_Countybased_Clip_Polygon'
+MASTER_CLIPPING_POLY = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\US_Countybased_Clip_Polygon'
 LAGOSNE_GDB = r'C:\Users\smithn78\Dropbox\CSI\CSI_LAGOS-exports\LAGOS-NE-EDI\LAGOS-NE-GIS\FileGDB\LAGOS_NE_GIS_Data_v1.0.gdb'
-LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\Derived_Land_Borders'
-COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\NonPublished\TIGER_Coastline'
-LAGOS_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.5.gdb\LAGOS_US_All_Lakes_1ha'
-GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial.shp'
+LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\Derived_Land_Borders'
+COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\TIGER_Coastline'
+LAGOS_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\LAGOS_US_All_Lakes_1ha'
+GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial_world.shp'
 STATE_FC = r'D:\Continental_Limnology\Data_Downloaded\LAGOS_ZONES_ALL\TIGER_Boundaries\Unzipped Original\tl_2016_us_state.shp'
+STATE_FC_FINDSTATE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Spatial_Classifications\state'
 
 # files to control this script
 ZONE_CONTROL_CSV = r"C:\Users\smithn78\Dropbox\CL_HUB_GEO\Reprocessing_LAGOS_Zones.csv"
@@ -42,7 +44,11 @@ with open(ZONE_CONTROL_CSV) as csv_file:
 
 HU8_OUTPUT = [line for line in lines if line['LAGOS Zone Name'] == 'hu8'][0]['Output']
 
-# Define the processing steps. 1) Dissolve on ID. 2) Clip to USA 3) Calculate original area. 4) Generate unique zone IDs.
+# Define the processing steps.
+# 1) Dissolve on ID.
+# 2) Clip to USA
+# 3) Calculate original area.
+# 4) Generate unique zone IDs.
 def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, other_keep_fields, clip_hu8, lagosne_name):
     # dissolve fields by the field that zone_id is based on (the field that identifies a unique zone)
     dissolve_fields = [f for f in "{}, {}, {}".format(
@@ -178,14 +184,15 @@ def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, oth
     DM.CalculateField(trimmed_lyr, 'oncoast' ,"'N'", 'PYTHON')
 
     # label sourcezoneid
-    arcpy.AlterField(trimmed, zone_id_field, 'sourcezoneid', clear_field_alias=True)
+    sourceid_name = 'sourceid_{}'.format(zone_id_field.replace('_', ''))
+    arcpy.AlterField(trimmed, zone_id_field, 'sourceid', clear_field_alias=True)
 
     # add lat long
     zone_prep.add_lat_lon(trimmed)
 
     print("State assignment...")
     # State?
-    zone_prep.find_states(trimmed, STATE_FC)
+    zone_prep.find_states(trimmed, STATE_FC_FINDSTATE)
 
     # glaciation status
     zone_prep.calc_glaciation(trimmed, GLACIAL_EXTENT, 'ZoneID')
@@ -215,31 +222,31 @@ def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, oth
 # COUNTY was originally processed by hand due to the need for manual editing
 # Then it was used the make the clipping poly that is used in this script
 
-# # Then process HU8 because it will be used to clip HU4 and HU12 also
-# hu8 = [line for line in lines if line['LAGOS Zone Name'] == 'hu8'][0]
-# print('hu8')
-# process_zone(hu8['Original'],
-#              hu8['Output'],
-#              hu8['LAGOS Zone Name'],
-#              hu8['Zone Field'],
-#              hu8['Name Field'],
-#              hu8['Other Keep Fields'],
-#              hu8['Clip to HU8'],
-#              hu8['LAGOS-NE Name'])
-#
-# # Then loop through everything else
-# # County is included just to make it easier to reproduce and prove it's consistent with the others
-# lines = [line for line in lines if line['LAGOS Zone Name'] not in ('hu8')]
-# for line in lines:
-#     print(line['LAGOS Zone Name'])
-#     process_zone(line['Original'],
-#                  line['Output'],
-#                  line['LAGOS Zone Name'],
-#                  line['Zone Field'],
-#                  line['Name Field'],
-#                  line['Other Keep Fields'],
-#                  line['Clip to HU8'],
-#                  line['LAGOS-NE Name'])
+# Then process HU8 because it will be used to clip HU4 and HU12 also
+hu8 = [line for line in lines if line['LAGOS Zone Name'] == 'hu8'][0]
+print('hu8')
+process_zone(hu8['Original'],
+             hu8['Output'],
+             hu8['LAGOS Zone Name'],
+             hu8['Zone Field'],
+             hu8['Name Field'],
+             hu8['Other Keep Fields'],
+             hu8['Clip to HU8'],
+             hu8['LAGOS-NE Name'])
+
+# Then loop through everything else
+# County is included just to make it easier to reproduce and prove it's consistent with the others
+lines = [line for line in lines if line['LAGOS Zone Name'] not in ('hu8')]
+for line in lines:
+    print(line['LAGOS Zone Name'])
+    process_zone(line['Original'],
+                 line['Output'],
+                 line['LAGOS Zone Name'],
+                 line['Zone Field'],
+                 line['Name Field'],
+                 line['Other Keep Fields'],
+                 line['Clip to HU8'],
+                 line['LAGOS-NE Name'])
 
 
 
@@ -286,14 +293,21 @@ def update_zone(zone_fc, zone_name):
     for fname in [name.format(zone_name) for name in ['{}_states',
                                                    '{}_lat_decdeg',
                                                    '{}_lon_decdeg']]:
-        arcpy.DeleteField(zone_fc, fname)
+        DM.DeleteField(zone_fc, fname)
+
+    # rename
+    old_mp = '{}_multipart'.format(zone_name)
+    new_mp = '{}_ismultipart'.format(zone_name)
+    if not arcpy.ListFields(zone_fc, new_mp):
+        DM.AlterField(zone_fc, old_mp, new_mp, clear_field_alias=True)
 
     # add lat long
-    zone_prep.add_lat_lon(zone_fc)
+    zone_prep.add_lat_lon(zone_fc, zone_name)
 
     print("State assignment...")
     # State?
-    zone_prep.find_states(zone_fc, STATE_FC)
+    if 'state' not in zone_fc:
+        zone_prep.find_states(zone_fc, STATE_FC_FINDSTATE)
 
     # preface the names with the division prefix if needed
     fields = [f.name for f in arcpy.ListFields(zone_fc, '*')
@@ -308,20 +322,131 @@ def update_zone(zone_fc, zone_name):
         except:
             pass
 
-# zones = ['hu12', 'hu8', 'hu4', 'county', 'state', 'wwf', 'mlra', 'bailey', 'neon', 'omernik3', 'epanutr']
-# sourcezoneid = ['hu12_huc12', 'hu8_huc8', 'hu4_huc4', 'county_geoid', 'state_geoid', 'wwf_feow_id', 'mlra_mlrarsym',
-#                 'bailey_ecocode', 'neon_domainid', 'omernik3_us_l3code', 'epanutr_wsa9']
-#
-# mgdb = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
-#
-# for z, s in zip(zones, sourcezoneid):
-#     zone_fc = os.path.join(mgdb, z)
-#     f = arcpy.ListFields(zone_fc, s)[0]
-#     print f.name
-#     print f.length
-#
-#
-# mgdb = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
-#
-# for z in zones:
-#     update_zone(os.path.join(mgdb, z), z)
+def process_buffer_zones(zones_fc, zone_name=''):
+    """
+    This function will add or refresh the following GEO metrics and flags as columns, modifying the input
+    feature class:
+    area_ha
+    perimeter_m
+    onlandborder
+    oncoast
+    ismultipart
+    lat
+    lon
+    states
+    inusa
+    lateglaciatedwisc
+
+    :param zones_fc: The zone feature class to add the columns to
+    :param zone_name: The zone name to use as a prefix for column names, if not the same as the feature class basename
+    :return: None
+    """
+
+    if not zone_name:
+        zone_name = os.path.basename(zones_fc)
+
+    # test geometry
+    if str(arcpy.Describe(zones_fc).spatialReference.factoryCode) not in ['5070', '102039']:
+        arcpy.AddError("""Zones feature class does not have desired projection (Albers USGS). 
+        Re-project to factory code 102039 and try again.""")
+        sys.exit(1)
+
+    # add field names except those added by functions below
+    # which are lat, lon, states, inusa, lateglaciatedwisc
+    area_ha = '{}_area_ha'.format(zone_name)
+    perimeter_m = '{}_perimeter_m'.format(zone_name)
+    onlandborder = '{}_onlandborder'.format(zone_name)
+    oncoast = '{}_oncoast'.format(zone_name)
+    ismultipart = '{}_ismultipart'.format(zone_name)
+    zoneid = '{}_zoneid'.format(zone_name)
+
+    # delete fields if necessary (refresh fields)
+    for fieldname in [area_ha, perimeter_m, onlandborder, oncoast, ismultipart]:
+        if arcpy.ListFields(zones_fc, fieldname):
+            DM.DeleteField(zones_fc, fieldname)
+    DM.AddField(zones_fc, area_ha, 'DOUBLE')
+    DM.AddField(zones_fc, perimeter_m, 'DOUBLE')
+    DM.AddField(zones_fc, onlandborder, 'TEXT', field_length=2)
+    DM.AddField(zones_fc, oncoast, 'TEXT', field_length=2)
+    DM.AddField(zones_fc, ismultipart, 'TEXT', field_length=2)
+
+    # calc geometry
+    with arcpy.da.UpdateCursor(zones_fc, [area_ha, perimeter_m, ismultipart, 'SHAPE@']) as cursor:
+        for row in cursor:
+            area, perim, multi, shape = row
+            area = shape.area/10000
+            perim = shape.length
+            # don't use shape.isMultipart this time because all buffers have a hole so always "True"
+            # use part count instead which doesn't count the hole as a part in our buffers
+            multi = 'Y' if shape.partCount > 1 else 'N'
+            row = [area, perim, multi, shape]
+            cursor.updateRow(row)
+
+    # calc edge flags
+    arcpy.AddMessage("Calculating edge flags...")
+    zone_layer = DM.MakeFeatureLayer(zones_fc, 'zone_layer')
+    border_lyr = DM.MakeFeatureLayer(LAND_BORDER, 'border_lyr')
+    DM.SelectLayerByLocation(zone_layer, 'INTERSECT', border_lyr)
+    DM.CalculateField(zone_layer, onlandborder, "'Y'", 'PYTHON')
+    DM.SelectLayerByAttribute(zone_layer, 'SWITCH_SELECTION')
+    DM.CalculateField(zone_layer, onlandborder, "'N'", 'PYTHON')
+
+    # identify coastal zones
+    coastal_lyr = DM.MakeFeatureLayer(COASTLINE, 'coastal_lyr')
+    DM.SelectLayerByLocation(zone_layer, 'INTERSECT', coastal_lyr)
+    DM.CalculateField(zone_layer, oncoast, "'Y'", 'PYTHON')
+    DM.SelectLayerByAttribute(zone_layer, 'SWITCH_SELECTION')
+    DM.CalculateField(zone_layer, oncoast, "'N'", 'PYTHON')
+
+    # add lat long
+    zone_prep.add_lat_lon(zones_fc, zone_name)
+
+    print("State assignment...")
+    # State?
+    zone_prep.find_states(zones_fc, STATE_FC_FINDSTATE, zone_name)
+
+    # glaciation status
+    zone_prep.calc_glaciation(zones_fc, GLACIAL_EXTENT, zoneid, zone_name)
+
+    # fix
+
+    # in usa
+    zone_prep.inusa_pct(zones_fc, zoneid, STATE_FC_FINDSTATE, zone_name)
+
+    # cleanup
+    for field in arcpy.ListFields(zones_fc, '*Join_Count*', '*TARGET_FID'):
+        DM.DeleteField(zones_fc, field.name)
+
+    for item in [border_lyr, coastal_lyr, zone_layer]:
+        DM.Delete(item)
+
+
+mgdb = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
+zones = ['buff100',
+         'buff500',
+         'nws',
+         'ws',
+         'hu12',
+         'hu8',
+         'hu4',
+         'county',
+         'state',
+         'wwf',
+         'mlra',
+         'bailey',
+         'neon',
+         'omernik3',
+         'epanutr']
+
+for z in zones:
+    print(z)
+    zone_fc = os.path.join(mgdb, z)
+    col_pattern = '{}_states'.format(z)
+    if arcpy.ListFields(zone_fc, col_pattern):
+        sourceid_field = arcpy.ListFields(zone_fc, col_pattern)[0].name
+        name_vals = [r[0] for r in arcpy.da.SearchCursor(zone_fc, sourceid_field)]
+        try:
+            print max([len(v) for v in name_vals if v])
+        except:
+            print("field is not character)")
+        print any([True if not v else False for v in name_vals])

@@ -11,7 +11,8 @@
 import lagosGIS
 import os
 import arcpy
-import LineDensity
+from deprecated import LineDensity
+
 
 def streams_in_zones(zones_fc, zone_field, streams_fc, output_table):
 

@@ -35,6 +35,8 @@ from postprocess_watersheds import calc_watershed_subtype
 from postprocess_watersheds import calc_watershed_equality
 import watershed_delineation.nhd_plus_watersheds_tools
 from point_attribution_of_raster_data import point_attribution_of_raster_data
+from line_density import calc_density as line_density
+from PointDensityInPolygons import points_in_zones as point_density
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):

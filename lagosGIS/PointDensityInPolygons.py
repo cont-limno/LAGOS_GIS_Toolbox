@@ -3,7 +3,7 @@
 import os
 import arcpy
 
-def points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selection_expr):
+def points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selection_expr = '', rename_label = ''):
     arcpy.env.workspace = 'in_memory'
     if interest_selection_expr:
         arcpy.MakeFeatureLayer_management(points_fc, "selected_points", interest_selection_expr)
@@ -14,10 +14,11 @@ def points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selec
                             'JOIN_ONE_TO_ONE', 'KEEP_ALL',
                             match_option= 'INTERSECT')
 
-    field_names = ['PointCount', 'PointsPerHa', 'PointsPerSqKm']
-    field_types = ['LONG', 'DOUBLE', 'DOUBLE']
-    calc_expressions = ['!Join_Count!', '!Join_Count!/!shape.area@hectares!',
-                '!Join_Count!/!shape.area@squarekilometers!']
+    field_names = ['n', 'npersqkm']
+    if rename_label:
+        field_names = ['{}_{}'.format(fn, rename_label) for fn in field_names]
+    field_types = ['LONG', 'DOUBLE']
+    calc_expressions = ['!Join_Count!', '!Join_Count!/!shape.area@squarekilometers!']
 
     for fname, ftype, expr in zip(field_names, field_types, calc_expressions):
         arcpy.AddField_management('temp_fc', fname, ftype)
@@ -32,6 +33,8 @@ def points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selec
                 arcpy.DeleteField_management(output_table, f)
             except:
                 continue
+    arcpy.Delete_management('selected_points')
+    arcpy.Delete_management('temp_fc')
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)

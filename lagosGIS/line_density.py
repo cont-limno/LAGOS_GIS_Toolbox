@@ -2,6 +2,7 @@ import os
 import arcpy
 import lagosGIS
 
+
 def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', rename_label=''):
     arcpy.env.workspace = 'in_memory'
     if rename_label:
@@ -14,6 +15,8 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
     else:
         lines_prep = lines_fc
 
+    # TODO: Add projection check
+
     # Perform identity analysis to join fields and crack lines at polygon boundaries
     lines_identity = arcpy.Identity_analysis(lines_prep, zones_fc, 'lines_identity')
     arcpy.AddField_management(lines_identity, 'length_m', 'DOUBLE')
@@ -21,7 +24,7 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
 
     # calc total length grouped by zone (numerator)
     lines_stat = arcpy.Statistics_analysis(lines_identity, 'lines_stat', 'length_m SUM', zone_field)
-    arcpy.CopyRows_management(lines_stat, out_table)
+    lines_stat_full = lagosGIS.one_in_one_out(lines_stat, zones_fc, zone_field, 'lines_stat_full')
 
     # get area of zones for density calc (denominator)
     zones_area = {}
@@ -30,10 +33,12 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
             zones_area[row[0]] = row[1].getArea(units='HECTARES')
 
     # calc the density by dividing
-    arcpy.AddField_management(lines_stat, out_density_field, 'DOUBLE')
-    with arcpy.da.UpdateCursor(lines_stat, [zone_field, out_density_field, 'SUM_length_m']) as cursor:
+    arcpy.AddField_management(lines_stat_full, out_density_field, 'DOUBLE')
+    with arcpy.da.UpdateCursor(lines_stat_full, [zone_field, out_density_field, 'SUM_length_m']) as cursor:
         for row in cursor:
             zid, mperha, msum = row
+            if msum is None:
+                msum = 0 # replace NULL values with 0 which is physically accurate here
             if zid:
                 mperha = msum/zones_area[zid]
                 row = (zid, mperha, msum)
@@ -43,14 +48,14 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
                 cursor.deleteRow()
 
     # delete extra field and ensure all input zones have output row
-    arcpy.DeleteField_management(lines_stat, 'SUM_length_m')
-    arcpy.DeleteField_management(lines_stat, 'FREQUENCY')
-    lagosGIS.one_in_one_out(lines_stat, zones_fc, zone_field, out_table)
+    arcpy.DeleteField_management(lines_stat_full, 'SUM_length_m')
+    arcpy.DeleteField_management(lines_stat_full, 'FREQUENCY')
+
+    arcpy.CopyRows_management(lines_stat_full, out_table)
 
     # cleanup
     for item in ['lines_prep', lines_identity, lines_stat]:
         arcpy.Delete_management(item)
-
 
 def main():
     # Parameters

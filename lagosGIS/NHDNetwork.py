@@ -757,15 +757,23 @@ class NHDNetwork:
             nonself_trace_up = set(trace_up).difference(set(inside_ids))
             tenha_upstream = set(nonself_trace_up).intersection(set(self.tenha_waterbody_ids))
 
-            if len(nonself_trace_up) == 0:
+            if len(nonself_trace_up) == 0: # no upstream connectivity
                 if len(nonself_trace_down) > 0:
                     connclass = 'Headwater'
                 if len(nonself_trace_down) == 0:
                     connclass = 'Isolated'
-            elif tenha_upstream:
-                connclass = 'DrainageLk'
-            else:
-                connclass = 'Drainage'
+
+            else: # has upstream connectivity
+                if len(nonself_trace_down) == 0: # no downstream connectivity
+                    if tenha_upstream:
+                        connclass = 'ClosedLk'
+                    else:
+                        connclass = 'Closed'
+                else: # has downstream connectivity (and upstream)
+                    if tenha_upstream:
+                        connclass = 'DrainageLk'
+                    else:
+                        connclass = 'Drainage'
 
         return connclass
 

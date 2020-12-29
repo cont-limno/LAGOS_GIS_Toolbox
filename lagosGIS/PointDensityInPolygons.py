@@ -16,7 +16,7 @@ def points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selec
 
     field_names = ['n', 'npersqkm']
     if rename_label:
-        field_names = ['{}_{}'.format(fn, rename_label) for fn in field_names]
+        field_names = ['{}_{}'.format(rename_label, fn) for fn in field_names]
     field_types = ['LONG', 'DOUBLE']
     calc_expressions = ['!Join_Count!', '!Join_Count!/!shape.area@squarekilometers!']
 

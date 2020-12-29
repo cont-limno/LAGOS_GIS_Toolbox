@@ -525,10 +525,10 @@ class NHDNetwork:
 
     # KNOWN BUG 2020-09-24 njs: This function only adds back isolated lakes, not sink lakes that have no outflow.
     # This function should be modified to add those lakes.
-    def trace_10ha_subnetworks(self, exclude_isolated=False):
+    def trace_10ha_subnetworks(self, include_offnetwork=True):
         """
         Identify the upstream subnetworks of lakes > 10ha for each focal lake in the network's start population.
-        :param exclude_isolated: Default False. Whether to exclude isolated lakes (in or out of the focal lake's
+        :param include_offnetwork: Default True. Whether to exclude isolated/closed lakes (in or out of the focal lake's
         watershed) in the subnetworks for each focal lake.
         :return: Dictionary with key = focal lake id, value = list of subnetwork catchment/flowline/waterbody ids
         """
@@ -542,8 +542,9 @@ class NHDNetwork:
         self.set_start_ids(tenha_ids)
         self.deactivate_stops()
         tenha_traces_no_stops_lists = self.trace_up_from_waterbody_starts()
+        # key = waterbody identifier, value = trace of flowline & waterbody identifiers including key
         tenha_traces_no_stops = {k: set(v) for k, v in tenha_traces_no_stops_lists.items()}
-        isolated_tenha = [k for k, v in tenha_traces_no_stops.items() if not v]
+
         # reset start ids to whatever they were before method invoked
         self.set_start_ids(initial_start_ids)
         full_traces = self.trace_up_from_waterbody_starts()
@@ -569,8 +570,9 @@ class NHDNetwork:
             else:
                 subnetwork = []
 
-            # will add ALL isolated lakes back in, not just those in this region/full-trace
-            if not exclude_isolated:
+            # will add ALL isolated/closed lakes back in, not just those in this region/full-trace
+            if include_offnetwork:
+                isolated_tenha = [k for k, v in tenha_traces_no_stops.items() if not v]
                 if lake_id in isolated_tenha:
                     other_tenha_ids = [id for id in isolated_tenha if id != lake_id]
                 else:
@@ -579,6 +581,38 @@ class NHDNetwork:
             subnetworks[lake_id] = subnetwork
 
         return subnetworks
+
+    def define_tenha_sinks(self):
+        """Defines the regions of the network where LAGOS treats flow as being "sunk" into the 10ha+ lake outlet.
+
+        :return: dict Dictionary with key = Permanent_Identifier of isolated or closed 10ha+ lakes,
+        value = upstream traces for the lake in the key
+        """
+        # save existing lakes definition and waterbody start ids for reset at end
+        reset_starts = False
+        if self.waterbody_start_ids:
+            reset_starts = self.waterbody_start_ids
+
+        # fetch tenha lake ids
+        self.activate_10ha_lake_stops()
+        self.deactivate_stops()
+
+        # find off-network 10ha+ lakes (Isolated, Closed, ClosedLk)
+        off_classes = ['Isolated', 'Closed', 'ClosedLk']
+        conn_class = {id:self.classify_waterbody_connectivity(id) for id in self.tenha_waterbody_ids}
+        off_network_tenha = [id for id, c in conn_class.items() if c in off_classes]
+
+        if off_network_tenha:
+            self.set_start_ids(off_network_tenha)
+            tenha_sink_traces = self.trace_up_from_waterbody_starts()
+        else:
+            tenha_sink_traces = {}
+
+        # reset if needed
+        if reset_starts:
+            self.waterbody_start_ids = reset_starts
+
+        return tenha_sink_traces
 
     def save_trace_catchments(self, trace, output_fc):
         """

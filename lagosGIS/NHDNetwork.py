@@ -637,7 +637,8 @@ class NHDNetwork:
         if not self.outlets:
             self.identify_subregion_outlets()
         results_unflat = [self.trace_up_from_a_flowline(id) for id in self.outlets]
-        results = list({id for id_list in results_unflat for id in id_list})
+        # convert list of trace-lists to one big list with unique elements
+        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
         return results
 
     def identify_subregion_inlets(self):

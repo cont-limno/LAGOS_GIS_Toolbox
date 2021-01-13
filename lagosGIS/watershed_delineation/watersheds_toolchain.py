@@ -305,7 +305,7 @@ def make_run_list(master_HU4):
     for r in regions:
         template.extend(['{}{}'.format(r, s) for s in subregions[2:]])
 
-    huc4 = [r[0] for r in arcpy.da.SearchCursor(master_HU4, 'hu4_huc4')]
+    huc4 = [r[0] for r in arcpy.da.SearchCursor(master_HU4, 'hu4_sourceid_huc4')]
     return [i for i in template if i in huc4]
 
 

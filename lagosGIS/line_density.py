@@ -54,7 +54,7 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
     arcpy.CopyRows_management(lines_stat_full, out_table)
 
     # cleanup
-    for item in ['lines_prep', lines_identity, lines_stat]:
+    for item in ['lines_prep', lines_identity, lines_stat, lines_stat_full]:
         arcpy.Delete_management(item)
 
 def main():

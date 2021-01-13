@@ -11,7 +11,7 @@ import arcpy
 from arcpy import analysis as AN, management as DM
 
 import lagosGIS
-from NHDNetwork import NHDNetwork
+from lagosGIS.NHDNetwork import NHDNetwork
 
 
 def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
@@ -41,7 +41,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
     # setup
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(5070)
-    arcpy.env.workspace = 'in_memory'
+    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\debug.gdb'
     temp_gdb = lagosGIS.create_temp_GDB('aggregate_watersheds')
 
     arcpy.AddMessage("Copying selections from inputs...")
@@ -83,7 +83,9 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     arcpy.AddMessage("Preparing network traces...")
     nhd_network.set_start_ids(matching_ids)
     if mode == 'interlake':
-        minus_traces = nhd_network.trace_10ha_subnetworks()  # traces to be erased in any event
+        tenha_sink_traces = nhd_network.define_tenha_sinks()  # traces to be erased in any event
+
+        # then convert network to use barriers
         nhd_network.activate_10ha_lake_stops()
 
     # Step 3: Run the desired traces according to the mode. trace[id] = list of all flowline IDS in trace
@@ -141,16 +143,30 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
                     u_cursor.updateRow([lake_id])
             # DM.CalculateField(lakeless_watershed, 'Permanent_Identifier', """'{}'""".format(lake_id), 'PYTHON')
 
-            # Loop Step 5: If interlake mode and there are things to erase, erase upstream 10ha+ lake subnetworks.
+            # Loop Step 5: If interlake mode, erase OTHER off-network 10ha+ lake catchments.
             # Create dissolved, hole-free subnetwork polygons before erasing.
-            # This erasing pattern allows us to remove other sinks only.
-            if mode == 'interlake' and minus_traces[lake_id]:
+
+            if mode == 'interlake':
+                def get_erasable_network(tenha_sink_traces, lake_id):
+                    if lake_id in tenha_sink_traces:
+                        reset_val = tenha_sink_traces[lake_id]
+                        del tenha_sink_traces[lake_id]
+                        # convert list of trace-lists to one big list with unique elements
+                        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
+                        tenha_sink_traces[lake_id] = reset_val
+                    else:
+                        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
+
+                    return sunken_flow
+
+                # convert list of trace-lists to one big list with unique elements
+                sunken_flow = get_erasable_network(tenha_sink_traces, lake_id)
 
                 # Loop Step 5a: Select matching subnetwork watersheds (note: will include isolated).
-                tenha_subnetworks_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
+                tenha_sinks_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                                           for id in
-                                                                                          minus_traces[lake_id]]))
-                DM.SelectLayerByAttribute(watersheds_lyr2, 'NEW_SELECTION', tenha_subnetworks_query)
+                                                                                          sunken_flow]))
+                DM.SelectLayerByAttribute(watersheds_lyr2, 'NEW_SELECTION', tenha_sinks_query)
                 DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', lakeless_watershed,
                                          selection_type='SUBSET_SELECTION')
 
@@ -239,10 +255,10 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         pass
 
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
-    for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
-                 hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
-                 merged_fc, refined]:
-        DM.Delete(item)
+    # for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
+    #              hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
+    #              merged_fc, refined]:
+    #     DM.Delete(item)
     DM.Delete(temp_gdb)
 
     # Add warning if any missing

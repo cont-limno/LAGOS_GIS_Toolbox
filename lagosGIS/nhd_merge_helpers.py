@@ -41,7 +41,10 @@ def batch_add_merge_ids(nhd_parent_directory):
         if arcpy.ListFields(fc, "nhd_merge_id"):
             arcpy.DeleteField_management(fc, "nhd_merge_id")
         arcpy.AddField_management(fc, "nhd_merge_id", "TEXT", field_length=70)
-        arcpy.CalculateField_management(fc, "nhd_merge_id", '''!Permanent_Identifier! + '_' + str(!FDate!)''', "PYTHON")
+        with arcpy.da.UpdateCursor(fc, ["nhd_merge_id", "Permanent_Identifier", "FDate"]) as cursor:
+            for row in cursor:
+                row[0] = '{}_{}'.format(row[1], str(row[2]))
+                cursor.updateRow(row)
 
 
 def batch_add_merge_ids2(nhd_parent_directory):

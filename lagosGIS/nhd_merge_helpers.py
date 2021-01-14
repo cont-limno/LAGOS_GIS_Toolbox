@@ -23,16 +23,9 @@ def batch_add_merge_ids(nhd_parent_directory, overwrite=False):
     fcs = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(nhd_parent_directory, datatype="FeatureClass"):
         for filename in filenames:
-            fc = os.path.join(dirpath, filename)
-            # Why can't it be easier to test for a field?
-            perm_id_search_result = arcpy.ListFields(fc, "Permanent_Identifier")
-            if perm_id_search_result:
-                perm_id_field = perm_id_search_result[0]
-                fdate_search_result = arcpy.ListFields(fc, "FDate")
-                if fdate_search_result:
-                    fdate_field = fdate_search_result[0]
-                    fcs.append(fc)
-                    print(fc)
+            if filename in ['NHDArea', 'NHDFlowline', 'NHDLine', 'NHDPoint', 'NHDWaterbody']:
+                fc = os.path.join(dirpath, filename)
+                fcs.append(fc)
 
     # For each fc in the list, calculate a new field. The two fields being concatenated into the new field are
     # a composite key in a naive merge of all NHD features (with full identicals removed).

@@ -8,7 +8,7 @@ import os
 import arcpy
 
 
-def batch_add_merge_ids(nhd_parent_directory):
+def batch_add_merge_ids(nhd_parent_directory, overwrite=False):
     """
     Adds a new id field called nhd_merge_id to all feature classes containing the identifier "Permanent_Identifier"
     in all NHD geodatabases in the parent directory provided. The resulting field can be used to link multiple
@@ -39,7 +39,10 @@ def batch_add_merge_ids(nhd_parent_directory):
     for fc in fcs:
         print("Adding new identifier all_merge_id to {}...".format(fc.split(nhd_parent_directory)[1]))
         if arcpy.ListFields(fc, "nhd_merge_id"):
-            arcpy.DeleteField_management(fc, "nhd_merge_id")
+            if overwrite:
+                arcpy.DeleteField_management(fc, "nhd_merge_id")
+            else:
+                continue
         arcpy.AddField_management(fc, "nhd_merge_id", "TEXT", field_length=70)
         with arcpy.da.UpdateCursor(fc, ["nhd_merge_id", "Permanent_Identifier", "FDate"]) as cursor:
             for row in cursor:

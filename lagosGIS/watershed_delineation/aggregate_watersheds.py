@@ -41,7 +41,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
     # setup
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(5070)
-    arcpy.env.workspace = r'C:\Users\smithn78\Documents\ArcGIS\debug.gdb'
+    arcpy.env.workspace = 'in_memory'
     temp_gdb = lagosGIS.create_temp_GDB('aggregate_watersheds')
 
     arcpy.AddMessage("Copying selections from inputs...")
@@ -69,7 +69,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     waterbody_holeless = DM.EliminatePolygonPart(waterbody_mem, temp_waterbodies,
                                                  'PERCENT', part_area_percent='99')
     DM.AddIndex(waterbody_holeless, 'Permanent_Identifier', 'permid_idx')
-    waterbody_lyr = DM.MakeFeatureLayer(waterbody_holeless)
+    waterbody_lyr1 = DM.MakeFeatureLayer(waterbody_holeless) # no "interactive" selections
+    waterbody_lyr2 = DM.MakeFeatureLayer(waterbody_holeless)
 
     # watersheds copy
     temp_gdb_watersheds_path = os.path.join(temp_gdb, 'watersheds_simple')
@@ -81,14 +82,16 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     # Step 2: If interlake, get traces for all 10ha+ lakes, so they can be erased while other sinks are dissolved in.
     #  If network, do nothing.
     arcpy.AddMessage("Preparing network traces...")
-    nhd_network.set_start_ids(matching_ids)
+
     if mode == 'interlake':
         tenha_sink_traces = nhd_network.define_tenha_sinks()  # traces to be erased in any event
+        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
 
         # then convert network to use barriers
         nhd_network.activate_10ha_lake_stops()
 
     # Step 3: Run the desired traces according to the mode. trace[id] = list of all flowline IDS in trace
+    nhd_network.set_start_ids(matching_ids)
     traces = nhd_network.trace_up_from_waterbody_starts()
 
     arcpy.AddMessage("Accumulating watersheds according to traces...")
@@ -124,7 +127,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             if counter % 250 == 0:
                 print("{} of {} lakes completed...".format(counter, len(matching_ids)))
             # Loop Step 2: Fetch this lake
-            this_lake = AN.Select(waterbody_lyr, 'this_lake', "Permanent_Identifier = '{}'".format(lake_id))
+            this_lake_query = "Permanent_Identifier = '{}'".format(lake_id)
+            this_lake = AN.Select(waterbody_lyr1, 'this_lake', this_lake_query)
 
             # Loop Step 3: Select catchments with their Permanent_Identifier in the lake's upstream network trace.
             watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
@@ -135,8 +139,10 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             this_watershed_holes = DM.Dissolve(selected_watersheds, 'this_watershed_holes')  # sheds has selection
             no_holes = DM.EliminatePolygonPart(this_watershed_holes, 'no_holes', 'PERCENT', part_area_percent='99.999')
 
-            # Loop Step 5: Erase the lake from its own shed.
-            lakeless_watershed = arcpy.Erase_analysis(no_holes, this_lake, 'lakeless_watershed')
+            # Loop Step 5: Erase the lake from its own shed as well as any lakes along edges (not contained ones).
+            DM.SelectLayerByLocation(waterbody_lyr2, 'CROSSED_BY_THE_OUTLINE_OF', no_holes) # neighbor lakes
+            DM.SelectLayerByAttribute(waterbody_lyr2, 'ADD_TO_SELECTION', this_lake_query)
+            lakeless_watershed = arcpy.Erase_analysis(no_holes, waterbody_lyr2, 'lakeless_watershed')
             DM.AddField(lakeless_watershed, 'Permanent_Identifier', 'TEXT', field_length=40)
             with arcpy.da.UpdateCursor(lakeless_watershed, 'Permanent_Identifier') as u_cursor:
                 for row in u_cursor:
@@ -147,20 +153,16 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             # Create dissolved, hole-free subnetwork polygons before erasing.
 
             if mode == 'interlake':
-                def get_erasable_network(tenha_sink_traces, lake_id):
-                    if lake_id in tenha_sink_traces:
-                        reset_val = tenha_sink_traces[lake_id]
-                        del tenha_sink_traces[lake_id]
-                        # convert list of trace-lists to one big list with unique elements
-                        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
-                        tenha_sink_traces[lake_id] = reset_val
-                    else:
-                        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
+                def erase_from_sunken_flow(lake_id):
+                    reset_val = tenha_sink_traces[lake_id]
+                    del tenha_sink_traces[lake_id]
+                    # convert list of trace-lists to one big list with unique elements
+                    modified_sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
+                    tenha_sink_traces[lake_id] = reset_val
+                    return modified_sunken_flow
 
-                    return sunken_flow
-
-                # convert list of trace-lists to one big list with unique elements
-                sunken_flow = get_erasable_network(tenha_sink_traces, lake_id)
+                if lake_id in tenha_sink_traces:
+                    sunken_flow = erase_from_sunken_flow(lake_id)
 
                 # Loop Step 5a: Select matching subnetwork watersheds (note: will include isolated).
                 tenha_sinks_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
@@ -203,13 +205,13 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
     arcpy.env.overwriteOutput = False
 
-    # Step 4: For all isolated lakes, select the correct catchments and erase focal lakes from their own sheds
+    # Step 4: For all isolated/headwater lakes, select the correct catchments and erase focal lakes from their own sheds
     # in one operation (to save time in loop).
     arcpy.AddMessage("Batch processing remaining lakes...")
     if single_catchment_ids:
         waterbodies_query = 'Permanent_Identifier IN ({})'.format(
             ','.join(['\'{}\''.format(id) for id in single_catchment_ids]))
-        these_lakes = AN.Select(waterbody_lyr, 'these_lakes', waterbodies_query)
+        these_lakes = AN.Select(waterbody_lyr1, 'these_lakes', waterbodies_query)
         watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                            for id in single_catchment_ids]))
         these_watersheds = AN.Select(watersheds_simple, 'these_watersheds', watersheds_query)
@@ -217,6 +219,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         DM.Append(lakeless_watersheds, merged_fc, 'NO_TEST')
         for item in [these_lakes, these_watersheds, lakeless_watersheds]:
             DM.Delete(item)
+
+
 
     # Step 5: Fix in-island lakes, if any are present in the subregion. (140 lakes in U.S., in 53 subregions)
     out_count = int(DM.GetCount(merged_fc).getOutput(0))
@@ -226,11 +230,11 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         islands_holeless = DM.EliminatePolygonPart(islands, 'islands_holeless', 'PERCENT', part_area_percent='99')
         islands_lyr = DM.MakeFeatureLayer(islands_holeless, 'islands_lyr')
         # select those filled lakes that are entirely within the island polygons and process their sheds.
-        DM.SelectLayerByLocation(waterbody_lyr, 'COMPLETELY_WITHIN', islands_lyr)
-        DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', waterbody_lyr)
+        DM.SelectLayerByLocation(waterbody_lyr2, 'COMPLETELY_WITHIN', islands_lyr)
+        DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', waterbody_lyr2)
         # get waterbody catchments only (no island stream catchments
         DM.SelectLayerByAttribute(watersheds_lyr2, 'SUBSET_SELECTION', watersheds_query)
-        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr, 'island_sheds')  # SELECTION ON both
+        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr2, 'island_sheds')  # SELECTION ON both
         DM.Append(island_sheds, merged_fc, 'NO_TEST')
         for item in [islands, islands_holeless, islands_lyr, island_sheds]:
             DM.Delete(item)
@@ -255,7 +259,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         pass
 
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
-    # for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
+    # for item in [waterbody_lyr1, waterbody_lyr2, watersheds_lyr1, watersheds_lyr2,
     #              hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
     #              merged_fc, refined]:
     #     DM.Delete(item)

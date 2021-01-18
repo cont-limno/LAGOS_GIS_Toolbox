@@ -8,11 +8,11 @@ import os
 import arcpy
 import lagosGIS
 
-# arcpy.env.workspace = 'in_memory'
-# CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
-# OUT_FOLDER = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2020-04-28_Export-LOCUS'
-# OUT_GDB = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2020-04-28_Export-LOCUS\2020-04-28_gis_locus.gdb'
-#
+arcpy.env.workspace = 'in_memory'
+CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb'
+OUT_FOLDER = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-01-13_Export-LOCUS'
+OUT_GDB = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2020-04-28_Export-LOCUS\2020-04-28_gis_locus.gdb'
+
 # # #---------- LOCUS tables--------------
 #
 # # Lake information
@@ -71,46 +71,46 @@ import lagosGIS
 # lake_shp_pt_export = os.path.join(OUT_GDB, 'lake_as_point')
 # lake_shape = lagosGIS.select_fields(lake_fc + '_points', lake_shp_pt_export, ['lagoslakeid', 'nws_zoneid', 'ws_zoneid'])
 #
-#
-# # Lake characteristics
-# lake_char_fields = [
-# 'lagoslakeid',
-# 'lake_waterarea_ha',
-# 'lake_totalarea_ha',
-# 'lake_islandarea_ha',
-# 'lake_perimeter_m',
-# 'lake_islandperimeter_m',
-#  'lake_shorelinedevfactor_nounits',
-# 'lake_mbgconhull_length_m',
-# 'lake_mbgconhull_width_m',
-# 'lake_mbgconhull_orientation_deg',
-# 'lake_mbgrect_length_m',
-# 'lake_mbgrect_width_m',
-# 'lake_mbgrect_arearatio',
-# 'lake_meanwidth_m',
-# 'lake_connectivity_class',
-# 'lake_connectivity_fluctuates',
-# 'lake_connectivity_permanent',
-# 'lake_lakes4ha_upstream_ha',
-# 'lake_lakes4ha_upstream_n',
-# 'lake_lakes1ha_upstream_ha',
-# 'lake_lakes1ha_upstream_n',
-# 'lake_lakes10ha_upstream_n',
-# 'lake_lakes10ha_upstream_ha',
-# 'lake_glaciatedlatewisc',
-# ]
-#
-# lake_fc = os.path.join(CURRENT_WORKING_GDB, 'LAGOS_US_All_Lakes_1ha')
-#
-# print('lake char')
-# lake_fields = [f.name for f in arcpy.ListFields(lake_fc)]
-# for f in lake_char_fields:
-#     if f not in lake_fields:
-#         print f
-# temp_lake_char = lagosGIS.select_fields(lake_fc, 'temp_lake_char', lake_char_fields, convert_to_table=True)
-# lake_char = lagosGIS.export_to_csv('temp_lake_char', OUT_FOLDER, new_table_name = 'lake_characteristics',
-#                                    rename_fields=False, export_qa_version=False)
-#
+
+# Lake characteristics
+lake_char_fields = [
+'lagoslakeid',
+'lake_waterarea_ha',
+'lake_totalarea_ha',
+'lake_islandarea_ha',
+'lake_perimeter_m',
+'lake_islandperimeter_m',
+ 'lake_shorelinedevfactor_nounits',
+'lake_mbgconhull_length_m',
+'lake_mbgconhull_width_m',
+'lake_mbgconhull_orientation_deg',
+'lake_mbgrect_length_m',
+'lake_mbgrect_width_m',
+'lake_mbgrect_arearatio',
+'lake_meanwidth_m',
+'lake_connectivity_class',
+'lake_connectivity_fluctuates',
+'lake_connectivity_permanent',
+'lake_lakes4ha_upstream_ha',
+'lake_lakes4ha_upstream_n',
+'lake_lakes1ha_upstream_ha',
+'lake_lakes1ha_upstream_n',
+'lake_lakes10ha_upstream_n',
+'lake_lakes10ha_upstream_ha',
+'lake_glaciatedlatewisc',
+]
+
+lake_fc = os.path.join(CURRENT_WORKING_GDB, 'LAGOS_US_All_Lakes_1ha')
+
+print('lake char')
+lake_fields = [f.name for f in arcpy.ListFields(lake_fc)]
+for f in lake_char_fields:
+    if f not in lake_fields:
+        print f
+temp_lake_char = lagosGIS.select_fields(lake_fc, 'temp_lake_char', lake_char_fields, convert_to_table=True)
+lake_char = lagosGIS.export_to_csv('temp_lake_char', OUT_FOLDER, new_table_name = 'lake_characteristics',
+                                   rename_fields=False, export_qa_version=False)
+
 # # WS watersheds
 # ws_fields = [
 # 'lagoslakeid',

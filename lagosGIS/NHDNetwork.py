@@ -584,6 +584,8 @@ class NHDNetwork:
 
     def define_tenha_sinks(self):
         """Defines the regions of the network where LAGOS treats flow as being "sunk" into the 10ha+ lake outlet.
+        Regions must be off the main network (example: divergence leads to lake with no outlet and also to main river,
+        the network upstream of this divergence will not be "sunk" into that lake)
 
         :return: dict Dictionary with key = Permanent_Identifier of isolated or closed 10ha+ lakes,
         value = upstream traces for the lake in the key
@@ -597,14 +599,18 @@ class NHDNetwork:
         self.activate_10ha_lake_stops()
         self.deactivate_stops()
 
-        # find off-network 10ha+ lakes (Isolated, Closed, ClosedLk)
+        # make list of ids for off-network 10ha+ lakes (Isolated, Closed, ClosedLk)
         off_classes = ['Isolated', 'Closed', 'ClosedLk']
         conn_class = {id:self.classify_waterbody_connectivity(id) for id in self.tenha_waterbody_ids}
         off_network_tenha = [id for id, c in conn_class.items() if c in off_classes]
 
         if off_network_tenha:
             self.set_start_ids(off_network_tenha)
-            tenha_sink_traces = self.trace_up_from_waterbody_starts()
+            tenha_up = self.trace_up_from_waterbody_starts()
+            on_network = set(self.trace_up_from_hu4_outlets())
+            # drop any on-network traces from the results
+            tenha_sink_traces = {k:list(set(v).difference(on_network)) for k, v in tenha_up.items()}
+
         else:
             tenha_sink_traces = {}
 
@@ -624,7 +630,7 @@ class NHDNetwork:
         """"""
         query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                 for id in trace]))
-        output_fc = DM.Select(self.flowline, output_fc, query)
+        output_fc = arcpy.Select_analysis(self.flowline, output_fc, query)
         return output_fc
 
     # ---INLET/OUTLET METHODS-------------------------------------------------------------------------------------------
@@ -638,7 +644,10 @@ class NHDNetwork:
             self.identify_subregion_outlets()
         results_unflat = [self.trace_up_from_a_flowline(id) for id in self.outlets]
         # convert list of trace-lists to one big list with unique elements
-        sunken_flow = list({id for trace_list in tenha_sink_traces.values() for id in trace_list})
+        results = [id for trace_list in results_unflat for id in trace_list]
+        results_waterbodies = [self.flowline_waterbody[flowid]
+                               for flowid in results if flowid in self.flowline_waterbody]
+        results.extend(results_waterbodies)
         return results
 
     def identify_subregion_inlets(self):

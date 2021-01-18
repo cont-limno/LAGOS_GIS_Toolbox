@@ -23,7 +23,7 @@ def batch_add_merge_ids(nhd_parent_directory, overwrite=False):
     fcs = []
     for dirpath, dirnames, filenames in arcpy.da.Walk(nhd_parent_directory, datatype="FeatureClass"):
         for filename in filenames:
-            if filename in ['NHDArea', 'NHDFlowline', 'NHDLine', 'NHDPoint', 'NHDWaterbody']:
+            if filename in ['NHDWaterbody', 'NHDFlowline', 'NHDArea']:
                 fc = os.path.join(dirpath, filename)
                 fcs.append(fc)
 

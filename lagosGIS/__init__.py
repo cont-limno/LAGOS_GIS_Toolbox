@@ -9,12 +9,14 @@ __all__ = ["lake_connectivity_classification",
            "lake_from_to",
            "polygons_in_zones",
            "lakes_in_zones",
-           "nhd_plus_watersheds_tools.py",
            "point_attribution_of_raster_data",
            "locate_lake_outlets",
            "locate_lake_inlets",
            "calc_watershed_subtype",
-           "calc_watershed_equality"]
+           "calc_watershed_equality",
+           "aggregate_watersheds",
+           "line_density",
+           "point_density"]
 
 import os
 import arcpy
@@ -33,10 +35,10 @@ from locate_lake_outlets import locate_lake_outlets
 from locate_lake_inlets import locate_lake_inlets
 from postprocess_watersheds import calc_watershed_subtype
 from postprocess_watersheds import calc_watershed_equality
-import watershed_delineation.nhd_plus_watersheds_tools
 from point_attribution_of_raster_data import point_attribution_of_raster_data
 from line_density import calc_density as line_density
 from PointDensityInPolygons import points_in_zones as point_density
+from watershed_delineation.aggregate_watersheds import aggregate_watersheds as aggregate_watersheds
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):

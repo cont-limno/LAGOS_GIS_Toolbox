@@ -620,7 +620,7 @@ class NHDNetwork:
 
         return tenha_sink_traces
 
-    def interlake_erasable(self):
+    def define_interlake_erasable(self):
         """
         In order to sink flow into 10ha+ lakes but merge flow from smaller lakes into the interlake watershed,
         we use a barrier-dissolve-erase workflow.
@@ -650,6 +650,7 @@ class NHDNetwork:
             step 2 above, or not, as the NHDNetwork tools cannot test their position since there is no shared flow.
             There is categorically no consequence to "erasing" additional 10ha+ isolated catchments.)
             B) Closed lake networks may be partially or entirely erasable only if they are not downstream of the focal lake.
+            Only the portions of closed lake networks that are off the main network will be erasable.
             C) Drainage lake networks for which the outlet is upstream of the focal lake may be partially or entirely erasable.
             D) If closed networks (B) or upstream drainage networks (C) do not intersect any flow included in the focal
             lake's interlake watershed (the upstream trace using 10ha+ outlets as barriers), they shall be entirely
@@ -674,6 +675,8 @@ class NHDNetwork:
         erasable_dict = dict()
 
         # traces for each lake in results as sets
+        print("Tracing focal lake networks...")
+        self.deactivate_stops()
         lake_upstream_traces = {k:set(v) for k, v in self.trace_up_from_waterbody_starts().items()}
         lake_downstream_traces = {k:set(self.trace_down_from_a_waterbody(k)) for k in focal_lakes}
         self.activate_10ha_lake_stops()
@@ -681,19 +684,25 @@ class NHDNetwork:
         self.deactivate_stops()
 
         # get conn class for tenha lakes
+        print("Classifying 10ha+ lake connectivity...")
         tenha_conn = {id:self.classify_waterbody_connectivity(id) for id in self.tenha_waterbody_ids}
 
         # get networks for tenha lakes as sets, both NHDFlowline and NHDWaterbody ids will be included
         self.set_start_ids(self.tenha_waterbody_ids)
         tenha_nets_full = {k:set(v) for k, v in self.trace_up_from_waterbody_starts().items()}
 
-        tenha_isolated = {k:v for k, v in tenha_nets_full if tenha_conn[k] == 'Isolated'}
-        tenha_closed = {k:v for k, v in tenha_nets_full if tenha_conn[k] in ('Closed', 'ClosedLk')}
-        tenha_drainage = {k:v for k, v in tenha_nets_full if tenha_conn[k] in ('Headwater', 'Drainage', 'DrainageLk')}
+        tenha_isolated = {k:v for k, v in tenha_nets_full.items() if tenha_conn[k] == 'Isolated'}
+        tenha_closed_entire = {k:v for k, v in tenha_nets_full.items() if tenha_conn[k] in ('Closed', 'ClosedLk')}
+        # only portions of closed networks that are off the main network will be erasable
+        on_network = set(self.trace_up_from_hu4_outlets())
+        tenha_closed = {k:v.difference(on_network) for k, v in tenha_closed_entire.items()}
+        tenha_drainage = {k:v for k, v in tenha_nets_full.items()
+                          if tenha_conn[k] in ('Headwater', 'Drainage', 'DrainageLk')}
 
-        # all lakes will get isolated added
-        isolated_erasable_segments = set([id for trace in tenha_isolated.values() for id in trace])
+        # all lakes will get isolated added. Use keys because traces are emtpy for Isolated
+        isolated_erasable_segments = set(tenha_isolated.keys())
 
+        print("Defining erasable regions for each lake...")
         for lake_id in focal_lakes:
             # get the focal lake's networks and drop the lake itself so it doesn't test true for being in its own trace
             focal_downstream = lake_downstream_traces[lake_id].difference(lake_id)
@@ -706,9 +715,9 @@ class NHDNetwork:
 
             else:
                 # get qualifying closed lakes, those not downstream of focal lake
-                closed_tenha_eligible = {k:v for k, v in tenha_closed if k not in focal_downstream}
+                closed_tenha_eligible = {k:v for k, v in tenha_closed.items() if k not in focal_downstream}
                 # get qualifying drainage lakes, those with outlet of network is upstream of focal_lake
-                tenha_drainage_eligible = {k:v for k, v in tenha_drainage if k in focal_upstream}
+                tenha_drainage_eligible = {k:v for k, v in tenha_drainage.items() if k in focal_upstream}
 
                 # now that we screened for eligibility, merge dicts and treat the same in the upcoming tests
                 other_tenha_eligible = closed_tenha_eligible
@@ -717,7 +726,7 @@ class NHDNetwork:
                 # test for complete or partial erasure per D and E in docstring
                 full_erasable = {k:v for k, v in other_tenha_eligible.items() if v.isdisjoint(focal_interlake)}
                 partial_erasable = {k:v.difference(focal_interlake)
-                                    for k, v in other_tenha_eligible.items() if v.intersect(focal_interlake)}
+                                    for k, v in other_tenha_eligible.items() if v.intersection(focal_interlake)}
 
                 # convert to flat sets
                 full_erasable_segments = set([id for trace in full_erasable.values() for id in trace])
@@ -726,7 +735,9 @@ class NHDNetwork:
                 # merge with isolated 10ha+ lakes (all included) to make final result
                 erasable = isolated_erasable_segments.union(full_erasable_segments).union(partial_erasable_segments)
 
-            return erasable
+            erasable_dict[lake_id] = erasable
+
+        return erasable_dict
 
 
     def save_trace_catchments(self, trace, output_fc):

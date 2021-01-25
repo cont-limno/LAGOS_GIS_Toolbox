@@ -523,102 +523,6 @@ class NHDNetwork:
         else:
             raise Exception("Populate start IDs with set_start_ids before calling trace_up_from_starts().")
 
-    # KNOWN BUG 2020-09-24 njs: This function only adds back isolated lakes, not sink lakes that have no outflow.
-    # This function should be modified to add those lakes.
-    def trace_10ha_subnetworks(self, include_offnetwork=True):
-        """
-        Identify the upstream subnetworks of lakes > 10ha for each focal lake in the network's start population.
-        :param include_offnetwork: Default True. Whether to exclude isolated/closed lakes (in or out of the focal lake's
-        watershed) in the subnetworks for each focal lake.
-        :return: Dictionary with key = focal lake id, value = list of subnetwork catchment/flowline/waterbody ids
-        """
-        if not self.waterbody_start_ids:
-            raise Exception("Populate start IDs with set_start_ids before calling trace_up_from_starts().")
-
-        # get all 10ha+ full networks
-        initial_start_ids = self.waterbody_start_ids
-        self.activate_10ha_lake_stops()
-        tenha_ids = self.waterbody_stop_ids
-        self.set_start_ids(tenha_ids)
-        self.deactivate_stops()
-        tenha_traces_no_stops_lists = self.trace_up_from_waterbody_starts()
-        # key = waterbody identifier, value = trace of flowline & waterbody identifiers including key
-        tenha_traces_no_stops = {k: set(v) for k, v in tenha_traces_no_stops_lists.items()}
-
-        # reset start ids to whatever they were before method invoked
-        self.set_start_ids(initial_start_ids)
-        full_traces = self.trace_up_from_waterbody_starts()
-
-        subnetworks = dict()
-        for lake_id in self.waterbody_start_ids:
-            reset = []
-            if lake_id in tenha_traces_no_stops:
-                reset = tenha_traces_no_stops[lake_id]
-                # temp remove this lake's own network if it's 10ha+
-                del tenha_traces_no_stops[lake_id]
-
-            # if this lake id in the trace, then the dict entry is for a downstream lake. discard.
-            eligible_tenha_subnets = [v for k, v in tenha_traces_no_stops.items() if lake_id not in v]
-
-            if reset:
-                tenha_traces_no_stops[lake_id] = reset
-            # get the subnetwork traces that overlap this lake's full network only
-            full_trace = set(full_traces[lake_id])
-            if full_trace:
-                sub_traces = {id for id_list in eligible_tenha_subnets for id in id_list}
-                subnetwork = list(full_trace.intersection(sub_traces))
-            else:
-                subnetwork = []
-
-            # will add ALL isolated/closed lakes back in, not just those in this region/full-trace
-            if include_offnetwork:
-                isolated_tenha = [k for k, v in tenha_traces_no_stops.items() if not v]
-                if lake_id in isolated_tenha:
-                    other_tenha_ids = [id for id in isolated_tenha if id != lake_id]
-                else:
-                    other_tenha_ids = isolated_tenha[:]
-                subnetwork.extend(other_tenha_ids)
-            subnetworks[lake_id] = subnetwork
-
-        return subnetworks
-
-    def define_tenha_sinks(self):
-        """Defines the regions of the network where LAGOS treats flow as being "sunk" into the 10ha+ lake outlet.
-        Regions must be off the main network (example: divergence leads to lake with no outlet and also to main river,
-        the network upstream of this divergence will not be "sunk" into that lake)
-
-        :return: dict Dictionary with key = Permanent_Identifier of isolated or closed 10ha+ lakes,
-        value = upstream traces for the lake in the key
-        """
-        # save existing lakes definition and waterbody start ids for reset at end
-        reset_starts = False
-        if self.waterbody_start_ids:
-            reset_starts = self.waterbody_start_ids
-
-        # fetch tenha lake ids
-        self.activate_10ha_lake_stops()
-        self.deactivate_stops()
-
-        # make list of ids for off-network 10ha+ lakes (Isolated, Closed, ClosedLk)
-        off_classes = ['Isolated', 'Closed', 'ClosedLk']
-        conn_class = {id:self.classify_waterbody_connectivity(id) for id in self.tenha_waterbody_ids}
-        off_network_tenha = [id for id, c in conn_class.items() if c in off_classes]
-
-        if off_network_tenha:
-            self.set_start_ids(off_network_tenha)
-            tenha_up = self.trace_up_from_waterbody_starts()
-            on_network = set(self.trace_up_from_hu4_outlets())
-            # drop any on-network traces from the results
-            tenha_sink_traces = {k:list(set(v).difference(on_network)) for k, v in tenha_up.items()}
-
-        else:
-            tenha_sink_traces = {}
-
-        # reset if needed
-        if reset_starts:
-            self.waterbody_start_ids = reset_starts
-
-        return tenha_sink_traces
 
     def define_interlake_erasable(self):
         """
@@ -631,13 +535,14 @@ class NHDNetwork:
         3) Therefore, in order to re-sink flow from 10ha+ lake sub-networks contained within the dissolved result
         of step 2, we define must define erasable regions and erase them as the final step. However, NHDNetwork cannot
         test for containment within the result of step 2, so this tool returns erasable network regions associated with
-        all lakes 10ha+ that are either a) isolated, b) closed and not downstream of the focal lake, or c) draining
+        all lakes 10ha+ that are either a) isolated, b) terminal and not downstream of the focal lake, or c) draining
         (Drainage, DrainageLk, Headwater) lakes upstream of the focal lake.
 
         Definition of terms:
-            A) All networks referenced in the following criteria have an outlet in a lake >=10ha.
-            B) The focal lake network, downstream flow, and upstream flow referenced in the following criteria relate to
-             the FULL upstream network of the lake with no barriers unless the term "focal lake's interlake watershed"
+            A) All flow networks referenced in the following criteria have an outlet in a lake >=10ha, except when the
+            focal lake is being referenced which may be any size >=1.
+            B) The focal lake flow network, downstream flow, and upstream flow referenced in the following criteria relate to
+             the FULL upstream flow network of the lake with no barriers unless the term "focal lake's interlake watershed"
              is used.
             C) The focal lake's interlake watershed as defined here is the upstream trace of the focal lake with 10ha+
             lake outlets acting as barriers that stop upstream tracing.
@@ -646,25 +551,29 @@ class NHDNetwork:
             of the comparison point.
 
         Definition of erasable networks:
-            A) Isolated networks are always erasable in their entirety. (This is true whether they geometrically overlap the output of
-            step 2 above, or not, as the NHDNetwork tools cannot test their position since there is no shared flow.
+            A) Isolated lake catchments are always erasable in their entirety. (This is true whether they geometrically
+            overlap the output of step 2 above, or not, as the NHDNetwork tools cannot test their position since there
+            is no shared flow.
             There is categorically no consequence to "erasing" additional 10ha+ isolated catchments.)
-            B) Closed lake networks may be partially or entirely erasable only if they are not downstream of the focal lake.
-            Only the portions of closed lake networks that are off the main network will be erasable.
-            C) Drainage lake networks for which the outlet is upstream of the focal lake may be partially or entirely erasable.
-            D) If closed networks (B) or upstream drainage networks (C) do not intersect any flow included in the focal
-            lake's interlake watershed (the upstream trace using 10ha+ outlets as barriers), they shall be entirely
-            erasable.
-            E) Networks shall be partially erasable if they intersect any flow from the interlake watershed of the
-            focal lake. The erasable portion shall include any flow that is NOT in the interlake watershed of the focal
-            lake (it may be either in the complete network watershed only, or off-network).
+            B) Flow networks assigned to a terminal lake outlet may be partially or entirely erasable only if they are
+            not downstream of the focal lake.
+            C) Drainage lake networks for which the outlet is upstream of the focal lake may be partially or entirely
+             erasable.
+            D) If flow networks assigned to terminal lake outlets (B) or flow networks assigned to eligible drainage
+             lake outlets (C) do not intersect any flow included in the focal lake's interlake watershed (the upstream
+             trace using 10ha+ outlets as barriers), they shall be entirely erasable.
+            E) Eligible flow networks (B & C) shall be partially erasable if they intersect any flow from the interlake
+             watershed of the focal lake. The erasable portion shall include any flow that is NOT in the interlake
+              watershed of the focal lake (it may be either in the complete network watershed only, or off-network).
         4) As a consequence of the definition above, the following lake networks will not be erasable:
-            A) Lake networks associated with lakes < 10ha.
-            B) Lake networks that include the focal lake as an upstream lake. That is, it is not permitted to erase the
-             entire focal lake's watershed from itself.
-            C) Lake networks that are downstream of a divergence also flowing to the focal lake that contain ANY flow
-            that does not also proceed to the focal lake will be divided into an erasable and non-erasable portion. The
+            A) Lake flow networks associated with lakes < 10ha.
+            B) Lake flow networks that include the focal lake as an upstream lake. That is, it is not permitted to erase
+             the entire focal lake's watershed from itself.
+            C) Lake networks that include regions downstream of a divergence also flowing to the focal lake that contain
+             ANY flow that does not also proceed to the focal lake will be divided into an erasable and non-erasable
+             portion. (i.e. only the portion of a terminal lake network that flows nowhere else will be erased). The
             non-erasable portion is all of the flow that is also upstream of the focal lake.
+
 
         :return:
         """
@@ -692,10 +601,10 @@ class NHDNetwork:
         tenha_nets_full = {k:set(v) for k, v in self.trace_up_from_waterbody_starts().items()}
 
         tenha_isolated = {k:v for k, v in tenha_nets_full.items() if tenha_conn[k] == 'Isolated'}
-        tenha_closed_entire = {k:v for k, v in tenha_nets_full.items() if tenha_conn[k] in ('Closed', 'ClosedLk')}
-        # only portions of closed networks that are off the main network will be erasable
+        tenha_terminal_entire = {k:v for k, v in tenha_nets_full.items() if tenha_conn[k] in ('Terminal', 'TerminalLk')}
+        # only portions of terminal networks that are off the main network will be erasable
         on_network = set(self.trace_up_from_hu4_outlets())
-        tenha_closed = {k:v.difference(on_network) for k, v in tenha_closed_entire.items()}
+        tenha_terminal = {k:v.difference(on_network) for k, v in tenha_terminal_entire.items()}
         tenha_drainage = {k:v for k, v in tenha_nets_full.items()
                           if tenha_conn[k] in ('Headwater', 'Drainage', 'DrainageLk')}
 
@@ -714,13 +623,13 @@ class NHDNetwork:
                 erasable = set()
 
             else:
-                # get qualifying closed lakes, those not downstream of focal lake
-                closed_tenha_eligible = {k:v for k, v in tenha_closed.items() if k not in focal_downstream}
+                # get qualifying terminal lakes, those not downstream of focal lake
+                terminal_tenha_eligible= {k:v for k, v in .items() if k not in focal_downstream}
                 # get qualifying drainage lakes, those with outlet of network is upstream of focal_lake
                 tenha_drainage_eligible = {k:v for k, v in tenha_drainage.items() if k in focal_upstream}
 
                 # now that we screened for eligibility, merge dicts and treat the same in the upcoming tests
-                other_tenha_eligible = closed_tenha_eligible
+                other_tenha_eligible = terminal_tenha_eligible
                 other_tenha_eligible.update(tenha_drainage_eligible)
 
                 # test for complete or partial erasure per D and E in docstring
@@ -930,9 +839,9 @@ class NHDNetwork:
             else: # has upstream connectivity
                 if len(nonself_trace_down) == 0: # no downstream connectivity
                     if tenha_upstream:
-                        connclass = 'ClosedLk'
+                        connclass = 'TerminalLk'
                     else:
-                        connclass = 'Closed'
+                        connclass = 'Terminal'
                 else: # has downstream connectivity (and upstream)
                     if tenha_upstream:
                         connclass = 'DrainageLk'

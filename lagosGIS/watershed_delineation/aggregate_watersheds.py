@@ -69,8 +69,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     waterbody_holeless = DM.EliminatePolygonPart(waterbody_mem, temp_waterbodies,
                                                  'PERCENT', part_area_percent='99')
     DM.AddIndex(waterbody_holeless, 'Permanent_Identifier', 'permid_idx')
-    waterbody_lyr1 = DM.MakeFeatureLayer(waterbody_holeless) # no "interactive" selections
-    waterbody_lyr2 = DM.MakeFeatureLayer(waterbody_holeless)
+    waterbody_lyr = DM.MakeFeatureLayer(waterbody_holeless)
 
     # watersheds copy
     temp_gdb_watersheds_path = os.path.join(temp_gdb, 'watersheds_simple')
@@ -106,6 +105,10 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     arcpy.env.overwriteOutput = True
     arcpy.SetLogHistory(False)
     for lake_id in matching_ids:
+        # *print updates roughly every 5 minutes
+        counter += 1
+        if counter % 250 == 0:
+            print("{} of {} lakes completed...".format(counter, len(matching_ids)))
 
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
@@ -120,11 +123,6 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             single_catchment_ids.append(lake_id)
 
         else:
-            # *print updates roughly every 5 minutes
-            counter += 1
-            if counter % 250 == 0:
-                print("{} of {} lakes completed...".format(counter, len(matching_ids)))
-
             # Loop Step 3: Select catchments with their Permanent_Identifier in the lake's upstream network trace.
             watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                                for id in trace_permids]))
@@ -136,15 +134,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
             # Loop Step 5: Erase the lake from its own shed as well as any lakes along edges (not contained ones).
             this_lake_query = "Permanent_Identifier = '{}'".format(lake_id)
-
-            # get lakes to erase
-            # neighbor lakes...
-            DM.SelectLayerByLocation(waterbody_lyr2, 'CROSSED_BY_THE_OUTLINE_OF', no_holes)
-            # ...that touch the watershed but aren't inside of it
-            DM.SelectLayerByLocation(watersheds_lyr2, 'HAVE_THEIR_CENTER_IN', no_holes, 'REMOVE_FROM_SELECTION')
-            # and also this lake should be erased from its own shed
-            DM.SelectLayerByAttribute(waterbody_lyr2, 'ADD_TO_SELECTION', this_lake_query)
-            lakeless_watershed = arcpy.Erase_analysis(no_holes, waterbody_lyr2, 'lakeless_watershed')
+            DM.SelectLayerByAttribute(waterbody_lyr, 'NEW_SELECTION', this_lake_query)
+            lakeless_watershed = arcpy.Erase_analysis(no_holes, waterbody_lyr, 'lakeless_watershed')
 
             # add identifier
             DM.AddField(lakeless_watershed, 'Permanent_Identifier', 'TEXT', field_length=40)
@@ -204,7 +195,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     if single_catchment_ids:
         waterbodies_query = 'Permanent_Identifier IN ({})'.format(
             ','.join(['\'{}\''.format(id) for id in single_catchment_ids]))
-        these_lakes = AN.Select(waterbody_lyr1, 'these_lakes', waterbodies_query)
+        these_lakes = AN.Select(waterbody_lyr, 'these_lakes', waterbodies_query)
         watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                            for id in single_catchment_ids]))
         these_watersheds = AN.Select(watersheds_simple, 'these_watersheds', watersheds_query)
@@ -223,11 +214,11 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         islands_holeless = DM.EliminatePolygonPart(islands, 'islands_holeless', 'PERCENT', part_area_percent='99')
         islands_lyr = DM.MakeFeatureLayer(islands_holeless, 'islands_lyr')
         # select those filled lakes that are entirely within the island polygons and process their sheds.
-        DM.SelectLayerByLocation(waterbody_lyr2, 'COMPLETELY_WITHIN', islands_lyr)
-        DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', waterbody_lyr2)
+        DM.SelectLayerByLocation(waterbody_lyr, 'COMPLETELY_WITHIN', islands_lyr)
+        DM.SelectLayerByLocation(watersheds_lyr2, 'INTERSECT', waterbody_lyr)
         # get waterbody catchments only (no island stream catchments
         DM.SelectLayerByAttribute(watersheds_lyr2, 'SUBSET_SELECTION', watersheds_query)
-        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr2, 'island_sheds')  # SELECTION ON both
+        island_sheds = AN.Erase(watersheds_lyr2, waterbody_lyr, 'island_sheds')  # SELECTION ON both
         DM.Append(island_sheds, merged_fc, 'NO_TEST')
         for item in [islands, islands_holeless, islands_lyr, island_sheds]:
             DM.Delete(item)
@@ -252,7 +243,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         pass
 
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
-    for item in [waterbody_lyr1, waterbody_lyr2, watersheds_lyr1, watersheds_lyr2,
+    for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
                  hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
                  merged_fc, refined]:
         DM.Delete(item)

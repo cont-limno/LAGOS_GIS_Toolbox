@@ -55,7 +55,12 @@ def make_catseed(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes
 
     # Make a shapefile from NHDFlowline and project to EPSG 102039
     # 428 = pipeline, 336 = canal; flow direction must be initialized--matches NHDPlus rules pretty well
-    flowline_eligible_query = 'FType NOT IN (428,336) OR (FType = 336 and FlowDir = 1)'
+    flowline_type_query = '(FType NOT IN (428,336) OR (FType = 336 and FlowDir = 1))'
+
+    # prohibit artificial paths in eligible lakes from getting seeds as that will generate small problem catchments
+    flowline_nolakes_query = 'WBArea_Permanent_Identifier NOT IN ({})'.format(
+        ','.join(['\'{}\''.format(id) for id in this_gdb_wbs]))
+    flowline_eligible_query = '{} and {}'.format(flowline_type_query, flowline_nolakes_query)
     eligible_flowlines = arcpy.Select_analysis(flowline, 'eligible_flowlines', flowline_eligible_query)
 
     # Add field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
@@ -71,7 +76,6 @@ def make_catseed(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes
     with arcpy.da.UpdateCursor(eligible_flowlines, ['Permanent_Identifier', 'GridCode']) as u_cursor:
         for row in u_cursor:
             u_cursor.updateRow((row[0], permid_grid[row[0]]))
-
 
     # these must be saved as tifs for the mosiac nodata values to work with the watersheds tool
     flowline_raster = os.path.join(pour_dir, "flowline_raster.tif")

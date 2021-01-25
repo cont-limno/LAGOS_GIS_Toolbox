@@ -136,9 +136,17 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
             # Loop Step 5: Erase the lake from its own shed as well as any lakes along edges (not contained ones).
             this_lake_query = "Permanent_Identifier = '{}'".format(lake_id)
-            DM.SelectLayerByLocation(waterbody_lyr2, 'CROSSED_BY_THE_OUTLINE_OF', no_holes) # neighbor lakes
+
+            # get lakes to erase
+            # neighbor lakes...
+            DM.SelectLayerByLocation(waterbody_lyr2, 'CROSSED_BY_THE_OUTLINE_OF', no_holes)
+            # ...that touch the watershed but aren't inside of it
+            DM.SelectLayerByLocation(watersheds_lyr2, 'HAVE_THEIR_CENTER_IN', no_holes, 'REMOVE_FROM_SELECTION')
+            # and also this lake should be erased from its own shed
             DM.SelectLayerByAttribute(waterbody_lyr2, 'ADD_TO_SELECTION', this_lake_query)
             lakeless_watershed = arcpy.Erase_analysis(no_holes, waterbody_lyr2, 'lakeless_watershed')
+
+            # add identifier
             DM.AddField(lakeless_watershed, 'Permanent_Identifier', 'TEXT', field_length=40)
             with arcpy.da.UpdateCursor(lakeless_watershed, 'Permanent_Identifier') as u_cursor:
                 for row in u_cursor:

@@ -624,7 +624,7 @@ class NHDNetwork:
 
             else:
                 # get qualifying terminal lakes, those not downstream of focal lake
-                terminal_tenha_eligible= {k:v for k, v in .items() if k not in focal_downstream}
+                terminal_tenha_eligible= {k:v for k, v in tenha_terminal.items() if k not in focal_downstream}
                 # get qualifying drainage lakes, those with outlet of network is upstream of focal_lake
                 tenha_drainage_eligible = {k:v for k, v in tenha_drainage.items() if k in focal_upstream}
 

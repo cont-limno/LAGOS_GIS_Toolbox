@@ -122,10 +122,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
-
         if len(trace_permids) <= 2:  # headwater lakes have trace length = 2 (lake and flowline)
             single_catchment_ids.append(lake_id)
-
         else:
             # Loop Step 2: Select catchments with their Permanent_Identifier in the lake's upstream network trace.
             watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)

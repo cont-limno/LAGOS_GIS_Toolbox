@@ -11,7 +11,7 @@ from arcpy import env
 from NHDNetwork import NHDNetwork
 
 
-def burn_streams(subregion_ned, nhd_gdb, burnt_out,
+def burn_streams_and_sinks(subregion_ned, nhd_gdb, burnt_out,
                 projection = arcpy.SpatialReference(102039)):
     """
     Enforce stream linework in hydrologic conditioning of DEM and add walls at the HU12 boundaries.

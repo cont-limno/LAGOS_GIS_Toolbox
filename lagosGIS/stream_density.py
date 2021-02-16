@@ -12,7 +12,9 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
     # TODO: Add projection check
 
     # Perform identity analysis to join fields and crack lines at polygon boundaries
+    arcpy.AddMessage("Cracking lines...")
     lines_identity = arcpy.Identity_analysis(lines_fc, zones_fc, 'lines_identity')
+    arcpy.AddMessage("Summarizing results...")
     arcpy.AddField_management(lines_identity, 'length_m', 'DOUBLE')
     arcpy.CalculateField_management(lines_identity, 'length_m', '!shape.length!', 'PYTHON')
 

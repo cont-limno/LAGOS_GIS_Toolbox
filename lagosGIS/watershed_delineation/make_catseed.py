@@ -56,7 +56,6 @@ def make_catseed(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes
     # Make a shapefile from NHDFlowline and project to EPSG 102039
     # 428 = pipeline, 336 = canal; flow direction must be initialized--matches NHDPlus rules pretty well
     flowline_type_query = '(FType NOT IN (428,336) OR (FType = 336 and FlowDir = 1))'
-
     # prohibit artificial paths in eligible lakes from getting seeds as that will generate small problem catchments
     flowline_nolakes_query = 'WBArea_Permanent_Identifier NOT IN ({})'.format(
         ','.join(['\'{}\''.format(id) for id in this_gdb_wbs]))
@@ -64,8 +63,6 @@ def make_catseed(nhd_gdb, subregion_dem, out_dir, gridcode_table, eligible_lakes
     eligible_flowlines = arcpy.Select_analysis(flowline, 'eligible_flowlines', flowline_eligible_query)
 
     # Add field to flowline_albers and waterbody_albers then calculate unique identifiers for features.
-##    # Flowlines get positive values, waterbodies get negative
-##    # this will help us to know which is which later
     # Calculate lakes pour_id first, then add maximum to streams pour_ids to get unique ids for all
     arcpy.AddField_management(eligible_lakes_copy, "GridCode", "LONG")
     with arcpy.da.UpdateCursor(eligible_lakes_copy, ['Permanent_Identifier', 'GridCode']) as u_cursor:

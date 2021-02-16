@@ -13,13 +13,12 @@ from arcpy import analysis as AN
 import arcpy
 import lagosGIS
 from lagosGIS.NHDNetwork import NHDNetwork
-from burn_dems import burn_streams_and_sinks
 
 __all__ = [
-    "burn_streams_and_sinks",
     "add_waterbody_nhdpid",
     "update_grid_codes",
     "add_lake_seeds",
+    "revise_hydrodem",
     "flow_direction",
     "delineate_catchments"
 ]
@@ -185,6 +184,85 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
         arcpy.CheckInExtension('Spatial')
 
     return output_raster
+
+
+def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catseed_raster, out_raster):
+    """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them.
+
+    :param nhdplus_gdb: The geodatabase for the subregion getting the DEM updated
+    :param hydrodem_raster: The hydro-conditioned DEM to be updated
+    :param filldepth_raster: The fill depth raster provided by NHD Plus
+    :param lagos_catseed_raster: The modified "catseed" raster created with the Add Lake Seeds tool
+    :param out_raster: The output raster
+    :return:
+    """
+
+    arcpy.env.workspace = 'C:/Users/smithn78/Documents/ArcGIS/debug.gdb'
+    # per suggestion by Price here
+    # https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
+    arcpy.env.scratchWorkspace = os.path.dirname(os.path.dirname(os.path.dirname(lagos_catseed_raster)))
+    arcpy.env.overwriteOutput = True
+    arcpy.env.snapRaster = hydrodem_raster
+    projection = arcpy.SpatialReference(5070)
+    arcpy.env.outputCoordinateSystem = projection
+    arcpy.CheckOutExtension('Spatial')
+
+    # get back to the burned DEM before filling
+    filldepth = arcpy.sa.Reclassify(arcpy.sa.Raster(filldepth_raster), "Value", "1 499971 1; NoData 0")
+    burned_dem = arcpy.sa.Raster(hydrodem_raster) - filldepth
+
+    # identify valid sinks
+    network = NHDNetwork(nhdplus_gdb)
+    waterbody_ids = network.define_lakes(strict_minsize=False, force_lagos=True).keys()
+    arcpy.AddMessage("Identifying sink lakes...")
+    lake_conn_classes = {id:network.classify_waterbody_connectivity(id) for id in waterbody_ids}
+    sink_lake_ids = [k for k,v in lake_conn_classes.items() if v in ('Isolated', 'TerminalLk', 'Terminal')]
+    sink_lakes_query = 'Permanent_Identifier IN ({})'.format(
+        ','.join(['\'{}\''.format(id) for id in sink_lake_ids]))
+    sink_lakes = arcpy.Select_analysis(network.waterbody, 'sink_lakes', sink_lakes_query)
+
+    # protect these sink lakes in DEM
+    sink_centroids = arcpy.FeatureToPoint_management(sink_lakes, 'sink_centroids', 'INSIDE')
+    sinks_raster0 = arcpy.PolygonToRaster_conversion(sink_lakes, "OBJECTID", "sinks_raster0", cellsize=10)
+    centroids_raster0 = arcpy.PointToRaster_conversion(sink_centroids, "OBJECTID", "centroids_raster0", cellsize=10)
+    sinks_raster = arcpy.sa.Reclassify(arcpy.sa.Raster(sinks_raster0) > 0, "Value", "1 1; NoData 0")
+    centroids_raster = arcpy.sa.Reclassify(arcpy.sa.Raster(centroids_raster0) > 0, "Value", "1 1; NoData 0")
+
+
+    # burn in the sink lakes and add the nodata protection in the center
+    arcpy.AddMessage("Burning sinks...")
+    areal_drop = 10000 # in cm, so 100m elevation drop
+    burnt = burned_dem - (areal_drop * sinks_raster)
+    protected = arcpy.sa.SetNull(centroids_raster == 1, burnt)
+
+    # remove all fill-protected lakes that are NOT also in our modified pour points--these are the erroneous sinks
+    # use raster calculator to fill nodata with min value that surrounds it (lake is flattish)
+    dem_null = arcpy.sa.IsNull(protected)
+    lagos_null = arcpy.sa.IsNull(lagos_catseed_raster)
+    replacement = arcpy.sa.FocalStatistics(protected, statistics_type='MINIMUM')  # assign lake elevation value
+    result = arcpy.sa.Con((dem_null == 1) & (lagos_null == 1), replacement, protected)
+
+    # save the final result
+    result.save(out_raster)
+
+    # cleanup
+    arcpy.CheckInExtension('Spatial')
+    arcpy.env.overwriteOutput = False
+
+def make_hydrodem(burned_raster, hydrodem_raster_out):
+    """
+    Remove pits from hydro-enforced raster and fill using TauDEM tools.
+    :param burned_raster: Output of Burn Streams or Fix HydroDEM
+    :param hydrodem_raster_out: The final "hydrodem" raster output to save
+    :return:
+    """
+    arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(burned_raster, hydrodem_raster_out)
+    print(pitremove_cmd)
+    try:
+        sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
+    except:
+        arcpy.AddMessage("Tool did not run. Check for correct installation of TauDEM tools.")
 
 def flow_direction(hydrodem_raster, flow_direction_raster_out):
     """

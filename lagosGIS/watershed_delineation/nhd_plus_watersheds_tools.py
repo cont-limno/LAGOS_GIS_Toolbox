@@ -13,7 +13,16 @@ from arcpy import analysis as AN
 import arcpy
 import lagosGIS
 from lagosGIS.NHDNetwork import NHDNetwork
+from burn_dems import burn_streams_and_sinks
 
+__all__ = [
+    "burn_streams_and_sinks",
+    "add_waterbody_nhdpid",
+    "update_grid_codes",
+    "add_lake_seeds",
+    "flow_direction",
+    "delineate_catchments"
+]
 
 def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
     """
@@ -83,9 +92,10 @@ def update_grid_codes(nhdplus_gdb, output_table):
 def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible_lakes_fc, output_raster,
                    nhdplus_waterbody_fc=''):
     """
-    Modify NHDPlus HR "catseed" raster to include lake-based pour points (seeds) for all lakes in need of watersheds.
+    Generate catchment pour points raster similar to NHDPlus HR "catseed" by using their NHDPlusBurnLineEvent layer
+    and also including lake-based pour points (seeds) for all lakes in need of watersheds.
 
-    :param str nhdplus_catseed_raster: NHDPlus HR "catseed" TIFF raster for the HU4 needing watersheds created.
+    :param str nhdplus_catseed_raster: NHDPlus HR catseed raster used to set snap raster, can also use subregion DEM
     :param str nhdplus_gdb: NHDPlus HR geodatabase for the HU4 needing watersheds created.
     :param str gridcode_table: NHDPlusID-GridCode mapping table (must contain lake seeds) that is the result of
     nhdplushr_tools.update_grid_codes()
@@ -106,17 +116,20 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
         the NHDWaterbody feature class for the NHDPlus-HR HUC4 you are trying to process.''')
 
     arcpy.env.workspace = 'in_memory'
-
     # essential environment settings for conversion to raster
     arcpy.env.snapRaster = nhdplus_catseed_raster
     arcpy.env.extent = nhdplus_catseed_raster
     arcpy.env.cellSize = nhdplus_catseed_raster
-    arcpy.env.outputCoordinateSystem = arcpy.Describe(nhdplus_catseed_raster).spatialReference
+    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(5070)
+    burnline = os.path.join(nhdplus_gdb, 'NHDPlusBurnLineEvent')
+    flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
+    pour_dir = os.path.dirname(output_raster)
 
+    # --- WATERBODY SEEDS PREP ------------------
     # add gridcodes to lakes
     nhdpid_grid = {r[0]: r[1] for r in arcpy.da.SearchCursor(gridcode_table, ['NHDPlusID', 'GridCode'])}
-    this_gdb_wbs = tuple(nhdpid_grid.keys())
-    filter_clause = 'NHDPlusID IN {}'.format(this_gdb_wbs)
+    this_gdb_ids = tuple(nhdpid_grid.keys())
+    filter_clause = 'NHDPlusID IN {}'.format(this_gdb_ids)
     eligible_lakes_copy = AN.Select(eligible_lakes_fc, 'eligible_lakes_copy', filter_clause)
     DM.AddField(eligible_lakes_copy, 'GridCode', 'LONG')
     with arcpy.da.UpdateCursor(eligible_lakes_copy, ['NHDPlusID', 'GridCode']) as u_cursor:
@@ -124,73 +137,54 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
             new_row = (row[0], nhdpid_grid[row[0]])
             u_cursor.updateRow(new_row)
 
-    # convert lakes to raster
-    lake_seeds = arcpy.PolygonToRaster_conversion(eligible_lakes_copy, 'GridCode', 'lake_seeds')
-
+    # --- VECTOR TO RASTER ------------------------
+    # these must be saved as tifs for the mosiac nodata values to work with the watersheds tool
+    lake_seeds = os.path.join(pour_dir, "lakes_raster.tif")
+    arcpy.PolygonToRaster_conversion(eligible_lakes_copy, "GridCode", lake_seeds, "", "", 10)
     combined = DM.MosaicToNewRaster([nhdplus_catseed_raster, lake_seeds], arcpy.env.workspace, 'combined',
                                     pixel_type='32_BIT_SIGNED', number_of_bands='1', mosaic_method='LAST')
     DM.BuildRasterAttributeTable(combined)
 
+    # --- MODIFY TO DROP ERROR SINK AND DANGLING FLOWLINES THROUGH LAKES
+
+    # IDENTIFY POTENTIAL DANGLING FLOWLINES
+    # Get gridcodes for Artificial Paths associated with lakes
+    def find_lakepath_gridcodes():
+        waterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
+        flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
+        lake_xwalk = {r[0]:r[1] for r in arcpy.da.SearchCursor(waterbody, ['NHDPlusID', 'Permanent_Identifier'])}
+        flowline_xwalk = {r[0]:r[1]
+                          for r in arcpy.da.SearchCursor(flowline, ['WBArea_Permanent_Identifier', 'NHDPlusID'])
+                          if r[0]}
+        result = filter(lambda x: x is not None, [nhdpid_grid.get(
+            flowline_xwalk.get(
+                lake_xwalk.get(id))) for id in this_gdb_ids]
+        )
+        return result
+    lakepath_gridcodes = find_lakepath_gridcodes()
+
+    # IDENTIFY ERRONEOUS SINKS
     # due to burn/catseed errors in NHD, we are removing all sinks marked "NHDWaterbody closed lake" (SC)
     # remove from existing raster so we don't have to duplicate their flowline processing steps
     # in regions with no error: no change, correctly indicated closed lakes would be removed but we have overwritten
     # them with our own lake poly seeds anyway.
     sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
     sinks_to_remove = [r[0] for r in arcpy.da.SearchCursor(sink, ['GridCode'], "PurpCode = 'SC'")]
-    arcpy.CheckOutExtension('Spatial')
-    if sinks_to_remove:
-        nobadsinks = arcpy.sa.SetNull(combined, combined, 'VALUE in ({})'.format(','.join(['{}'.format(id)
-                                                                                           for id in sinks_to_remove])))
-        nobadsinks.save(output_raster)
-    else:
-        DM.CopyRaster(combined, output_raster)
-    arcpy.CheckInExtension('Spatial')
+
+    # Merge flowpaths and sinks; test for whether we need to run cleaning step
+    undesirable_codes = lakepath_gridcodes + sinks_to_remove
+    gridcodes_in_raster = set([r[0] for r in arcpy.da.SearchCursor(combined, 'VALUE')])
+    removable_codes = gridcodes_in_raster.intersection(undesirable_codes)
+
+    if removable_codes:
+        arcpy.AddMessage("Modifying catseed raster to clean lake seeds...")
+        arcpy.CheckOutExtension('Spatial')
+        cleaned = arcpy.sa.SetNull(combined, combined, 'VALUE in ({})'.format(','.join(['{}'.format(id)
+                                                                                           for id in removable_codes])))
+        cleaned.save(output_raster)
+        arcpy.CheckInExtension('Spatial')
 
     return output_raster
-
-
-def fix_hydrodem(hydrodem_raster, lagos_catseed_raster, out_raster):
-    """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them.
-
-    :param hydrodem_raster: The hydro-conditioned DEM to be updated
-    :param lagos_catseed_raster: The modified "catseed" raster created with the Add Lake Seeds tool
-    :param out_raster: The output raster
-    :return:
-    """
-
-    """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them."""
-    arcpy.env.workspace = 'in_memory'
-    # per suggestion by Price here
-    # https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
-    arcpy.env.scratchWorkspace = os.path.dirname(os.path.dirname(os.path.dirname(lagos_catseed_raster)))
-    arcpy.env.overwriteOutput = True
-    arcpy.CheckOutExtension('Spatial')
-
-    # use raster calculator to fill nodata with min value that surrounds it (lake is flattish)
-    dem_null = arcpy.sa.IsNull(hydrodem_raster)
-    lagos_null = arcpy.sa.IsNull(lagos_catseed_raster)
-    replacement = arcpy.sa.FocalStatistics(hydrodem_raster, statistics_type='MINIMUM')  # assign lake elevation value
-    result = arcpy.sa.Con((dem_null == 1) & (lagos_null == 1), replacement, hydrodem_raster)
-    result.save(out_raster)
-
-    # cleanup
-    arcpy.CheckInExtension('Spatial')
-    arcpy.env.overwriteOutput = False
-
-def make_hydrodem(burned_raster, hydrodem_raster_out):
-    """
-    Remove pits from hydro-enforced raster and fill using TauDEM tools.
-    :param burned_raster: Output of Burn Streams or Fix HydroDEM
-    :param hydrodem_raster_out: The final "hydrodem" raster output to save
-    :return:
-    """
-    arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-    pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(burned_raster, hydrodem_raster_out)
-    print(pitremove_cmd)
-    try:
-        sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
-    except:
-        arcpy.AddMessage("Tool did not run. Check for correct installation of TauDEM tools.")
 
 def flow_direction(hydrodem_raster, flow_direction_raster_out):
     """
@@ -407,7 +401,6 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 #     DM.AddField(output_table, 'Lake_Permanent_Identifier', 'TEXT', field_length=40)
 #     DM.AddField(output_table, 'NHDPlusID', 'DOUBLE')
 #     DM.AddField(output_table, 'lake_higheststrahler', 'SHORT')
-#     # TODO: Eliminate lowest strahler order field, unnecessary
 #     DM.AddField(output_table, 'lake_loweststrahler', 'SHORT')
 #
 #     # set up cursor

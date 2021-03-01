@@ -353,7 +353,30 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
             onmain = 'Y' if permid in on_network else 'N'
             u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
-    output_fc = DM.CopyFeatures(dissolved, output_fc)
+    def reassign_slivers_to_lakes(catchments_fc):
+        # remove slight overlaps with neighboring lakes that are in the LAGOS population
+        waterbody_ids = nhd_network.define_lakes(strict_minsize=False, force_lagos=True).keys()
+        waterbody_query = 'Permanent_Identifier IN ({})'.format(
+            ','.join(['\'{}\''.format(id) for id in waterbody_ids]))
+        waterbody = arcpy.Select_analysis(nhd_network.waterbody, 'waterbody', waterbody_query)
+        waterbody_only = lagosGIS.select_fields(waterbody, 'waterbody_only', ['Permanent_Identifier'], convert_to_table=False)
+        union = arcpy.Union_analysis([dissolved, waterbody_only], 'union')
+
+        # move slivers in union into the lake watershed as long as they intersect the lake
+        with arcpy.da.UpdateCursor(union, ['Permanent_Identifier', 'Permanent_Identifier_1']) as cursor:
+            for row in cursor:
+                if row[1] != '': # union produces blank strings instead of nulls
+                    row[0] = row[1] # if lake_id, then use it as the catchment id (move slivers into lake catchment)
+                cursor.updateRow(row)
+
+        arcpy.DeleteField_management(union, 'Permanent_Identifier_1')
+        arcpy.DeleteField_management(union, 'FID_1')
+        reassigned = arcpy.Dissolve_management(union, 'reassigned', 'Permanent_Identifier')
+        return reassigned
+
+    reassigned_output = reassign_slivers_to_lakes(dissolved)
+    arcpy.CopyFeatures_management(reassigned_output, output_fc)
+
     return output_fc
 
 

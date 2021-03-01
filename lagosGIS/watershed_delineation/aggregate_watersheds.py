@@ -134,7 +134,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             this_watershed_holes = DM.Dissolve(selected_watersheds, 'this_watershed_holes')  # sheds has selection
             no_holes = DM.EliminatePolygonPart(this_watershed_holes, 'no_holes', 'PERCENT', part_area_percent='99.999')
 
-            # Loop Step 4: Erase the lake from its own shed as well as any lakes along edges (not contained ones).
+            # Loop Step 4: Erase the lake from its own shed
             this_lake_query = "Permanent_Identifier = '{}'".format(lake_id)
             DM.SelectLayerByAttribute(waterbody_lyr, 'NEW_SELECTION', this_lake_query)
             lakeless_watershed = arcpy.Erase_analysis(no_holes, waterbody_lyr, 'lakeless_watershed')

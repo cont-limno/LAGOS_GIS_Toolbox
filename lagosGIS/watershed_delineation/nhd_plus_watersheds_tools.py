@@ -197,13 +197,13 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     :return:
     """
 
-    arcpy.env.workspace = 'C:/Users/smithn78/Documents/ArcGIS/debug.gdb'
+    arcpy.env.workspace = 'in_memory'
     # per suggestion by Price here
     # https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
     arcpy.env.scratchWorkspace = os.path.dirname(os.path.dirname(os.path.dirname(lagos_catseed_raster)))
     arcpy.env.overwriteOutput = True
     arcpy.env.snapRaster = hydrodem_raster
-    projection = arcpy.SpatialReference(5070)
+    projection = arcpy.SpatialReference(102039)
     arcpy.env.outputCoordinateSystem = projection
     arcpy.CheckOutExtension('Spatial')
 
@@ -304,7 +304,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     nhd_network = NHDNetwork(nhdplus_gdb)
 
     # delineate watersheds with ArcGIS Watershed tool, then convert to one polygon per watershed
-    arcpy.AddMessage("Delineating watersheds...")
+    arcpy.AddMessage("Delineating catchments...")
     sheds = arcpy.sa.Watershed(flowdir_raster, catseed_raster, 'Value')
     arcpy.AddMessage("Watersheds complete.")
     sheds_poly = arcpy.RasterToPolygon_conversion(sheds, 'sheds_poly', 'NO_SIMPLIFY', 'Value')

@@ -720,7 +720,7 @@ class NHDNetwork:
             lowest_to_ids = list(to_ids.difference(next_up_flat))
             if lowest_to_ids == ['0']:
                 lowest_to_ids = self.upstream['0']
-            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id, max_depth=300)) for id in lowest_to_ids}
+            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id)) for id in lowest_to_ids}
             max_net_size = max(distinct_net_sizes.values())
             outlets = [id for id, n in distinct_net_sizes.items() if n >= .5 * max_net_size]
         self.outlets = outlets

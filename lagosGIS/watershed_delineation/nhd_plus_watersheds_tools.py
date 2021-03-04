@@ -32,6 +32,7 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
     :return: ArcGIS Result object for eligible_lakes_fc
 
     """
+    arcpy.AddMessage("Finding ids...")
     # add field first time
     if not arcpy.ListFields(eligible_lakes_fc, 'NHDPlusID'):
         DM.AddField(eligible_lakes_fc, 'NHDPlusID', 'DOUBLE')
@@ -39,7 +40,7 @@ def add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc):
     # get nhdpids
     wbplus_permid_nhdpid = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhdplus_waterbody_fc,
                                                                       ['Permanent_Identifier', 'NHDPlusID'])}
-
+    arcpy.AddMessage("Transferring ids...")
     # transfer nhdpids to the other lakes fc
     with arcpy.da.UpdateCursor(eligible_lakes_fc, ['Permanent_Identifier', 'NHDPlusID']) as u_cursor:
         for row in u_cursor:
@@ -88,11 +89,15 @@ def update_grid_codes(nhdplus_gdb, output_table):
     return output_table
 
 
-def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible_lakes_fc, output_raster,
-                   nhdplus_waterbody_fc=''):
+def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible_lakes_fc, output_raster):
     """
-    Generate catchment pour points raster similar to NHDPlus HR "catseed" by using their NHDPlusBurnLineEvent layer
-    and also including lake-based pour points (seeds) for all lakes in need of watersheds.
+    Modify NHDPlus catseed raster to
+    1) include all LAGOS lakes as pour points,
+    2) remove pour points associated with
+     artificial path flowlines going through those lakes (most are covered automatically but some narrow lakes are
+     a problem that needs specific handling),
+    3) remove any waterbodies <1ha that were erroneously permitted as sinks in NHDPlus (those with "NHDWaterbody closed
+    lake" as the Purpose code.
 
     :param str nhdplus_catseed_raster: NHDPlus HR catseed raster used to set snap raster, can also use subregion DEM
     :param str nhdplus_gdb: NHDPlus HR geodatabase for the HU4 needing watersheds created.
@@ -100,15 +105,13 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     nhdplushr_tools.update_grid_codes()
     :param str eligible_lakes_fc: Lake feature class containing the lake polygons that will be used as pour points.
     :param str output_raster: Output pour points/seed raster for use in delineating watersheds.
-    :param str nhdplus_waterbody_fc: (Optional) If NHDPlusID is not already included in eligible_lakes_fc, specify
-    an NHDPlus HR NHDWaterbody feature class to transfer NHDPlusID from
     :return: Path for output_raster
 
     """
     # not much of a test, if the field exists but isn't populated, this tool will run with no IDs populated
     if not arcpy.ListFields(eligible_lakes_fc, 'NHDPlusID'):
         try:
-            add_waterbody_nhdpid(nhdplus_waterbody_fc, eligible_lakes_fc)
+            add_waterbody_nhdpid(os.path.join(nhdplus_gdb, 'NHDWaterbody'), eligible_lakes_fc)
         except:
             raise Exception('''
         No NHDPlusID field found in eligible_lakes_fc. Please supply optional nhdplus_waterbody_fc argument using
@@ -120,8 +123,6 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     arcpy.env.extent = nhdplus_catseed_raster
     arcpy.env.cellSize = nhdplus_catseed_raster
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(5070)
-    burnline = os.path.join(nhdplus_gdb, 'NHDPlusBurnLineEvent')
-    flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
     pour_dir = os.path.dirname(output_raster)
 
     # --- WATERBODY SEEDS PREP ------------------
@@ -187,7 +188,9 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
 
 
 def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catseed_raster, out_raster):
-    """Fills interior NoData values in lakes removed from pour points, so that TauDEM pit remove will fill them.
+    """Uses the NHDPlus hydrodem and filldepth to reconstitute the un-filled burned DEM, and then synchronizes
+    the protected lake regions (those with NoData in center to prevent filling in TauDEM Pit Remove) with the
+    catseed raster as modified in add_lake_seeds.
 
     :param nhdplus_gdb: The geodatabase for the subregion getting the DEM updated
     :param hydrodem_raster: The hydro-conditioned DEM to be updated

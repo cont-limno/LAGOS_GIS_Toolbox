@@ -96,7 +96,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     # Establish output fc
     merged_sheds = DM.CreateFeatureclass('in_memory', 'merged_sheds', 'POLYGON', spatial_reference=albers)
     DM.AddField(merged_sheds, 'Permanent_Identifier', 'TEXT', field_length=40)
-    sheds_cursor = arcpy.InsertCursor(merged_sheds, ['Permanent_Identifier', 'SHAPE@'])
+    sheds_cursor = arcpy.da.InsertCursor(merged_sheds, ['Permanent_Identifier', 'SHAPE@'])
 
     # Looping watersheds processing
     # The specific recipe for speed in this loop (about 0.8 seconds per loop/drainage lake):

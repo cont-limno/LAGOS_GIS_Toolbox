@@ -173,7 +173,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
             # Loop Step 6: Save current watershed to merged results feature class.
             this_watershed_geom = DM.CopyFeatures(this_watershed, arcpy.Geometry())
-            sheds_cursor.insertRow([lake_id, this_watershed_geom])
+            sheds_cursor.insertRow([lake_id, this_watershed_geom[0]])
 
     arcpy.env.overwriteOutput = False
     arcpy.SetLogHistory(True)

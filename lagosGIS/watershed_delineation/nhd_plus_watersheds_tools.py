@@ -204,7 +204,7 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     # per suggestion by Price here
     # https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
     arcpy.env.scratchWorkspace = os.path.dirname(lagos_catseed_raster)
-    arcpy.env.workspace = arcpy.env.scratchWorkspace
+    arcpy.env.workspace = 'in_memory'
     arcpy.env.overwriteOutput = True
     arcpy.env.snapRaster = filldepth_raster
     projection = arcpy.SpatialReference(5070)
@@ -217,7 +217,7 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
 
     burned_dem = arcpy.sa.Raster(hydrodem_raster) - filldepth
 
-    arcpy.env.workspace = 'in_memory'
+
     # identify valid sinks
     network = NHDNetwork(nhdplus_gdb)
     waterbody_ids = network.define_lakes(strict_minsize=False, force_lagos=True).keys()

@@ -118,6 +118,7 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
         the NHDWaterbody feature class for the NHDPlus-HR HUC4 you are trying to process.''')
 
     arcpy.env.workspace = 'in_memory'
+    arcpy.env.scratchWorkspace = os.path.dirname(output_raster)
     # essential environment settings for conversion to raster
     arcpy.env.snapRaster = nhdplus_catseed_raster
     arcpy.env.extent = nhdplus_catseed_raster
@@ -200,20 +201,23 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     :return:
     """
 
-    arcpy.env.workspace = 'in_memory'
     # per suggestion by Price here
     # https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
-    arcpy.env.scratchWorkspace = os.path.dirname(os.path.dirname(os.path.dirname(lagos_catseed_raster)))
+    arcpy.env.scratchWorkspace = os.path.dirname(lagos_catseed_raster)
+    arcpy.env.workspace = arcpy.env.scratchWorkspace
     arcpy.env.overwriteOutput = True
-    arcpy.env.snapRaster = hydrodem_raster
-    projection = arcpy.SpatialReference(102039)
+    arcpy.env.snapRaster = filldepth_raster
+    projection = arcpy.SpatialReference(5070)
     arcpy.env.outputCoordinateSystem = projection
     arcpy.CheckOutExtension('Spatial')
 
     # get back to the burned DEM before filling
-    filldepth = arcpy.sa.Reclassify(arcpy.sa.Raster(filldepth_raster), "Value", "1 499971 1; NoData 0")
+    filldepth_raster = arcpy.sa.Raster(filldepth_raster)
+    filldepth = arcpy.sa.Con(arcpy.sa.IsNull(filldepth_raster), 0, filldepth_raster)
+
     burned_dem = arcpy.sa.Raster(hydrodem_raster) - filldepth
 
+    arcpy.env.workspace = 'in_memory'
     # identify valid sinks
     network = NHDNetwork(nhdplus_gdb)
     waterbody_ids = network.define_lakes(strict_minsize=False, force_lagos=True).keys()
@@ -228,8 +232,10 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     sink_centroids = arcpy.FeatureToPoint_management(sink_lakes, 'sink_centroids', 'INSIDE')
     sinks_raster0 = arcpy.PolygonToRaster_conversion(sink_lakes, "OBJECTID", "sinks_raster0", cellsize=10)
     centroids_raster0 = arcpy.PointToRaster_conversion(sink_centroids, "OBJECTID", "centroids_raster0", cellsize=10)
-    sinks_raster = arcpy.sa.Reclassify(arcpy.sa.Raster(sinks_raster0) > 0, "Value", "1 1; NoData 0")
-    centroids_raster = arcpy.sa.Reclassify(arcpy.sa.Raster(centroids_raster0) > 0, "Value", "1 1; NoData 0")
+    sinks = arcpy.sa.Raster(sinks_raster0) > 0
+    centroids = arcpy.sa.Raster(centroids_raster0) > 0
+    sinks_raster = arcpy.sa.Con(arcpy.sa.IsNull(sinks), 0, sinks)
+    centroids_raster = arcpy.sa.Con(arcpy.sa.IsNull(centroids), 0, centroids)
 
 
     # burn in the sink lakes and add the nodata protection in the center

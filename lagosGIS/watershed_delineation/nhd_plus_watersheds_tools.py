@@ -206,17 +206,16 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     arcpy.env.scratchWorkspace = os.path.dirname(lagos_catseed_raster)
     arcpy.env.workspace = 'in_memory'
     arcpy.env.overwriteOutput = True
-    arcpy.env.snapRaster = filldepth_raster
-    projection = arcpy.SpatialReference(5070)
+    arcpy.env.snapRaster = hydrodem_raster
+    arcpy.env.extent = hydrodem_raster
+    projection = arcpy.SpatialReference(102039)
     arcpy.env.outputCoordinateSystem = projection
     arcpy.CheckOutExtension('Spatial')
 
     # get back to the burned DEM before filling
-    filldepth_raster = arcpy.sa.Raster(filldepth_raster)
-    filldepth = arcpy.sa.Con(arcpy.sa.IsNull(filldepth_raster), 0, filldepth_raster)
-
+    filldepth_raster1 = arcpy.sa.Raster(filldepth_raster)
+    filldepth = arcpy.sa.Con(arcpy.sa.IsNull(filldepth_raster1), 0, filldepth_raster1)
     burned_dem = arcpy.sa.Raster(hydrodem_raster) - filldepth
-
 
     # identify valid sinks
     network = NHDNetwork(nhdplus_gdb)
@@ -227,7 +226,6 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     sink_lakes_query = 'Permanent_Identifier IN ({})'.format(
         ','.join(['\'{}\''.format(id) for id in sink_lake_ids]))
     sink_lakes = arcpy.Select_analysis(network.waterbody, 'sink_lakes', sink_lakes_query)
-
     # protect these sink lakes in DEM
     sink_centroids = arcpy.FeatureToPoint_management(sink_lakes, 'sink_centroids', 'INSIDE')
     sinks_raster0 = arcpy.PolygonToRaster_conversion(sink_lakes, "OBJECTID", "sinks_raster0", cellsize=10)
@@ -284,11 +282,6 @@ def flow_direction(hydrodem_raster, flow_direction_raster_out):
     arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
     flow_dir = arcpy.sa.FlowDirection(hydrodem_raster)
     # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
-    # TODO: For non-hr, clip to HU4 instead
-    print(arcpy.Describe(flow_dir).spatialReference.name)
-    print(arcpy.Describe(hydrodem_raster).spatialReference.name)
-    print(arcpy.Describe(flow_dir).extent)
-    print(arcpy.Describe(hydrodem_raster).extent)
     flow_dir_clipped = arcpy.sa.Con(arcpy.sa.IsNull(hydrodem_raster), hydrodem_raster, flow_dir)
     flow_dir_clipped.save(flow_direction_raster_out)
     arcpy.CheckInExtension('Spatial')
@@ -383,6 +376,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         reassigned = arcpy.Dissolve_management(union, 'reassigned', 'Permanent_Identifier')
         return reassigned
 
+    arcpy.AddMessage("Reassigning slivers...")
     reassigned_output = reassign_slivers_to_lakes(dissolved)
     arcpy.CopyFeatures_management(reassigned_output, output_fc)
 

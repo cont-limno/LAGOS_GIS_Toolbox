@@ -144,30 +144,6 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
                                     pixel_type='32_BIT_SIGNED', number_of_bands='1', mosaic_method='LAST')
     DM.BuildRasterAttributeTable(combined)
 
-    # # --- MODIFY TO DROP ERROR SINK AND DANGLING FLOWLINES THROUGH LAKES
-    #
-    # # IDENTIFY POTENTIAL DANGLING FLOWLINES
-    # # Get gridcodes for Artificial Paths associated with lakes
-    # def find_lakepath_gridcodes():
-    #     waterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
-    #     # Make 2 dicts, lake_xwalk, flowline_xwalk,
-    #     flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
-    #     lake_xwalk = {r[0]:r[1] for r in arcpy.da.SearchCursor(waterbody, ['NHDPlusID', 'Permanent_Identifier'])}
-    #     flowline_xwalk = defaultdict(list)
-    #     with arcpy.da.SearchCursor(flowline, ['NHDPlusID', 'WBArea_Permanent_Identifier']) as cursor:
-    #         for row in cursor:
-    #             if row[1]:
-    #                 flowline_xwalk[row[1]].append(row[0])
-    #     # fetch NHDPID for flowlines in lakes and convert to gridcode
-    #     flowline_result = filter(lambda x: x is not None,
-    #                              [flowline_xwalk.get(lake_xwalk.get(id)) for id in this_gdb_ids])
-    #     result = [nhdpid_grid.get(id) for id_list in flowline_result for id in id_list]
-    #     return result
-    # lakepath_gridcodes = find_lakepath_gridcodes()
-
-
-
-
     # IDENTIFY ERRONEOUS SINKS
     # due to burn/catseed errors in NHD, we are removing all sinks marked "NHDWaterbody closed lake" (SC)
     # remove from existing raster so we don't have to duplicate their flowline processing steps
@@ -219,7 +195,7 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
 
     # identify valid sinks
     network = NHDNetwork(nhdplus_gdb)
-    waterbody_ids = network.define_lakes(strict_minsize=False, force_lagos=True).keys()
+    waterbody_ids = network.define_lakes(strict_minsize=True, force_lagos=True).keys()
     arcpy.AddMessage("Identifying sink lakes...")
     lake_conn_classes = {id:network.classify_waterbody_connectivity(id) for id in waterbody_ids}
     sink_lake_ids = [k for k,v in lake_conn_classes.items() if v in ('Isolated', 'TerminalLk', 'Terminal')]
@@ -231,8 +207,10 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     sink_centroids = arcpy.FeatureToPoint_management(sink_lakes, 'sink_centroids', 'INSIDE')
     sinks_raster0 = arcpy.PolygonToRaster_conversion(sink_lakes, "OBJECTID", "sinks_raster0", cellsize=10)
     centroids_raster0 = arcpy.PointToRaster_conversion(sink_centroids, "OBJECTID", "centroids_raster0", cellsize=10)
-    sinks_raster = Con(IsNull(Raster(sinks_raster0)), 0, 1)
-    centroids_raster = Con(IsNull(Raster(centroids_raster0)), 0, 1)
+
+    # only permit sinks that are in the catseed raster, i.e. they are in the LAGOS lake population
+    sinks_raster = (IsNull(Raster(sinks_raster0)) == 0) & (IsNull(lagos_catseed_raster) == 0)
+    centroids_raster = ((IsNull(Raster(centroids_raster0)) == 0) & sinks_raster)
 
     # burn in the sink lakes and add the nodata protection in the center
     arcpy.AddMessage("Burning sinks...")

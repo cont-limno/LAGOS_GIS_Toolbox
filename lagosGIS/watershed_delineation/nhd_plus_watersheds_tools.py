@@ -10,6 +10,7 @@ import subprocess as sp
 from collections import defaultdict
 from arcpy import management as DM
 from arcpy import analysis as AN
+from arcpy.sa import *
 import arcpy
 import lagosGIS
 from lagosGIS.NHDNetwork import NHDNetwork
@@ -92,11 +93,8 @@ def update_grid_codes(nhdplus_gdb, output_table):
 def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible_lakes_fc, output_raster):
     """
     Modify NHDPlus catseed raster to
-    1) include all LAGOS lakes as pour points,
-    2) remove pour points associated with
-     artificial path flowlines going through those lakes (most are covered automatically but some narrow lakes are
-     a problem that needs specific handling),
-    3) remove any waterbodies <1ha that were erroneously permitted as sinks in NHDPlus (those with "NHDWaterbody closed
+    1) include all LAGOS lakes as pour points taking precedence over flowlines,
+    2) remove any waterbodies <1ha that were erroneously permitted as sinks in NHDPlus (those with "NHDWaterbody closed
     lake" as the Purpose code.
 
     :param str nhdplus_catseed_raster: NHDPlus HR catseed raster used to set snap raster, can also use subregion DEM
@@ -146,23 +144,29 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
                                     pixel_type='32_BIT_SIGNED', number_of_bands='1', mosaic_method='LAST')
     DM.BuildRasterAttributeTable(combined)
 
-    # --- MODIFY TO DROP ERROR SINK AND DANGLING FLOWLINES THROUGH LAKES
+    # # --- MODIFY TO DROP ERROR SINK AND DANGLING FLOWLINES THROUGH LAKES
+    #
+    # # IDENTIFY POTENTIAL DANGLING FLOWLINES
+    # # Get gridcodes for Artificial Paths associated with lakes
+    # def find_lakepath_gridcodes():
+    #     waterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
+    #     # Make 2 dicts, lake_xwalk, flowline_xwalk,
+    #     flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
+    #     lake_xwalk = {r[0]:r[1] for r in arcpy.da.SearchCursor(waterbody, ['NHDPlusID', 'Permanent_Identifier'])}
+    #     flowline_xwalk = defaultdict(list)
+    #     with arcpy.da.SearchCursor(flowline, ['NHDPlusID', 'WBArea_Permanent_Identifier']) as cursor:
+    #         for row in cursor:
+    #             if row[1]:
+    #                 flowline_xwalk[row[1]].append(row[0])
+    #     # fetch NHDPID for flowlines in lakes and convert to gridcode
+    #     flowline_result = filter(lambda x: x is not None,
+    #                              [flowline_xwalk.get(lake_xwalk.get(id)) for id in this_gdb_ids])
+    #     result = [nhdpid_grid.get(id) for id_list in flowline_result for id in id_list]
+    #     return result
+    # lakepath_gridcodes = find_lakepath_gridcodes()
 
-    # IDENTIFY POTENTIAL DANGLING FLOWLINES
-    # Get gridcodes for Artificial Paths associated with lakes
-    def find_lakepath_gridcodes():
-        waterbody = os.path.join(nhdplus_gdb, 'NHDWaterbody')
-        flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
-        lake_xwalk = {r[0]:r[1] for r in arcpy.da.SearchCursor(waterbody, ['NHDPlusID', 'Permanent_Identifier'])}
-        flowline_xwalk = {r[0]:r[1]
-                          for r in arcpy.da.SearchCursor(flowline, ['WBArea_Permanent_Identifier', 'NHDPlusID'])
-                          if r[0]}
-        result = filter(lambda x: x is not None, [nhdpid_grid.get(
-            flowline_xwalk.get(
-                lake_xwalk.get(id))) for id in this_gdb_ids]
-        )
-        return result
-    lakepath_gridcodes = find_lakepath_gridcodes()
+
+
 
     # IDENTIFY ERRONEOUS SINKS
     # due to burn/catseed errors in NHD, we are removing all sinks marked "NHDWaterbody closed lake" (SC)
@@ -172,19 +176,20 @@ def add_lake_seeds(nhdplus_catseed_raster, nhdplus_gdb, gridcode_table, eligible
     sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
     sinks_to_remove = [r[0] for r in arcpy.da.SearchCursor(sink, ['GridCode'], "PurpCode = 'SC'")]
 
-    # Merge flowpaths and sinks; test for whether we need to run cleaning step
-    undesirable_codes = lakepath_gridcodes + sinks_to_remove
+    # Find out if any of the selected sink codes are actually in the raster
     gridcodes_in_raster = set([r[0] for r in arcpy.da.SearchCursor(combined, 'VALUE')])
-    removable_codes = gridcodes_in_raster.intersection(undesirable_codes)
+    removable_codes = gridcodes_in_raster.intersection(sinks_to_remove)
 
     if removable_codes:
         arcpy.AddMessage("Modifying catseed raster to clean lake seeds...")
         arcpy.CheckOutExtension('Spatial')
-        cleaned = arcpy.sa.SetNull(combined, combined, 'VALUE in ({})'.format(','.join(['{}'.format(id)
-                                                                                           for id in removable_codes])))
+        cleaned = arcpy.sa.SetNull(combined, combined, 'VALUE in ({})'.format(','.join(['{}'.format(id)                                                                          for id in removable_codes])))
         cleaned.save(output_raster)
         arcpy.CheckInExtension('Spatial')
+    else:
+        arcpy.CopyRaster_management(combined, output_raster)
 
+    arcpy.Delete_management(lake_seeds)
     return output_raster
 
 
@@ -212,11 +217,6 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     arcpy.env.outputCoordinateSystem = projection
     arcpy.CheckOutExtension('Spatial')
 
-    # get back to the burned DEM before filling
-    filldepth_raster1 = arcpy.sa.Raster(filldepth_raster)
-    filldepth = arcpy.sa.Con(arcpy.sa.IsNull(filldepth_raster1), 0, filldepth_raster1)
-    burned_dem = arcpy.sa.Raster(hydrodem_raster) - filldepth
-
     # identify valid sinks
     network = NHDNetwork(nhdplus_gdb)
     waterbody_ids = network.define_lakes(strict_minsize=False, force_lagos=True).keys()
@@ -226,34 +226,46 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     sink_lakes_query = 'Permanent_Identifier IN ({})'.format(
         ','.join(['\'{}\''.format(id) for id in sink_lake_ids]))
     sink_lakes = arcpy.Select_analysis(network.waterbody, 'sink_lakes', sink_lakes_query)
+
     # protect these sink lakes in DEM
     sink_centroids = arcpy.FeatureToPoint_management(sink_lakes, 'sink_centroids', 'INSIDE')
     sinks_raster0 = arcpy.PolygonToRaster_conversion(sink_lakes, "OBJECTID", "sinks_raster0", cellsize=10)
     centroids_raster0 = arcpy.PointToRaster_conversion(sink_centroids, "OBJECTID", "centroids_raster0", cellsize=10)
-    sinks = arcpy.sa.Raster(sinks_raster0) > 0
-    centroids = arcpy.sa.Raster(centroids_raster0) > 0
-    sinks_raster = arcpy.sa.Con(arcpy.sa.IsNull(sinks), 0, sinks)
-    centroids_raster = arcpy.sa.Con(arcpy.sa.IsNull(centroids), 0, centroids)
-
+    sinks_raster = Con(IsNull(Raster(sinks_raster0)), 0, 1)
+    centroids_raster = Con(IsNull(Raster(centroids_raster0)), 0, 1)
 
     # burn in the sink lakes and add the nodata protection in the center
     arcpy.AddMessage("Burning sinks...")
     areal_drop = 10000 # in cm, so 100m elevation drop
-    burnt = burned_dem - (areal_drop * sinks_raster)
-    protected = arcpy.sa.SetNull(centroids_raster == 1, burnt)
-
+    filldepth = Raster(filldepth_raster)
+    # operations combined here for processing speed (fewer temporary rasters)
+    # first two terms generate the unfilled hydro raster and third term burns in sinks, like so
+    # unfilled_hydrodem = Raster(hydrodem_raster) - Con(IsNull(filldepth), 0, filldepth)
+    # with_burned_lakes = unfilled_hydrodem - (areal_drop * sinks_raster)
+    burnt = Raster(hydrodem_raster) - Con(IsNull(filldepth), 0, filldepth) - (areal_drop * sinks_raster)
+    protected = SetNull(centroids_raster == 1, burnt)
     # remove all fill-protected lakes that are NOT also in our modified pour points--these are the erroneous sinks
     # use raster calculator to fill nodata with min value that surrounds it (lake is flattish)
-    dem_null = arcpy.sa.IsNull(protected)
-    lagos_null = arcpy.sa.IsNull(lagos_catseed_raster)
-    replacement = arcpy.sa.FocalStatistics(protected, statistics_type='MINIMUM')  # assign lake elevation value
-    result = arcpy.sa.Con((dem_null == 1) & (lagos_null == 1), replacement, protected)
-
+    arcpy.AddMessage("Removing extraneous sinks (if any)...")
+    replacement = arcpy.sa.FocalStatistics(burnt, statistics_type='MINIMUM')  # assign lake elevation value
+    nhdplus_sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
+    nhdplus_closed = arcpy.Select_analysis(nhdplus_sink, 'nhdplus_closed', "PurpCode = 'SC'")
+    nhdplus_closed_ras0 = arcpy.PointToRaster_conversion(nhdplus_closed, "OBJECTID", "nhdplus_closed_ras", cellsize=10)
+    nhdplus_closed_ras = IsNull(Raster(nhdplus_closed_ras0)) == 0
+    lagos_catseed = Raster(lagos_catseed_raster)
+    # fill in NoData cells with "replacement" value
+    # IF they are a NoData cell used for an NHDWaterbody closed lake sink in NHDPlus (nhdplus_closed_raster == 1)
+    # AND they are not inside a LAGOS lake (IsNull(lagos_catseed_raster) == 1)
+    # ELSE use the burned values from before but also protect LAGOS lakes with central NoData value
+    #result = Con(((IsNull(Raster(nhdplus_closed_ras)) == 0) & (IsNull(lagos_catseed_raster) == 1)), replacement, protected)
+    result = Con((nhdplus_closed_ras) & (IsNull(lagos_catseed)), replacement, protected)
     # save the final result
     result.save(out_raster)
 
     # cleanup
     arcpy.CheckInExtension('Spatial')
+    for item in ['sink_lakes', 'sink_centroids', 'sinks_raster0', 'centroids_raster', 'nhdplus_closed']:
+        arcpy.Delete_management(item)
     arcpy.env.overwriteOutput = False
 
 def make_hydrodem(burned_raster, hydrodem_raster_out):
@@ -305,27 +317,15 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     arcpy.env.extent = flowdir_raster
     nhd_network = NHDNetwork(nhdplus_gdb)
 
-    # delineate watersheds with ArcGIS Watershed tool, then convert to one polygon per watershed
+    # delineate watersheds with ArcGIS Watershed tool, then convert to polygon
     arcpy.AddMessage("Delineating catchments...")
     sheds = arcpy.sa.Watershed(flowdir_raster, catseed_raster, 'Value')
     arcpy.AddMessage("Watersheds complete.")
     sheds_poly = arcpy.RasterToPolygon_conversion(sheds, 'sheds_poly', 'NO_SIMPLIFY', 'Value')
     DM.AlterField(sheds_poly, 'gridcode', 'GridCode', clear_field_alias=True)
-    dissolved = DM.Dissolve(sheds_poly, 'dissolved', 'GridCode')
-    arcpy.AddMessage("Watersheds converted to vector.")
 
-    # "Join" to the other identifiers via GridCode
-    update_fields = ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID']
-    if not nhd_network.plus:
-        update_fields.append('Permanent_Identifier')
-    gridcode_dict = {r[0]: r[1:] for r in arcpy.da.SearchCursor(gridcode_table, update_fields)}
-    DM.AddField(dissolved, 'NHDPlusID', 'DOUBLE')
-    DM.AddField(dissolved, 'SourceFC', 'TEXT', field_length=20)
-    DM.AddField(dissolved, 'VPUID', 'TEXT', field_length=8)
-    DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length=40)
-    DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length=1)
-
-    # add permids to watersheds for NHDPlus
+    arcpy.AddMessage("Linking identifiers...")
+    # make a nhdpid: permid dict for NHDPlus
     if nhd_network.plus:
         if not nhd_network.nhdpid_flowline:
             nhd_network.map_nhdpid_to_flowlines()
@@ -335,6 +335,43 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         for d in (nhd_network.nhdpid_flowline, nhd_network.nhdpid_waterbody):
             for k, v in d.iteritems():
                 nhdpid_combined[k] = v
+
+    # re-assign lake ArtificialPath catchments to have the lake Gridcode and dissolve into lake catchment
+    # here's why: some catseed cells for ArtificialPaths remain after modifying catseed to put lake raster outlets
+    # over the NHDPlus catseed layer. Couldn't re-create catseed from vectors to match NHDPlus snap, so using
+    # this solution instead.
+    update_fields = ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID']
+    if not nhd_network.plus:
+        update_fields.append('Permanent_Identifier')
+    gridcode_dict = {r[0]: r[1:] for r in arcpy.da.SearchCursor(gridcode_table, update_fields)}
+    flowplusid_wbpermid = {r[0]:r[1] for r in arcpy.da.SearchCursor(nhd_network.flowline,
+                            ['NHDPlusID', 'WBArea_Permanent_Identifier'], "WBArea_Permanent_Identifier IS NOT NULL")}
+    wbpermid_wbgrid = {nhdpid_combined.get(v[0]):k for k, v in gridcode_dict.items() if v[1] == 'NHDWaterbody'}
+    # make dict with flowline gridcode as key and waterbody gridcode as value
+    flowgrid_wbgrid_0 = {k:wbpermid_wbgrid.get(flowplusid_wbpermid.get(v[0])) for k, v in gridcode_dict.items()}
+    valid_wb_gridcodes = [r[0] for r in arcpy.da.SearchCursor(sheds_poly, 'GridCode')]
+    flowgrid_wbgrid = {k:v for k, v in flowgrid_wbgrid_0.items() if v and v in valid_wb_gridcodes}
+
+    # then replace gridcode in catchments to be waterbody if it belongs to ArtificialPath
+    with arcpy.da.UpdateCursor(sheds_poly, ['Gridcode']) as cursor:
+        for row in cursor:
+            if row[0] in flowgrid_wbgrid:
+                row[0] = flowgrid_wbgrid[row[0]]
+                cursor.updateRow(row)
+
+    # finally, dissolve on gridcode
+    dissolved = DM.Dissolve(sheds_poly, 'dissolved', 'GridCode')
+    arcpy.AddMessage("Watersheds converted to vector.")
+
+    # "Join" to the other identifiers via GridCode
+
+    DM.AddField(dissolved, 'NHDPlusID', 'DOUBLE')
+    DM.AddField(dissolved, 'SourceFC', 'TEXT', field_length=20)
+    DM.AddField(dissolved, 'VPUID', 'TEXT', field_length=8)
+    DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length=40)
+    DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length=1)
+
+
 
     # calculate whether the watershed is on the main network
     on_network = set(nhd_network.trace_up_from_hu4_outlets())
@@ -351,18 +388,24 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
                 else:
                     nhdpid, sourcefc, vpuid, permid = gridcode_dict[gridcode]
             if not permid:
-                permid = nhdpid_combined[nhdpid] if nhdpid in nhdpid_combined else None
+                permid = nhdpid_combined.get(nhdpid)
             onmain = 'Y' if permid in on_network else 'N'
             u_cursor.updateRow((gridcode, nhdpid, sourcefc, vpuid, permid, onmain))
 
     def reassign_slivers_to_lakes(catchments_fc):
         # remove slight overlaps with neighboring lakes that are in the LAGOS population
-        waterbody_ids = nhd_network.define_lakes(strict_minsize=False, force_lagos=True).keys()
+        waterbody_ids = [r[0] for r in arcpy.da.SearchCursor(
+            catchments_fc, ['Permanent_Identifier'], "SourceFC = 'NHDWaterbody'")]
         waterbody_query = 'Permanent_Identifier IN ({})'.format(
             ','.join(['\'{}\''.format(id) for id in waterbody_ids]))
         waterbody = arcpy.Select_analysis(nhd_network.waterbody, 'waterbody', waterbody_query)
         waterbody_only = lagosGIS.select_fields(waterbody, 'waterbody_only', ['Permanent_Identifier'], convert_to_table=False)
-        union = arcpy.Union_analysis([dissolved, waterbody_only], 'union')
+        arcpy.AddMessage("Finding conflicting lake/watershed slivers...")
+        catchments_lyr = arcpy.MakeFeatureLayer_management(catchments_fc)
+        arcpy.SelectLayerByLocation_management(catchments_lyr, 'INTERSECT', waterbody_only)
+        union = arcpy.Union_analysis([catchments_lyr, waterbody_only], 'union')
+        arcpy.SelectLayerByAttribute_management(catchments_lyr, 'SWITCH_SELECTION')
+        changeless_sheds = arcpy.CopyFeatures_management(catchments_lyr, 'changeless_sheds')
 
         # move slivers in union into the lake watershed as long as they intersect the lake
         with arcpy.da.UpdateCursor(union, ['Permanent_Identifier', 'Permanent_Identifier_1']) as cursor:
@@ -373,176 +416,14 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
         arcpy.DeleteField_management(union, 'Permanent_Identifier_1')
         arcpy.DeleteField_management(union, 'FID_1')
+        arcpy.AddMessage("Reconstituting watersheds...")
         reassigned = arcpy.Dissolve_management(union, 'reassigned', 'Permanent_Identifier')
-        return reassigned
+        merged = arcpy.Append_management(reassigned, changeless_sheds, 'NO_TEST')
+        arcpy.Delete_management(catchments_lyr)
+        return merged
 
     arcpy.AddMessage("Reassigning slivers...")
     reassigned_output = reassign_slivers_to_lakes(dissolved)
     arcpy.CopyFeatures_management(reassigned_output, output_fc)
 
     return output_fc
-
-
-# #---FUNCTIONS THAT DIDN'T END UP BEING USED---------------------------------------------------------------------------
-# def assign_catchments_to_lakes(nhdplus_gdb, output_fc):
-#     """Use the """
-#     # paths
-#     nhd_cat = os.path.join(nhdplus_gdb, 'NHDPlusCatchment')
-#     nhd_flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
-#     nhd_wb = os.path.join(nhdplus_gdb, 'NHDWaterbody')
-#
-#     # copy to output and prep
-#     nhd_cat_copy = DM.CopyFeatures(nhd_cat, output_fc)
-#     DM.AddField(nhd_cat_copy, 'Lake_PermID', field_type='TEXT', field_length=40)
-#     DM.AddField(nhd_cat_copy, 'Flowline_PermID', field_type='TEXT', field_length=40)
-#
-#     # build dictionaries for the joins
-#     nhd_flowline_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
-#                                                                    ['NHDPlusID', 'Permanent_Identifier'])}
-#     nhd_wbarea_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
-#                                                                  ['NHDPlusID', 'WBArea_Permanent_Identifier'])}
-#     nhd_wb_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_wb, ['NHDPlusID', 'Permanent_Identifier'])}
-#     valid_wb_ids = set(nhd_wb_dict.values())
-#     # some WBArea_... values come from NHDArea polygons, not NHDWaterbody. Filter dictionary for valid only.
-#     flowline_wb_dict = {nhdplusid: nhd_wbarea_dict[nhdplusid] for nhdplusid, wb_permid in nhd_wbarea_dict.items() if
-#                         wb_permid in valid_wb_ids}
-#
-#     with arcpy.da.UpdateCursor(nhd_cat_copy, ['NHDPlusID', 'Lake_PermID', 'Flowline_PermID']) as nhd_cat_copy_cursor:
-#
-#         # use UpdateCursor to "join" to get waterbody ids
-#         for u_row in nhd_cat_copy_cursor:
-#             nhdplusid = u_row[0]
-#             lake_permid_flowline = None
-#             lake_permid_sink = None
-#
-#             # like SELECT WBArea_Permanent_Identifier FROM nhd_cat LEFT JOIN nhd_flowline
-#             if nhdplusid in flowline_wb_dict:
-#                 lake_permid_flowline = flowline_wb_dict[nhdplusid]
-#
-#             # join to sinks to get sink to lake mapping
-#             # like SELECT Permanent_Identifier FROM nhd_cat LEFT JOIN nhd_wb
-#             if nhdplusid in nhd_wb_dict:
-#                 lake_permid_sink = nhd_wb_dict[nhdplusid]
-#
-#             # concatenate & calculate update
-#             if lake_permid_flowline:  # on network
-#                 lake_permid = lake_permid_flowline
-#
-#             else:  # off network (sink)
-#                 lake_permid = lake_permid_sink
-#                 stream_permid = None
-#
-#             if nhdplusid in nhd_flowline_dict:  # catchment is not for a sink
-#                 stream_permid = nhd_flowline_dict[nhdplusid]
-#             else:  # catchment is for a sink
-#                 stream_permid = None
-#
-#             # write the update
-#             new_row = (nhdplusid, lake_permid, stream_permid)
-#             nhd_cat_copy_cursor.updateRow(new_row)
-#
-#     return nhd_cat_copy
-#
-#
-# def merge_lake_catchments(nhdplus_gdb, output_catchments_fc):
-#     arcpy.env.workspace = 'in_memory'
-#     catchments_assigned = assign_catchments_to_lakes(nhdplus_gdb, 'catchments_assigned')
-#
-#     # dissolve the lake catchments and separate out the stream catchments layer
-#     stream_cats = AN.Select(catchments_assigned, 'stream_cats', 'Lake_PermID IS NULL')
-#     lake_cats = AN.Select(catchments_assigned, 'lake_cats', 'Lake_PermID IS NOT NULL')
-#     dissolved_lake_cats = DM.Dissolve(lake_cats, 'dissolved_lake_cats', ['Lake_PermID'])
-#     DM.AddField(dissolved_lake_cats, 'NHDPlusID', 'DOUBLE')  # leave as all NULL on purpose
-#
-#     # # update each lake watershed shape so that it includes the entire lake/cannot extend beyond the lake.
-#     # wb_shapes_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhdwaterbody, ['Permanent_Identifier', 'SHAPE@'])}
-#     # with arcpy.da.UpdateCursor(dissolved_lake_cats, ['Lake_Permanent_Identifier', 'SHAPE@']) as u_cursor:
-#     #     for row in u_cursor:
-#     #         id, shape = row
-#     #         wb_shape = wb_shapes_dict[id]
-#     #         new_shape = shape.union(wb_shape)
-#     #         u_cursor.updateRow((id, new_shape))
-#     #
-#     # # erase all lake catchments from stream catchments so there are no overlaps
-#     # output_fc = AN.Update(stream_cats, dissolved_lake_cats, output_catchments_fc)
-#     output_fc = DM.Merge([stream_cats, dissolved_lake_cats], output_catchments_fc)
-#     DM.AddIndex(output_fc, 'Lake_PermID', 'lake_id_idx')
-#     DM.AddIndex(output_fc, 'Flowline_PermID', 'stream_id_idx')
-#     DM.Delete('in_memory')
-#     return output_fc
-#
-#
-# def calculate_waterbody_strahler(nhdplus_gdb, output_table):
-#     """Output a table with a new field describing the Strahler stream order for each waterbody in the input GDB.
-#
-#     The waterbody's Strahler order will be defined as the highest Strahler order for an NHDFlowline artificial
-#     path associated with that waterbody.
-#
-#     :param nhdplus_gdb: The NHDPlus HR geodatabase to calculate Strahler values for
-#     :param output_table: The output table containing lake identifiers and the calculated field "lake_higheststrahler"
-#
-#     :return: ArcGIS Result object for output_table
-#
-#     """
-#     nhd_wb = os.path.join(nhdplus_gdb, 'NHDWaterbody')
-#     nhd_flowline = os.path.join(nhdplus_gdb, 'NHDFlowline')
-#     nhd_vaa = os.path.join(nhdplus_gdb, 'NHDPlusFlowlineVAA')
-#
-#     # build dictionaries for the joins
-#     nhd_wb_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_wb, ['Permanent_Identifier', 'NHDPlusID'])}
-#     # filter upcoming dictionary to only include artificial flowlines (but with both waterbody and NHDArea ids)
-#     nhd_flowline_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_flowline,
-#                                                                    ['NHDPlusID', 'WBArea_Permanent_Identifier']) if
-#                          r[1]}
-#     # filter out flowlines we can't get strahler for NOW, so that loop below doesn't have to test
-#     nhd_vaa_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(nhd_vaa, ['NHDPlusID', 'StreamOrde'])
-#                     if r[0] in nhd_flowline_dict}
-#     # filter out lines with uninitialized flow as they don't appear in nhd_vaa_dict
-#     nhd_flowline_dict2 = {key: val for key, val in nhd_flowline_dict.items() if key in nhd_vaa_dict}
-#
-#     # set up new table
-#     output_table = DM.CreateTable(os.path.dirname(output_table), os.path.basename(output_table))
-#     DM.AddField(output_table, 'Lake_Permanent_Identifier', 'TEXT', field_length=40)
-#     DM.AddField(output_table, 'NHDPlusID', 'DOUBLE')
-#     DM.AddField(output_table, 'lake_higheststrahler', 'SHORT')
-#     DM.AddField(output_table, 'lake_loweststrahler', 'SHORT')
-#
-#     # set up cursor
-#     out_rows = arcpy.da.InsertCursor(output_table, ['Lake_Permanent_Identifier',
-#                                                     'NHDPlusID',
-#                                                     'lake_higheststrahler',
-#                                                     'lake_loweststrahler'])
-#
-#     # function to call for each waterbody
-#     nhd_flowline_dict_items = nhd_flowline_dict2.items()
-#
-#     def get_matching_strahlers(wb_permid):
-#         matching_strahlers = [nhd_vaa_dict[flow_plusid] for flow_plusid, linked_wb_permid
-#                               in nhd_flowline_dict_items if linked_wb_permid == wb_permid]
-#         return matching_strahlers
-#
-#     # populate the table with the cursor
-#     for wb_permid, nhdplusid in nhd_wb_dict.items():
-#         strahlers = get_matching_strahlers(wb_permid)
-#         if strahlers:
-#             new_row = (wb_permid, nhdplusid, max(strahlers), min(strahlers))
-#         else:
-#             new_row = (wb_permid, nhdplusid, None, None)
-#         out_rows.insertRow(new_row)
-#
-#     del out_rows
-#
-#     return output_table
-#
-
-
-
-
-
-
-
-
-
-
-
-

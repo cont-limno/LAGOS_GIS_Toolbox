@@ -35,10 +35,10 @@ NHDPLUS_UNZIPPED_DIR = 'F:\Continental_Limnology\Data_Downloaded\NHDPlus_High_Re
 NHD_UNZIPPED_DIR = '' # not using any of these this time, keeping option available in code below
 # a directory wherever you want to store the outputs
 # each subregion will have its own geodatabase created and saved
-OUTPUTS_PARENT_DIR = 'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2'
+OUTPUTS_PARENT_DIR = 'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2_correct'
 LOG_FILE = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2\watersheds_log.csv"
 # set a scratch workspace: important so that raster.save will work correctly EVERY time in tools
-arcpy.env.scratchWorkspace = r'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2'
+arcpy.env.scratchWorkspace = r'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2_correct'
 
 # your 7z path, probably the same
 SEVENZ = r'''"C:\Program Files\7-Zip\7z.exe"'''
@@ -74,17 +74,17 @@ class Paths:
             self.fdr = path.join(self.rasters_dir, 'fdr.tif')
         self.waterbody = path.join(self.gdb, 'NHDWaterbody')
         # output items that don't exist at start
-        self.out_dir = path.join(OUTPUTS_PARENT_DIR, 'watersheds_{}'.format(huc4))
+        self.out_dir = OUTPUTS_PARENT_DIR
         self.locate_outputs()
 
     def locate_outputs(self):
         self.out_gdb = path.join(self.out_dir, 'watersheds_{}.gdb'.format(self.huc4))
         self.lagos_gridcode = path.join(self.out_gdb, 'lagos_gridcode_{}'.format(self.huc4))
-        self.lagos_catseed = path.join(self.out_dir, 'lagos_catseed_{}.tif'.format(self.huc4))
-        self.lagos_burn = path.join(self.out_dir, 'lagos_burn_{}.tif'.format(self.huc4))
+        self.lagos_catseed = path.join(self.out_dir, 'catseed', 'lagos_catseed_{}.tif'.format(self.huc4))
+        self.lagos_burn = path.join(self.out_dir, 'burn', 'lagos_burn_{}.tif'.format(self.huc4))
         self.lagos_walled = path.join(self.out_dir, 'lagos_burn_{}_walled.tif'.format(self.huc4))
-        self.lagos_fel = path.join(self.out_dir, 'lagos_hydrodem_{}.tif'.format(self.huc4))
-        self.lagos_fdr = path.join(self.out_dir, 'lagos_fdr_{}.tif'.format(self.huc4))
+        self.lagos_fel = path.join(self.out_dir, 'hydrodem', 'lagos_hydrodem_{}.tif'.format(self.huc4))
+        self.lagos_fdr = path.join(self.out_dir, 'fdr', 'lagos_fdr_{}.tif'.format(self.huc4))
         self.local_catchments = path.join(self.out_gdb, 'lagos_catchments_{}'.format(self.huc4))
         self.sheds_base = path.join(self.out_gdb, 'lagos_watersheds_{}'.format(self.huc4))
         self.iws_sheds = path.join(self.out_gdb, 'lagos_watersheds_{}_interlake'.format(self.huc4))
@@ -286,11 +286,11 @@ def make_run_list(master_HU4):
 
 if __name__ == '__main__':
     run_list = make_run_list(HU4)
-    for huc4 in run_list[run_list.index('1503'):]:
+    for huc4 in run_list[run_list.index('1704'):]:
         p = Paths(huc4)
         try:
-            last_tool = 'delineate_catchments'
-            tool_count = run(p.huc4, last_tool)
+            last_tool = 'fdr'
+            tool_count = run(p.huc4, last_tool, burn_override=True)
             if tool_count > 0:
                 p.log(LOG_FILE, '{}: SUCCESS'.format(last_tool))
         except Exception as e:

@@ -107,7 +107,7 @@ class NHDNetwork:
         # the following should have no effect on other users besides LAGOS use,
         # but will be used to modify .define_lakes so that it includes any permanent_id
         # found in the LAGOS population, regardless of its size or FType in NHDPlus Plus HR
-        self.lagos_pop_path = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+        self.lagos_pop_path = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 
     # ---UTILITIES FOR HIGHER METHODS-----------------------------------------------------------------------------------
     def prepare_upstream(self, force_refresh=False):
@@ -238,8 +238,12 @@ class NHDNetwork:
         self.lakes_areas = {} # clear prior definition
         lagos_fcode_list = lagosGIS.LAGOS_FCODE_LIST
         lake_minsize = 0.01 if strict_minsize else 0.009
-        if force_lagos and arcpy.Exists(self.lagos_pop_path):
-            force_ids = {r[0] for r in arcpy.da.SearchCursor(self.lagos_pop_path, 'Permanent_Identifier')}
+        if force_lagos:
+            if arcpy.Exists(self.lagos_pop_path):
+                force_ids = {r[0] for r in arcpy.da.SearchCursor(self.lagos_pop_path, 'Permanent_Identifier')}
+            else:
+                arcpy.AddMessage("Parameter to force LAGOS lake population was requested but the LAGOS lake path does not exist.")
+                force_ids = {}
         else:
             force_ids = {}
         with arcpy.da.SearchCursor(self.waterbody, ['Permanent_Identifier', 'AreaSqKm', 'FCode']) as cursor:

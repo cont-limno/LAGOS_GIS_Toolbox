@@ -184,6 +184,7 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     if single_catchment_ids:
         waterbodies_query = 'Permanent_Identifier IN ({})'.format(
             ','.join(['\'{}\''.format(id) for id in single_catchment_ids]))
+        arcpy.SelectLayerByAttribute_management(waterbody_lyr, 'CLEAR_SELECTION')
         these_lakes = AN.Select(waterbody_lyr, 'these_lakes', waterbodies_query)
         watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
                                                                            for id in single_catchment_ids]))
@@ -192,7 +193,6 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
         DM.Append(lakeless_watersheds, merged_sheds, 'NO_TEST')
         for item in [these_lakes, these_watersheds, lakeless_watersheds]:
             DM.Delete(item)
-
 
 
     # Step 5: Fix in-island lakes, if any are present in the subregion. (140 lakes in U.S., in 53 subregions)

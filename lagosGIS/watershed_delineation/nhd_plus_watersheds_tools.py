@@ -375,8 +375,9 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
     # update table with ids and flags
     print('Adding identifiers to dissolved watersheds...')
-    with arcpy.da.UpdateCursor(dissolved, ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier',
-                                           'On_Main_Network']) as u_cursor:
+    output_fields = ['GridCode', 'NHDPlusID', 'SourceFC', 'VPUID', 'Permanent_Identifier',
+                     'On_Main_Network']
+    with arcpy.da.UpdateCursor(dissolved, output_fields) as u_cursor:
         for row in u_cursor:
             gridcode, nhdpid, sourcefc, vpuid, permid, onmain = row
             if gridcode != 0:
@@ -414,7 +415,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         arcpy.DeleteField_management(union, 'Permanent_Identifier_1')
         arcpy.DeleteField_management(union, 'FID_1')
         arcpy.AddMessage("Reconstituting watersheds...")
-        reassigned = arcpy.Dissolve_management(union, 'reassigned', 'Permanent_Identifier')
+        reassigned = arcpy.Dissolve_management(union, 'reassigned', output_fields)
         merged = arcpy.Append_management(reassigned, changeless_sheds, 'NO_TEST')
 
         for item in [waterbody, waterbody_only, catchments_lyr, union, reassigned]:

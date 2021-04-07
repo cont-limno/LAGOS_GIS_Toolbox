@@ -364,14 +364,11 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
     arcpy.AddMessage("Watersheds converted to vector.")
 
     # "Join" to the other identifiers via GridCode
-
     DM.AddField(dissolved, 'NHDPlusID', 'DOUBLE')
     DM.AddField(dissolved, 'SourceFC', 'TEXT', field_length=20)
     DM.AddField(dissolved, 'VPUID', 'TEXT', field_length=8)
     DM.AddField(dissolved, 'Permanent_Identifier', 'TEXT', field_length=40)
     DM.AddField(dissolved, 'On_Main_Network', 'TEXT', field_length=1)
-
-
 
     # calculate whether the watershed is on the main network
     on_network = set(nhd_network.trace_up_from_hu4_outlets())
@@ -419,11 +416,16 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         arcpy.AddMessage("Reconstituting watersheds...")
         reassigned = arcpy.Dissolve_management(union, 'reassigned', 'Permanent_Identifier')
         merged = arcpy.Append_management(reassigned, changeless_sheds, 'NO_TEST')
-        arcpy.Delete_management(catchments_lyr)
+
+        for item in [waterbody, waterbody_only, catchments_lyr, union, changeless_sheds, reassigned]:
+            arcpy.Delete_management(item)
         return merged
 
     arcpy.AddMessage("Reassigning slivers...")
     reassigned_output = reassign_slivers_to_lakes(dissolved)
     arcpy.CopyFeatures_management(reassigned_output, output_fc)
+
+    for item in [sheds, sheds_poly, dissolved, reassigned_output]:
+        arcpy.Delete_management(item)
 
     return output_fc

@@ -181,11 +181,26 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     :param out_raster: The output raster
     :return:
     """
+    # ----- SETUP -----------------------------------------------------------------------------------------------------
+    # workspace will be set to hard drive if uncompressed hydrodem is > 8GB, prevents strange
+    # outputs where replacement raster is assigned in more places than it should be or random
+    # NoData gaps appear. Memory wasn't maxed out and neither was temp raster storage space, but
+    # this works anyway using a limit of 8GB on my 64GB machine.
+    # mostly affects subregions ['0902', '1018', '1109', '1710', '1209', '1304', '1606', '1701', '1702']
+    desc = arcpy.Describe(hydrodem_raster)
+    uncompressed_size = (float(desc.width) * desc.height * 4)/(2**30)
+    if uncompressed_size >= 8:
+        temp_gdb = lagosGIS.create_temp_GDB('revise_hydrodem')
+        arcpy.env.workspace = temp_gdb
+    else:
+        temp_gdb = ''
+        arcpy.env.workspace = 'in_memory'
 
     # per suggestion by Price here
     # https://community.esri.com/people/curtvprice/blog/2017/03/03/temporary-rasters-in-arcpy
     arcpy.env.scratchWorkspace = os.path.dirname(lagos_catseed_raster)
-    arcpy.env.workspace = 'in_memory'
+
+    # remaining env settings
     arcpy.env.overwriteOutput = True
     arcpy.env.snapRaster = hydrodem_raster
     arcpy.env.extent = hydrodem_raster
@@ -193,6 +208,7 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     arcpy.env.outputCoordinateSystem = projection
     arcpy.CheckOutExtension('Spatial')
 
+    # ----- ADD LAGOS SINKS ---------------------------------------------------------------------------------------
     # identify valid sinks
     network = NHDNetwork(nhdplus_gdb)
     waterbody_ids = network.define_lakes(strict_minsize=True, force_lagos=True).keys()
@@ -216,6 +232,8 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     arcpy.AddMessage("Burning sinks...")
     areal_drop = 10000 # in cm, so 100m elevation drop
     filldepth = Raster(filldepth_raster)
+    lagos_catseed = Raster(lagos_catseed_raster)
+
     # operations combined here for processing speed (fewer temporary rasters)
     # first two terms inside SetNull generate the unfilled hydro raster and third term burns in sinks, like so
     # unfilled_hydrodem = Raster(hydrodem_raster) - Con(IsNull(filldepth), 0, filldepth)
@@ -223,24 +241,23 @@ def revise_hydrodem(nhdplus_gdb, hydrodem_raster, filldepth_raster, lagos_catsee
     # the setnull around the whole thing sets the nodata protection for the lake
     protected = SetNull(centroids_raster == 1, \
                     (Raster(hydrodem_raster) - Con(IsNull(filldepth), 0, filldepth) - (areal_drop * sinks_raster)))
-    # remove all fill-protected lakes that are NOT also in our modified pour points--these are the erroneous sinks
-    # use raster calculator to fill nodata with min value that surrounds it (lake is flattish)
-    arcpy.AddMessage("Removing extraneous sinks (if any)...")
 
+    # -----REMOVE POTENTIAL EXCESSIVE NHDPLUS HR SINKS--------------------------------------------------------------
+    # remove all fill-protected lakes that are NOT also in our modified pour points--these are the erroneous sinks
+    arcpy.AddMessage("Removing extraneous sinks (if any)...")
     nhdplus_sink = os.path.join(nhdplus_gdb, 'NHDPlusSink')
     nhdplus_closed = arcpy.Select_analysis(nhdplus_sink, 'nhdplus_closed', "PurpCode = 'SC'")
     nhdplus_closed_ras0 = arcpy.PointToRaster_conversion(nhdplus_closed, "OBJECTID", "nhdplus_closed_ras0", cellsize=10)
     nhdplus_closed_ras = IsNull(Raster(nhdplus_closed_ras0)) == 0
 
+    # use raster calculator to fill nodata with min value that surrounds it (lake is flattish)
     replacement = arcpy.sa.FocalStatistics(protected, statistics_type='MINIMUM')  # assign lake elevation value
-    lagos_catseed = Raster(lagos_catseed_raster)
-    # fill in NoData cells with "replacement" value
+
+    # fill in NoData cells with "replacement" value,
     # IF they are a NoData cell used for an NHDWaterbody closed lake sink in NHDPlus (nhdplus_closed_raster == 1)
-    # AND they are not inside a LAGOS lake (IsNull(lagos_catseed_raster) == 1)
+    # AND they are not inside a LAGOS lake (IsNull(lagos_catseed_raster) == 1).
     # ELSE use the burned values from before but also protect LAGOS lakes with central NoData value
-    #result = Con(((IsNull(Raster(nhdplus_closed_ras)) == 0) & (IsNull(lagos_catseed_raster) == 1)), replacement, protected)
     result = Con((nhdplus_closed_ras) & (IsNull(lagos_catseed)), replacement, protected)
-    # save the final result
     result.save(out_raster)
 
     # cleanup

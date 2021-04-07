@@ -240,6 +240,7 @@ class NHDNetwork:
         lake_minsize = 0.01 if strict_minsize else 0.009
         if force_lagos:
             if arcpy.Exists(self.lagos_pop_path):
+                arcpy.AddMessage("Defining lakes with force_lagos = True...")
                 force_ids = {r[0] for r in arcpy.da.SearchCursor(self.lagos_pop_path, 'Permanent_Identifier')}
             else:
                 arcpy.AddMessage("Parameter to force LAGOS lake population was requested but the LAGOS lake path does not exist.")

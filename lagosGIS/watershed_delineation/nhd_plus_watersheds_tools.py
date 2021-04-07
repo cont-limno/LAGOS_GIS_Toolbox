@@ -417,7 +417,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         reassigned = arcpy.Dissolve_management(union, 'reassigned', 'Permanent_Identifier')
         merged = arcpy.Append_management(reassigned, changeless_sheds, 'NO_TEST')
 
-        for item in [waterbody, waterbody_only, catchments_lyr, union, changeless_sheds, reassigned]:
+        for item in [waterbody, waterbody_only, catchments_lyr, union, reassigned]:
             arcpy.Delete_management(item)
         return merged
 

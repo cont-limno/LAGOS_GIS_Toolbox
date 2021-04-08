@@ -102,6 +102,7 @@ class NHDNetwork:
         self.intermit_flowline_ids = set()
         self.inlets = []
         self.outlets = []
+        self.outlets_type = None
         self.exclude_intermittent_flow = False
         self.lakes_areas = {}
         # the following should have no effect on other users besides LAGOS use,
@@ -708,26 +709,47 @@ class NHDNetwork:
         if not self.upstream:
             self.prepare_upstream()
 
+        # exclude ToPermanentIdentifier= 0 for first try, is used for flowlines that are network ends.
+        # It is also used for flowlines ending in ocean, check for another type of outlet FIRST.
+
         to_ids = set(self.upstream.keys()).difference({'0'})
         from_all = {f for from_list in self.upstream.values() for f in from_list}
         downstream_inlets = list(set(to_ids).difference(set(from_all)))
+        # downstream_inlets are lowest flow entity, but typically the NHD includes the
+        # inlet for the next subregion down in the table or '0' for the ocean, so outlets_unflat checks for the
+        # flow entity(ies) just above the lowest
         outlets_unflat = [v for k, v in self.upstream.items() if k in downstream_inlets]
         outlets = [o for o_list in outlets_unflat for o in o_list]
 
+        # check that main outlet actually covers > 50% of network, otherwise try secondary
+        # outlet determination. Example subregions this affects: 0302, 0303, 0305.
+        outlet_network_lists = [self.trace_up_from_a_flowline(o) for o in outlets]
+        outlet_network = {id for id_list in outlet_network_lists for id in id_list}
+        network_fraction = float(len(outlet_network))/len(from_all)
+
         # for subregions with frontal or closed drainage, take the largest network's outlet
         # plus take any outlets with a network at least 1/2 the size of the main one in case there are multiple
-        # or in other words, the largest sink possible by my design is 1/3 the hu4 size (by stream segment count)
-        if not outlets:
+        # or in other words, the largest sink possible by my design is 1/2 the hu4 size (by stream segment count)
+        if not outlets or network_fraction < .5:
             print("Secondary outlet determination being used due to frontal or closed drainage for the subregion.")
-            to_ids = set(self.upstream.keys())
+            to_ids = set(self.upstream.keys()) # allow ocean(0) this time
             next_up = [self.upstream[id] for id in to_ids]
             next_up_flat = {id for id_list in next_up for id in id_list}
             lowest_to_ids = list(to_ids.difference(next_up_flat))
-            if lowest_to_ids == ['0']:
-                lowest_to_ids = self.upstream['0']
-            distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id)) for id in lowest_to_ids}
-            max_net_size = max(distinct_net_sizes.values())
-            outlets = [id for id, n in distinct_net_sizes.items() if n >= .5 * max_net_size]
+
+            # if lowest_to_ids is only '0' or only '0' aside from outlets identified previously
+            # then at least partial frontal drainage
+            if lowest_to_ids == ['0'] or set(lowest_to_ids).difference(set(downstream_inlets)) == {'0'}:
+                lowest_to_ids.extend(self.upstream['0'])
+                lowest_to_ids.remove('0')
+            # otherwise, the subregion has multiple non-ocean outlets, choose some to be "main"
+            else:
+                distinct_net_sizes = {id: len(self.trace_up_from_a_flowline(id)) for id in lowest_to_ids}
+                max_net_size = max(distinct_net_sizes.values())
+                outlets = [id for id, n in distinct_net_sizes.items() if n >= .5 * max_net_size]
+                self.outlets_type = "secondary"
+        else:
+            self.outlets_type = "primary"
         self.outlets = outlets
         return self.outlets
 

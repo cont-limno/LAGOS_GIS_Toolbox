@@ -358,6 +358,7 @@ class NHDNetwork:
                 from_ids = next_up_flat
             all_from_ids.extend(from_ids)
 
+        all_from_ids = list(set(all_from_ids))
         if include_wb_permids:
             if not self.flowline_waterbody:
                 self.map_flowlines_to_waterbodies()
@@ -411,6 +412,7 @@ class NHDNetwork:
                 to_ids = next_down_flat
             all_to_ids.extend(to_ids)
 
+        all_to_ids = list(set(all_to_ids))
         if include_wb_permids:
             if not self.flowline_waterbody:
                 self.map_flowlines_to_waterbodies()
@@ -590,7 +592,7 @@ class NHDNetwork:
         erasable_dict = dict()
 
         # traces for each lake in results as sets
-        print("Tracing focal lake networks...")
+        print("Tracing networks for {} focal lakes...".format(len(focal_lakes)))
         self.deactivate_stops()
         lake_upstream_traces = {k:set(v) for k, v in self.trace_up_from_waterbody_starts().items()}
         lake_downstream_traces = {k:set(self.trace_down_from_a_waterbody(k)) for k in focal_lakes}
@@ -618,12 +620,14 @@ class NHDNetwork:
         isolated_erasable_segments = set(tenha_isolated.keys())
 
         print("Defining erasable regions for each lake...")
+        self.deactivate_stops() # get full networks at start of loop
         for lake_id in focal_lakes:
             # get the focal lake's networks and drop the lake itself so it doesn't test true for being in its own trace
             focal_downstream = lake_downstream_traces[lake_id].difference(lake_id)
             focal_upstream = lake_upstream_traces[lake_id].difference(lake_id)
             focal_interlake = lake_interlake_traces[lake_id].difference(lake_id)
 
+            # NO MORE TRACING TOOLS FROM THIS POINT, JUST SET MATH
             # nothing ever needs erasing if the focal lake is itself Isolated or Headwater, give empty result
             if len(focal_upstream) < 2:
                 erasable = set()
@@ -843,6 +847,12 @@ class NHDNetwork:
         if not self.tenha_waterbody_ids:
             self.activate_10ha_lake_stops()
             self.deactivate_stops()
+        reset = False
+        if self.flowline_stop_ids:
+            reset = True
+            reset_flowline_stop_ids = self.flowline_stop_ids
+            reset_waterbody_stop_ids = self.waterbody_stop_ids
+            self.deactivate_stops()
 
         # Isolated first
         trace_up = self.trace_up_from_a_waterbody(waterbody_start_id)
@@ -874,6 +884,10 @@ class NHDNetwork:
                         connclass = 'DrainageLk'
                     else:
                         connclass = 'Drainage'
+
+        if reset:
+            self.waterbody_stop_ids = reset_waterbody_stop_ids
+            self.flowline_stop_ids = reset_flowline_stop_ids
 
         return connclass
 

@@ -36,9 +36,9 @@ NHD_UNZIPPED_DIR = '' # not using any of these this time, keeping option availab
 # a directory wherever you want to store the outputs
 # each subregion will have its own geodatabase created and saved
 OUTPUTS_PARENT_DIR = 'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2_correct'
-LOG_FILE = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2\watersheds_log.csv"
+LOG_FILE = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2_correct\watersheds_log.csv"
 # set a scratch workspace: important so that raster.save will work correctly EVERY time in tools
-arcpy.env.scratchWorkspace = r'D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds_v2_correct'
+arcpy.env.scratchWorkspace = r'D:\Continental_Limnology\Data_Working\Tool_Execution'
 
 # your 7z path, probably the same
 SEVENZ = r'''"C:\Program Files\7-Zip\7z.exe"'''
@@ -127,7 +127,7 @@ class Paths:
             if sz_result > 0:
                 print("Problem with 7-zip. Error code {}".format(sz_result.returncode))
 
-    def log(self, file, error_msg=''):
+    def log(self, file, error_msg='', time=0):
         """Format a comma-separated line for recording paths to logging file."""
         items = [self.huc4,
                  self.hr,
@@ -142,7 +142,8 @@ class Paths:
                  self.network_sheds,
                  'add_waterbody_nhdpid(); update_grid_codes(); add_lake_seeds(); delineate_catchments();',
                  dt.now(),
-                 error_msg]
+                 error_msg,
+                 time]
         line = ','.join([str(i) for i in items]) + '\n'
         with open(file, 'a') as file:
             file.write(line)
@@ -190,10 +191,6 @@ def run(huc4, last_tool='network', wait = False, burn_override=False):
         tool_count += 1
 
     # revise_hydrodem
-    # print arcpy.Exists(paths.lagos_burn)
-    # print stop_index >=2
-    # print arcpy.Exists(paths.network_sheds)
-    # print burn_override
     if not arcpy.Exists(paths.lagos_burn) \
             and stop_index >= 2 \
             and not arcpy.Exists(paths.network_sheds) \
@@ -221,6 +218,7 @@ def run(huc4, last_tool='network', wait = False, burn_override=False):
     if not arcpy.Exists(paths.lagos_fdr) and stop_index >= 4:
         arcpy.CheckOutExtension('Spatial')
         arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        arcpy.env.extent = paths.lagos_fel
         flow_dir = arcpy.sa.FlowDirection(paths.lagos_fel)
         # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
         flow_dir_clipped = arcpy.sa.Con(arcpy.sa.IsNull(paths.fdr), paths.fdr, flow_dir)
@@ -273,12 +271,12 @@ def make_run_list(master_HU4):
     subregions = ['{:02d}'.format(i) for i in range(1,31)]
     template = []
 
-    # do first 2 from each region first
-    for s in subregions[:2]:
+    # do first 1 from each region first
+    for s in subregions[:1]:
         template.extend(['{}{}'.format(r, s) for r in regions])
     # then go by region after that
     for r in regions:
-        template.extend(['{}{}'.format(r, s) for s in subregions[2:]])
+        template.extend(['{}{}'.format(r, s) for s in subregions[1:]])
 
     huc4 = [r[0] for r in arcpy.da.SearchCursor(master_HU4, 'hu4_sourceid_huc4')]
     return [i for i in template if i in huc4]
@@ -286,41 +284,30 @@ def make_run_list(master_HU4):
 
 if __name__ == '__main__':
     run_list = make_run_list(HU4)
-    for huc4 in run_list[run_list.index('1704'):]:
+    great_lakes =['0418', '0420', '0424', '0427', '0429', '0430']
+    run_list.extend(great_lakes)
+    run_list.sort()
+    # big_files = ['0902', '1018', '1109', '1710', '1209', '1304', '1606', '1701', '1702']
+    # for bf in big_files:
+    #     run_list.remove(bf)
+    run_list.remove('0424')
+    run_list.remove('0415')
+
+
+    for huc4 in run_list:
         p = Paths(huc4)
         try:
-            last_tool = 'fdr'
+            last_tool = 'network'
+            start_time = dt.now()
             tool_count = run(p.huc4, last_tool, burn_override=True)
+            time_diff = dt.now() - start_time
             if tool_count > 0:
-                p.log(LOG_FILE, '{}: SUCCESS'.format(last_tool))
+                p.log(LOG_FILE, '{}: SUCCESS'.format(last_tool), time_diff.seconds/60)
         except Exception as e:
             p.log(LOG_FILE, repr(e))
             print(e)
         finally:
             arcpy.Delete_management('in_memory')
-
-
-
-
-
-
-
-# TODO: Update mosaic feature
-def update_mosaic(mosaic):
-    mosaic_short = path.basename(mosaic)
-    arcpy.AddRastersToMosaicDataset_management(mosaic, 'Raster Dataset', path.join(NHDPLUS_UNZIPPED_DIR, 'Rasters'),
-                                               filter='*{}*tif'.format(mosaic_short),
-                                               update_overviews='UPDATE_OVERVIEWS',
-                                               sub_folder='SUBFOLDERS',
-                                               duplicate_items_action='EXCLUDE_DUPLICATES')
-
-def completed_list(search_string):
-    results = []
-    for dirnames, dirpaths, filenames in arcpy.da.Walk(OUTPUTS_PARENT_DIR):
-        for f in filenames:
-            if search_string in f:
-                results.append(f)
-    return results
 
 def patch_on_network_flag():
     """Patch implemented on Apr 17 to allow more outlets per subregion, if several large networks appear."""
@@ -341,167 +328,6 @@ def patch_on_network_flag():
                 onmain = 'Y' if permid in on_network else 'N'
                 u_cursor.updateRow((permid, onmain))
 
-#
-#
-# def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_override=True):
-#     arcpy.env.overwriteOutput = True
-#     from watershed_delineation import mosaic_dems as mosaic
-#     from watershed_delineation.burn_dems import burn_streams
-#     from watershed_delineation.make_catseed import make_catseed as make_catseed
-#
-#     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
-#     NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'
-#
-#     paths = Paths(huc4, hr=False)
-#     if out_dir:
-#         paths.out_dir = out_dir
-#         paths.locate_outputs()
-#     arcpy.AddMessage("Starting subregion {}...".format(paths.huc4))
-#     if last_tool:
-#         stop_index = ALT_TOOL_ORDER.index(last_tool)
-#
-#     if not path.exists(paths.out_dir):
-#         os.mkdir(paths.out_dir)
-#     if not path.exists(paths.out_gdb):
-#         arcpy.CreateFileGDB_management(path.dirname(paths.out_gdb), path.basename(paths.out_gdb))
-#
-#     start_time = dt.now()
-#     tool_count = 0
-#     # If the tool output doesn't exist yet, and the job control agrees it should be run, try running.
-#     # If the tool fails, continue after logging the error to the CSV.
-#
-#     # Mosaic DEMS to subregion
-#     if not arcpy.Exists(paths.dem) and stop_index >= 0:
-#         arcpy.AddMessage('Mosaicking DEMs started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         work_dir = mosaic.stage_files(paths.gdb, NED_DIR, NED_FOOTPRINT, paths.out_dir, is_zipped=True)
-#         ned = mosaic.mosaic(work_dir, paths.gdb, paths.out_dir, available_ram=48) # path on disk = self.dem = 'NED13_####.tif'
-#         tool_count += 1
-#     #TODO: Remove any originals, NED but maybe also NHD, did we modify that at all?
-#
-#     # Create hydrodem burn and add walls
-#     if not arcpy.Exists(paths.lagos_burn) and stop_index >= 1 and not burn_override:
-#         arcpy.AddMessage('Burning DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         burn_temp = burn_streams(paths.dem, paths.gdb, paths.lagos_burn)
-#         tool_count += 1
-#
-#     # Fill  hydrodem
-#     if not arcpy.Exists(paths.lagos_fel) and stop_index >= 2:
-#         arcpy.AddMessage('Filling DEM started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)
-#         print(pitremove_cmd)
-#         sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
-#         tool_count += 1
-#
-#     # Create catseed
-#     if not arcpy.Exists(paths.lagos_gridcode) and stop_index >=3:
-#         make_gridcode.make_gridcode(paths.gdb, paths.lagos_gridcode)
-#
-#     paths.lagos_catseed = path.join(paths.out_dir, 'pourpoints{}'.format(huc4), 'lagos_catseed.tif')
-#     if not arcpy.Exists(paths.lagos_catseed) and stop_index >= 3:
-#         arcpy.AddMessage('Identifying pour points started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         make_catseed(paths.gdb, paths.lagos_fel, paths.out_dir, paths.lagos_gridcode, LAGOS_LAKES)
-#         tool_count += 1
-#
-#     # Create fdr
-#     if not arcpy.Exists(paths.lagos_fdr) and stop_index >= 4:
-#         arcpy.CheckOutExtension('Spatial')
-#         arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         flow_dir = arcpy.sa.FlowDirection(paths.lagos_fel)
-#         # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
-#         wbdhu4 = path.join(paths.gdb, 'WBDHU4')
-#         hu4 = arcpy.Select_analysis(wbdhu4, 'in_memory/hu4', "HUC4 = '{}'".format(huc4))
-#         hu4_buff = arcpy.Buffer_analysis(hu4, 'in_memory/hu4_buff', '10 meters')
-#         arcpy.env.snapRaster = flow_dir
-#         arcpy.Clip_management(flow_dir, '', paths.lagos_fdr, hu4_buff, clipping_geometry='ClippingGeometry')
-#         arcpy.CheckInExtension('Spatial')
-#         arcpy.Delete_management('in_memory/hu4')
-#         tool_count += 1
-#
-#
-#     # delineate catchments
-#     if not arcpy.Exists(paths.local_catchments) and stop_index >= 5:
-#         arcpy.AddMessage('Delineating catchments started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         nt.delineate_catchments(paths.lagos_fdr, paths.lagos_catseed, paths.gdb, paths.lagos_gridcode, paths.local_catchments)
-#         tool_count += 1
-#
-#
-#     # interlake watersheds
-#     if not arcpy.Exists(paths.iws_sheds) and stop_index >= 6:
-#
-#         # wait for predecessor to exist
-#         # useful to split this step into 2nd process. in_memory objects won't interfere, should be safe
-#         if wait:
-#             cat_exists = arcpy.Exists(paths.local_catchments)
-#             while not cat_exists:
-#                 sleep(10)
-#         arcpy.AddMessage(
-#             'Interlake watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         aggregate_watersheds.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.iws_sheds, 'interlake')
-#         tool_count += 1
-#
-#     # network watersheds
-#     if not arcpy.Exists(paths.network_sheds) and stop_index >= 7:
-#
-#         # wait for predecessor to exist
-#         # useful to split this step into 2nd process. in_memory objects won't interfere, should be safe
-#         if wait:
-#             cat_exists = arcpy.Exists(paths.local_catchments)
-#             while not cat_exists:
-#                 sleep(10)
-#         arcpy.AddMessage(
-#             'Network watersheds started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-#         aggregate_watersheds.aggregate_watersheds(paths.local_catchments, paths.gdb, LAGOS_LAKES, paths.network_sheds, 'network')
-#         tool_count += 1
-#     return tool_count
-#
-# def make_alt_run_list(master_HU4):
-#     """Make a run list that will output one huc4 from most regions first, for QA purposes."""
-#     regions = ['{:02d}'.format(i) for i in range(1,19)]
-#     subregions = ['{:02d}'.format(i) for i in range(1,31)]
-#     template = []
-#
-#     # do first 2 from each region first
-#     for s in subregions[:2]:
-#         template.extend(['{}{}'.format(r, s) for r in regions])
-#     # then go by region after that
-#     for r in regions:
-#         template.extend(['{}{}'.format(r, s) for s in subregions[2:]])
-#
-#     huc4 = [r[0] for r in arcpy.da.SearchCursor(master_HU4, 'hu4_huc4')]
-#
-#     # Select only the ones that don't have HR Plus data
-#     no_plus = [i for i in template if i in huc4 and i[:2] in ['04', '08', '18']]
-#     no_plus.remove('1806')
-#     no_plus.remove('1807')
-#     no_plus.remove('1808')
-#     no_plus.remove('1809')
-#     no_plus.remove('1810')
-#     no_plus.remove('1801')
-#
-#     # Add regions that need alt-processing along with regular
-#     no_plus.extend(['0512', '0712', '1111', '0508'])
-#     no_plus.sort()
-#
-#     return no_plus
-#
-# def run_alt_batch():
-#     run_list = make_alt_run_list(HU4)
-#     log_file = r"D:\Continental_Limnology\Data_Working\Tool_Execution\Watersheds\watersheds_log.csv"
-#     for huc4 in run_list:
-#         p = Paths(huc4)
-#         try:
-#             last_tool = 'network'
-#             if huc4 in ['0512', '0712', '1111', '0508']:
-#                 tool_count = run_alternate(p.huc4, last_tool, out_dir = p.out_dir + '_alt')
-#             else:
-#                 tool_count = run_alternate(p.huc4, last_tool)
-#             if tool_count > 0:
-#                 p.log(log_file, '{}: SUCCESS'.format(last_tool))
-#         except Exception as e:
-#             p.log(log_file, repr(e))
-#             print(e)
-#         finally:
-#             arcpy.Delete_management('in_memory')
 
 def add_ws_flags():
     # run_list = make_run_list(HU4)
@@ -512,48 +338,6 @@ def add_ws_flags():
         p = Paths(huc4)
         nt.watershed_equality(p.iws_sheds, p.network_sheds)
         nt.qa_shape_metrics(p.iws_sheds, p.network_sheds, LAGOS_LAKES)
-
-
-def add_hr_indicator():
-    not_hr = ['0401', '0402', '0403', '0404', '0405', '0406', '0407',
-              '0408', '0409', '0410', '0411', '0412', '0413', '0414',
-              '0415', '0801', '0802', '0803',
-              '0804', '0805', '0806', '0807', '0808', '0809',
-              '1802', '1803', '1804', '1805']
-    both = ['0512', '0712', '1111', '0508']
-    hr = [h for h in make_run_list(HU4) if h not in not_hr and h not in both] + both
-    p1 = [Paths(h) for h in not_hr]
-    p2 = [Paths(h) for h in both]
-    for p in p2:
-        p.out_dir = p.out_dir + '_alt'
-        p.locate_outputs()
-    non_hr_paths = p1 + p2
-    hr_paths = [Paths(h) for h in hr]
-
-    for p in non_hr_paths:
-        print(p.huc4)
-        fcs = [p.local_catchments, p.iws_sheds, p.network_sheds]
-        for fc in fcs:
-            if not arcpy.ListFields(fc, 'VPUID'):
-                arcpy.AddField_management(fc, 'watershedprocess', 'TEXT', field_length=20)
-                if fc != p.local_catchments:
-                    arcpy.AddField_management(fc, 'VPUID', 'TEXT', field_length=4)
-                with arcpy.da.UpdateCursor(fc, ['VPUID', 'watershedprocess']) as cursor:
-                    for row in cursor:
-                        cursor.updateRow((p.huc4, 'NHD HR 2017'))
-
-    for p in hr_paths:
-        print(p.huc4)
-        fcs = [p.local_catchments, p.iws_sheds, p.network_sheds]
-        for fc in fcs:
-            if not arcpy.ListFields(fc, 'VPUID'):
-                arcpy.AddField_management(fc, 'watershedprocess', 'TEXT', field_length=20)
-                if fc != p.local_catchments:
-                    arcpy.AddField_management(fc, 'VPUID', 'TEXT', field_length=4)
-                with arcpy.da.UpdateCursor(fc, ['VPUID', 'watershedprocess']) as cursor:
-                    for row in cursor:
-                        cursor.updateRow((p.huc4, 'NHDPlus HR Beta 2019'))
-
 
 def merge_watersheds(parent_directory, output_fc, tag):
     merge_fcs = []

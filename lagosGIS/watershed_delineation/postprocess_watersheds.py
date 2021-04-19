@@ -11,10 +11,10 @@ import lagosGIS
 import zone_prep
 from NHDNetwork import NHDNetwork
 
-LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\Derived_Land_Borders'
-COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\NonPublished\TIGER_Coastline'
-STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Spatial_Classifications\state'
-MASTER_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\Derived_Land_Borders'
+COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\TIGER_Coastline'
+STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Spatial_Classifications\state'
+MASTER_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 
 # ---POSTPROCESSING FUNCTIONS-------------------------------------------------------------------------------------------
 
@@ -114,32 +114,32 @@ def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
     DM.Delete('in_memory/interlake_fc')
     return (subtype_results)
 
-# Not called anymore!
-def qa_shape_metrics(interlake_watershed_fc, network_watershed_fc, lakes_fc):
-    """This function was used to create shape metrics for sliver watershed investigation."""
-    for fc in [interlake_watershed_fc, network_watershed_fc]:
-        try:
-            DM.AddField(fc, 'isoperimetric', 'DOUBLE')
-        except:
-            pass
-        try:
-            DM.AddField(fc, 'perim_area_ratio', 'DOUBLE')
-        except:
-            pass
-        try:
-            DM.AddField(fc, 'lake_shed_area_ratio', 'DOUBLE')
-        except:
-            pass
-        lake_areas = {r[0]: r[1] for r in
-                      arcpy.da.SearchCursor(lakes_fc, ['Permanent_Identifier', 'lake_waterarea_ha'])}
-        with arcpy.da.UpdateCursor(fc, ['isoperimetric', 'perim_area_ratio',
-                                        'lake_shed_area_ratio', 'Permanent_Identifier', 'SHAPE@']) as u_cursor:
-            for row in u_cursor:
-                iso, pa, lakeshed, id, shape = row
-                iso = (4 * 3.14159 * shape.area) / (shape.length ** 2)
-                pa = shape.length / shape.area
-                lakeshed = lake_areas[id] * 10000 / shape.area  # convert lake area to m2
-                u_cursor.updateRow((iso, pa, lakeshed, id, shape))
+# # Not called anymore! Referenced in doc for preliminary work leading to sliver flag rules.
+# def qa_shape_metrics(interlake_watershed_fc, network_watershed_fc, lakes_fc):
+#     """This function was used to create shape metrics for sliver watershed investigation."""
+#     for fc in [interlake_watershed_fc, network_watershed_fc]:
+#         try:
+#             DM.AddField(fc, 'isoperimetric', 'DOUBLE')
+#         except:
+#             pass
+#         try:
+#             DM.AddField(fc, 'perim_area_ratio', 'DOUBLE')
+#         except:
+#             pass
+#         try:
+#             DM.AddField(fc, 'lake_shed_area_ratio', 'DOUBLE')
+#         except:
+#             pass
+#         lake_areas = {r[0]: r[1] for r in
+#                       arcpy.da.SearchCursor(lakes_fc, ['Permanent_Identifier', 'lake_waterarea_ha'])}
+#         with arcpy.da.UpdateCursor(fc, ['isoperimetric', 'perim_area_ratio',
+#                                         'lake_shed_area_ratio', 'Permanent_Identifier', 'SHAPE@']) as u_cursor:
+#             for row in u_cursor:
+#                 iso, pa, lakeshed, id, shape = row
+#                 iso = (4 * 3.14159 * shape.area) / (shape.length ** 2)
+#                 pa = shape.length / shape.area
+#                 lakeshed = lake_areas[id] * 10000 / shape.area  # convert lake area to m2
+#                 u_cursor.updateRow((iso, pa, lakeshed, id, shape))
 
 
 # ---MAIN FUNCTION------------------------------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     :return: sheds_fc
     """
 
-    # -------- setup --------
+    # -------- SETUP -----------------------------------------------------------------------------------------------
     if zone_name not in ('ws', 'nws'):
         raise Exception("Please use either 'ws' or 'nws' for the zone name.")
 
@@ -197,11 +197,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     # ws_equalsnws added by its tool
     # *_states added by its tool
 
-    #------ calculations --------
-    # equality and subtype flags
-    if zone_name == 'ws':
-        calc_watershed_equality(sheds_fc, network_fc)
-        calc_watershed_subtype(nhd_gdb, sheds_fc, fits_naming_standard)
+    # ------ CALCULATIONS -----------------------------------------------------------------------------------------
 
     # add lagoslakeid and copy to zoneid
     permid_lagosid = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['Permanent_Identifier', 'lagoslakeid'])}
@@ -211,7 +207,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
             u_cursor.updateRow(row)
     DM.CalculateField(sheds_fc, zoneid, '!lagoslakeid!', 'PYTHON')
 
-    # basic area, perim
+    # basic area, perimeter
     print("Calculating shape metrics...")
     lake_area_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['lagoslakeid', 'lake_waterarea_ha'])}
     shape_fields = ['lagoslakeid',
@@ -235,8 +231,9 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
             row = (id, multi, lake_area, area, perim, ratio, shape)
             u_cursor.updateRow(row)
 
+
+    # BOUNDARY FLAGS
     print('Adding flags...')
-    # add boundary flag fields
     # identify border zones
     sheds_fc_lyr = DM.MakeFeatureLayer(sheds_fc)
     border_lyr = DM.MakeFeatureLayer(LAND_BORDER, 'border_lyr')
@@ -252,9 +249,9 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     DM.SelectLayerByAttribute(sheds_fc_lyr, 'SWITCH_SELECTION')
     DM.CalculateField(sheds_fc_lyr, oncoast, "'N'", 'PYTHON')
     oncoast = '{}_oncoast'.format(zone_name)
+
     # percent in USA
     arcpy.TabulateIntersection_analysis(sheds_fc, zoneid, STATES_GEO, 'in_memory/tabarea')
-
     # round to 2 digits and don't let values exceed 100
     inusa_dict = {r[0]:min(round(r[1],2), 100)
                   for r in arcpy.da.SearchCursor('in_memory/tabarea', [zoneid, 'PERCENTAGE'])}
@@ -263,6 +260,12 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
         for row in u_cursor:
             row[1] = inusa_dict[row[0]]
             u_cursor.updateRow(row)
+
+    # OTHER FLAGS
+    # equality and subtype flags
+    if zone_name == 'ws':
+        calc_watershed_equality(sheds_fc, network_fc)
+        calc_watershed_subtype(nhd_gdb, sheds_fc, fits_naming_standard)
 
     # assign states to zone
     print('State assignment...')

@@ -201,11 +201,11 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
 
     # add lagoslakeid and copy to zoneid
     permid_lagosid = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['Permanent_Identifier', 'lagoslakeid'])}
-    with arcpy.da.UpdateCursor(sheds_fc, ['Permanent_Identifier', 'lagoslakeid']) as u_cursor:
+    with arcpy.da.UpdateCursor(sheds_fc, ['Permanent_Identifier', 'lagoslakeid', zoneid]) as u_cursor:
         for row in u_cursor:
             row[1] = permid_lagosid[row[0]]
+            row[2] = str(row[1])
             u_cursor.updateRow(row)
-    DM.CalculateField(sheds_fc, zoneid, '!lagoslakeid!', 'PYTHON')
 
     # basic area, perimeter
     print("Calculating shape metrics...")

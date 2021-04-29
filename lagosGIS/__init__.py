@@ -33,8 +33,8 @@ from polygons_in_zones import polygons_in_zones
 from lakes_in_zones import lakes_in_zones
 from locate_lake_outlets import locate_lake_outlets
 from locate_lake_inlets import locate_lake_inlets
-from postprocess_watersheds import calc_watershed_subtype
-from postprocess_watersheds import calc_watershed_equality
+from watershed_delineation.postprocess_watersheds import calc_watershed_subtype
+from watershed_delineation.postprocess_watersheds import calc_watershed_equality
 from point_attribution_of_raster_data import point_attribution_of_raster_data
 from line_density import calc_density as line_density
 from PointDensityInPolygons import points_in_zones as point_density
@@ -60,7 +60,7 @@ def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
 
     # This is a fast and stable merge method for this number of features compared to arcpy Merge
     if all_exist_test:
-        print("Beginning merge of {} feature classes, copying first feature class to output...".format(fc_count))
+        print("Beginning merge of {} feature classes, copying first feature class {} to output...".format(fc_count, first_fc))
         if description.dataType == "FeatureClass":
             arcpy.Select_analysis(first_fc, output_fc, filter)
         else:

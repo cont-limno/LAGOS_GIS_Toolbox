@@ -104,7 +104,7 @@ class Paths:
             print('{} has a bad file: {}'.format(self.gdb_zip, test_gdb))
 
         sevenz_cmd = '{} t {}'.format(SEVENZ, self.rasters_zip)
-        print sevenz_cmd
+        print(sevenz_cmd)
         test_raster = sp.call(sevenz_cmd)
 
         # supposedly 7-zip returns 2 if the archive is invalid
@@ -208,7 +208,7 @@ def run(huc4, last_tool='network', wait = False, burn_override=False):
         arcpy.AddMessage(
             'Pit Remove started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         pitremove_cmd = 'mpiexec -n 8 pitremove -z {} -fel {}'.format(paths.lagos_burn, paths.lagos_fel)
-        print pitremove_cmd
+        print(pitremove_cmd)
         sp.call(pitremove_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
         tool_count += 1
         pit_diff = dt.now() - pit_start
@@ -284,17 +284,12 @@ def make_run_list(master_HU4):
 
 if __name__ == '__main__':
     run_list = make_run_list(HU4)
-    great_lakes =['0418', '0420', '0424', '0427', '0429', '0430']
+    great_lakes =['0418', '0420','0427', '0429', '0430']
     run_list.extend(great_lakes)
     run_list.sort()
-    # big_files = ['0902', '1018', '1109', '1710', '1209', '1304', '1606', '1701', '1702']
-    # for bf in big_files:
-    #     run_list.remove(bf)
-    run_list.remove('0424')
     run_list.remove('0415')
 
-
-    for huc4 in run_list:
+    for huc4 in run_list[run_list.index('0701'):]:
         p = Paths(huc4)
         try:
             last_tool = 'network'
@@ -329,62 +324,5 @@ def patch_on_network_flag():
                 u_cursor.updateRow((permid, onmain))
 
 
-def add_ws_flags():
-    # run_list = make_run_list(HU4)
-    run_list  = make_run_list(HU4)
-    failures = []
-    for huc4 in run_list:
-        print(huc4)
-        p = Paths(huc4)
-        nt.watershed_equality(p.iws_sheds, p.network_sheds)
-        nt.qa_shape_metrics(p.iws_sheds, p.network_sheds, LAGOS_LAKES)
-
-def merge_watersheds(parent_directory, output_fc, tag):
-    merge_fcs = []
-    alt_merge_fcs = []
-    walk = arcpy.da.Walk(parent_directory, datatype='FeatureClass')
-    for dirpath, dirnames, filenames in walk:
-        for filename in filenames:
-            if tag in filename and 'alt' not in dirpath:
-                merge_fcs.append(os.path.join(dirpath, filename))
-            if tag in filename and 'alt' in dirpath and tag == 'catchment':
-                alt_merge_fcs.append(os.path.join(dirpath, filename))
-
-    # merge the main results
-    if tag == 'catchment' or tag == 'interlake':
-        output_fc = lagosGIS.efficient_merge(merge_fcs, output_fc)
-
-    elif tag == 'network':
-        output_fc = lagosGIS.efficient_merge(merge_fcs, output_fc, "equalsiws = 'N'")
-
-    # fill in some of the regions where the NHDPlus HR falls short of the HU4 boundary we used along a border where
-    # NHDPlus is used on one side and NHD is used on the other
-
-    # These regions cannot be in any lake's watershed but they allow the landscape to be dissected
-    if tag == 'catchment':
-        MERGE_REGIONS = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.6.gdb\NHD_Combined_Regions'
-        for fc in alt_merge_fcs:
-            lyr = arcpy.MakeFeatureLayer_management(fc, 'lyr')
-            arcpy.SelectLayerByLocation_management(lyr, 'INTERSECT', MERGE_REGIONS)
-            arcpy.Append_management(output_fc, lyr)
-
-    return output_fc
-
-def add_subtypes(interlake_fc):
-    not_hr = ['0401', '0402', '0403', '0404', '0405', '0406', '0407',
-              '0408', '0409', '0410', '0411', '0412', '0413', '0414',
-              '0415', '0801', '0802', '0803',
-              '0804', '0805', '0806', '0807', '0808', '0809',
-              '1802', '1803', '1804', '1805']
-    hr = [h for h in make_run_list(HU4) if h not in not_hr]
-
-    for huc4 in hr:
-        print(huc4)
-        p = Paths(huc4)
-        nt.calc_subtype_flag(p.gdb, interlake_fc)
-    for huc4 in not_hr:
-        print(huc4)
-        p = Paths(huc4, hr=False)
-        nt.calc_subtype_flag(p.gdb, interlake_fc)
 
 

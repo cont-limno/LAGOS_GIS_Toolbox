@@ -446,7 +446,7 @@ for z in zones:
         sourceid_field = arcpy.ListFields(zone_fc, col_pattern)[0].name
         name_vals = [r[0] for r in arcpy.da.SearchCursor(zone_fc, sourceid_field)]
         try:
-            print max([len(v) for v in name_vals if v])
+            print(max([len(v) for v in name_vals if v]))
         except:
             print("field is not character)")
-        print any([True if not v else False for v in name_vals])
+        print(any([True if not v else False for v in name_vals]))

@@ -29,7 +29,7 @@ def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
              'county', 'state',
              'epanutr4', 'wwf', 'mlra', 'bailey', 'neon', 'omernik3', 'epanutr']
     for z in zones:
-        print z
+        print(z)
         zone = os.path.join(mgdb, z)
         zoneid = '{}_zoneid'.format(z)
         if not arcpy.ListFields(lakes_points_fc, zoneid):

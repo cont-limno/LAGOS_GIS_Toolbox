@@ -67,7 +67,7 @@ def stage_files(nhd_gdb, ned_dir, ned_footprints_fc, out_dir, is_zipped):
     with arcpy.da.SearchCursor("ned_clip", ["FILE_ID"]) as cursor:
         for row in cursor:
             file_id = row[0].replace("g","")
-            print file_id
+            print(file_id)
             # unzipping if needed
 
             if is_zipped:

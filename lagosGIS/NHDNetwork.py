@@ -804,7 +804,7 @@ class NHDNetwork:
         all_outlets = []
         if not self.lakes_areas:
             self.define_lakes()
-        waterbody_start_ids = self.lakes_areas.keys()
+        waterbody_start_ids = list(self.lakes_areas.keys())
         for waterbody_start_id in waterbody_start_ids:
             outlets = self.identify_lake_outlets(waterbody_start_id)
             all_outlets.extend(outlets)
@@ -817,7 +817,7 @@ class NHDNetwork:
         all_inlets = []
         if not self.lakes_areas:
             self.define_lakes()
-        waterbody_start_ids = self.lakes_areas.keys()
+        waterbody_start_ids = list(self.lakes_areas.keys())
         for waterbody_start_id in waterbody_start_ids:
             inlets = self.identify_lake_inlets(waterbody_start_id)
             all_inlets.extend(inlets)

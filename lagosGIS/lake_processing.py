@@ -55,7 +55,7 @@ def add_zoneids_to_lakes(lakes_points_fc, lakes_poly, mgdb):
 
         # make a dict from combining the INTERSECT and CLOSEST results
         zone_dict = {r[0]: r[1] for r in arcpy.da.SearchCursor(join_fc, ['lagoslakeid', zoneid1])}
-        for k, v in zone_dict.items():
+        for k, v in list(zone_dict.items()):
             if not v:
                 zone_dict[k] = update_vals[k]
 

@@ -333,7 +333,7 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
             nhd_network.map_waterbody_to_nhdpids()
         nhdpid_combined = defaultdict(list)
         for d in (nhd_network.nhdpid_flowline, nhd_network.nhdpid_waterbody):
-            for k, v in d.iteritems():
+            for k, v in d.items():
                 nhdpid_combined[k] = v
 
     # re-assign lake ArtificialPath catchments to have the lake Gridcode and dissolve into lake catchment
@@ -392,10 +392,11 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
 
     def reassign_slivers_to_lakes(catchments_fc):
         # remove slight overlaps with neighboring lakes that are in the LAGOS population
-        waterbody_ids = [r[0] for r in arcpy.da.SearchCursor(
-            catchments_fc, ['Permanent_Identifier'], "SourceFC = 'NHDWaterbody'")]
+        output_fields.insert(0, output_fields.pop(4))
+        waterbody_cat_dict = {r[0]:r[1:] for r in arcpy.da.SearchCursor(
+            catchments_fc, output_fields, "SourceFC = 'NHDWaterbody'")}
         waterbody_query = 'Permanent_Identifier IN ({})'.format(
-            ','.join(['\'{}\''.format(id) for id in waterbody_ids]))
+            ','.join(['\'{}\''.format(id) for id in waterbody_cat_dict.keys()]))
         waterbody = arcpy.Select_analysis(nhd_network.waterbody, 'waterbody', waterbody_query)
         waterbody_only = lagosGIS.select_fields(waterbody, 'waterbody_only', ['Permanent_Identifier'], convert_to_table=False)
         arcpy.AddMessage("Finding conflicting lake/watershed slivers...")
@@ -406,10 +407,11 @@ def delineate_catchments(flowdir_raster, catseed_raster, nhdplus_gdb, gridcode_t
         changeless_sheds = arcpy.CopyFeatures_management(catchments_lyr, 'changeless_sheds')
 
         # move slivers in union into the lake watershed as long as they intersect the lake
-        with arcpy.da.UpdateCursor(union, ['Permanent_Identifier', 'Permanent_Identifier_1']) as cursor:
+        with arcpy.da.UpdateCursor(union, ['Permanent_Identifier_1'] + output_fields) as cursor:
             for row in cursor:
-                if row[1] != '': # union produces blank strings instead of nulls
-                    row[0] = row[1] # if lake_id, then use it as the catchment id (move slivers into lake catchment)
+                if row[0] != '': # union produces blank strings instead of nulls
+                    row[1] = row[0] # if lake_id, then use it as the catchment id (move slivers into lake catchment)
+                    row[2:] = waterbody_cat_dict.get(row[1]) # update fields to match waterbody vals
                 cursor.updateRow(row)
 
         arcpy.DeleteField_management(union, 'Permanent_Identifier_1')

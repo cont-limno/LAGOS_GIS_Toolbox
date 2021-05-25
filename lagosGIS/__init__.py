@@ -16,7 +16,8 @@ __all__ = ["lake_connectivity_classification",
            "calc_watershed_equality",
            "aggregate_watersheds",
            "line_density",
-           "point_density"]
+           "point_density",
+           "zone_prep"]
 
 import os
 import arcpy

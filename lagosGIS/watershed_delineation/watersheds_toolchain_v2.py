@@ -289,7 +289,7 @@ if __name__ == '__main__':
     run_list.sort()
     run_list.remove('0415')
 
-    for huc4 in run_list[run_list.index('0701'):]:
+    for huc4 in run_list:
         p = Paths(huc4)
         try:
             last_tool = 'network'

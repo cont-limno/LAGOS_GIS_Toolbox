@@ -21,7 +21,7 @@ def merge_matching_master(output_list, output_fc, master_file, join_field = 'lag
     if arcpy.Exists('outputs_merged'):
         arcpy.Delete_management('outputs_merged')
 
-    if len(output_list) == NUM_SUBREGIONS:
+    if len(output_list) >= NUM_SUBREGIONS:
         arcpy.AddMessage("Merging outputs...")
         outputs_merged = lagosGIS.efficient_merge(output_list, 'outputs_merged')
         arcpy.AddMessage("Merge completed, trimming to master list...")

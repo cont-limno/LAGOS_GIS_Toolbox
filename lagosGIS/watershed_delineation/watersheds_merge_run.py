@@ -1,3 +1,9 @@
+# filename: watersheds_merge_run.py
+# author: Nicole J Smith
+# version: 2.0 Beta
+# LAGOS module(s): LOCUS
+# tool type: code journal (no ArcGIS Toolbox, workstation-specific paths)
+
 from datetime import datetime as dt
 import os
 import arcpy

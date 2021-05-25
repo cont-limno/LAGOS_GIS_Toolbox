@@ -12,6 +12,7 @@ from arcpy import analysis as AN, management as DM
 
 import lagosGIS
 from lagosGIS.NHDNetwork import NHDNetwork
+from datetime import datetime
 
 
 def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
@@ -107,6 +108,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
     # 5) Spatial queries were actually quite fast but picked up extraneous catchments, so we will not use that method.
     # 6) Deletions in the loop waste time (1/3 second per loop) and overwriting causes no problems.
     # 7) Avoid processing any isolated or headwater lakes, no upstream aggregation necessary.
+    # UPDATE: At least one of these must be the opposite of faster in some subregions, such as 1702
+    # Not going to find out why---high catchment features count?
     arcpy.AddMessage("Accumulating watersheds according to traces...")
     counter = 0
     single_catchment_ids = []
@@ -122,12 +125,13 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
         # Loop Step 1: Determine if the lake has upstream network. If not, skip accumulation.
         trace_permids = traces[lake_id]
+
         if len(trace_permids) <= 2:  # headwater lakes have trace length = 2 (lake and flowline)
             single_catchment_ids.append(lake_id)
         else:
             # Loop Step 2: Select catchments with their Permanent_Identifier in the lake's upstream network trace.
             watersheds_query = 'Permanent_Identifier IN ({})'.format(','.join(['\'{}\''.format(id)
-                                                                               for id in trace_permids]))
+                                                                                        for id in trace_permids]))
             selected_watersheds = AN.Select(watersheds_lyr1, 'selected_watersheds', watersheds_query)
 
             # Loop Step 3: Make a single, hole-free catchment polygon.
@@ -173,7 +177,12 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
 
             # Loop Step 6: Save current watershed to merged results feature class.
             this_watershed_geom = DM.CopyFeatures(this_watershed, arcpy.Geometry())
-            sheds_cursor.insertRow([lake_id, this_watershed_geom[0]])
+            try:
+                sheds_cursor.insertRow([lake_id, this_watershed_geom[0]])
+            except: # sometimes there is an empty geometry in unusual situations
+                # such as a lake included outside the bounds of the subregion (1109)
+                # or a lake polygon digitized inside another lake polygon (1702)
+                arcpy.AddMessage("WARNING: Lake {} has empty watershed geometry.".format(lake_id))
 
     arcpy.env.overwriteOutput = False
     arcpy.SetLogHistory(True)
@@ -223,18 +232,22 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             u_cursor.updateRow((permid, inflag))
 
     # Step 7: Clean up results a bit and output results: eliminate slivers smaller than NHD raster cell, clip to HU4
+    clipped = AN.Clip(merged_sheds, hu4, output_fc)
+    result = DM.EliminatePolygonPart(clipped, 'refined1', 'AREA', part_area='99', part_option='ANY')
 
-    refined = DM.EliminatePolygonPart(merged_sheds, 'refined1', 'AREA', part_area='99', part_option='ANY')
-    result = AN.Clip(refined, hu4, output_fc)
     try:
         DM.DeleteField(result, 'ORIG_FID')
     except:
         pass
 
+    # Step 8: Add VPUID
+    arcpy.AddField_management(result, 'VPUID', 'TEXT', field_length=4)
+    arcpy.CalculateField_management(result, 'VPUID', "'{}'".format(huc4_code), 'PYTHON')
+
     # DELETE/CLEANUP: first fcs to free up temp_gdb, then temp_gdb
     for item in [waterbody_lyr, watersheds_lyr1, watersheds_lyr2,
                  hu4, waterbody_mem, waterbody_holeless, watersheds_simple,
-                 merged_sheds, refined]:
+                 merged_sheds, clipped]:
         DM.Delete(item)
     DM.Delete(temp_gdb)
 

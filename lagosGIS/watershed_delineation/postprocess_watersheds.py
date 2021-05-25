@@ -8,13 +8,14 @@ import arcpy
 from arcpy import management as DM
 
 import lagosGIS
-import zone_prep
-from NHDNetwork import NHDNetwork
+import lagosGIS.zone_prep
+import NHDNetwork
 
 LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\Derived_Land_Borders'
 COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\TIGER_Coastline'
 STATES_GEO = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Spatial_Classifications\state'
 MASTER_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+GLACIAL_EXTENT = r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\GEO_datadownload_inprogress\DATA_glaciationlatewisc\Pre-processed\lgm_glacial_world.shp'
 
 # ---POSTPROCESSING FUNCTIONS-------------------------------------------------------------------------------------------
 
@@ -36,14 +37,14 @@ def calc_watershed_equality(interlake_watershed_fc, network_watershed_fc):
         for row in u_cursor:
             permid, flag = row
             if permid in iws_area and permid in net_area:
-                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 10  # meters square, or 0.01 hectares
+                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 100  # square meters, or 0.01 hectares
                 flag = 'N' if area_is_diff else 'Y'
             u_cursor.updateRow((permid, flag))
     with arcpy.da.UpdateCursor(network_watershed_fc, ['Permanent_Identifier', 'equalsiws']) as u_cursor:
         for row in u_cursor:
             permid, flag = row
             if permid in iws_area and permid in net_area:
-                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 10  # square meters
+                area_is_diff = abs(iws_area[permid] - net_area[permid]) >= 100  # square meters
                 flag = 'N' if area_is_diff else 'Y'
             u_cursor.updateRow((permid, flag))
 
@@ -58,11 +59,11 @@ def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
 
     else:
         permid = 'Permanent_Identifier'
-        eq = 'equalsnetwork'
+        eq = 'equalsnws'
         vpuid = 'VPUID'
 
     # Get list of eligible lakes
-    nhd_network = NHDNetwork(nhd_gdb)
+    nhd_network = NHDNetwork.NHDNetwork(nhd_gdb)
     gdb_wb_permids = {row[0] for row in arcpy.da.SearchCursor(nhd_network.waterbody, 'Permanent_Identifier') if row[0]}
     eligible_lake_ids = {row[0] for row in arcpy.da.SearchCursor(interlake_fc, permid)}
     matching_ids = list(gdb_wb_permids.intersection(eligible_lake_ids))
@@ -174,6 +175,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     mbgconhull_width_m = '{}_mbgconhull_width_m'.format(zone_name)
     mbgconhull_orientation_deg = '{}_mbgconhull_orientation_deg'.format(zone_name)
     meanwidth_m = '{}_meanwidth_m'.format(zone_name)
+    vpuid = 'VPUID'
 
     # add fields
     print("Adding fields...")
@@ -193,6 +195,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     DM.AddField(sheds_fc, mbgconhull_width_m, 'DOUBLE')
     DM.AddField(sheds_fc, mbgconhull_orientation_deg, 'DOUBLE')
     DM.AddField(sheds_fc, meanwidth_m, 'DOUBLE')
+    DM.AddField(sheds_fc, vpuid, 'TEXT', field_length=4)
     # ws_subtype added by its tool
     # ws_equalsnws added by its tool
     # *_states added by its tool
@@ -251,6 +254,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     oncoast = '{}_oncoast'.format(zone_name)
 
     # percent in USA
+    arcpy.AddMessage("Percent in USA...")
     arcpy.TabulateIntersection_analysis(sheds_fc, zoneid, STATES_GEO, 'in_memory/tabarea')
     # round to 2 digits and don't let values exceed 100
     inusa_dict = {r[0]:min(round(r[1],2), 100)
@@ -258,20 +262,24 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
 
     with arcpy.da.UpdateCursor(sheds_fc, [zoneid, inusa_pct]) as u_cursor:
         for row in u_cursor:
-            row[1] = inusa_dict[row[0]]
+            if row[0] in inusa_dict:
+                row[1] = inusa_dict[row[0]]
+            else: # occasional border lakes have watersheds completely outside state borders
+                row[1] = 0
             u_cursor.updateRow(row)
 
     # OTHER FLAGS
     # equality and subtype flags
     if zone_name == 'ws':
         calc_watershed_equality(sheds_fc, network_fc)
-        calc_watershed_subtype(nhd_gdb, sheds_fc, fits_naming_standard)
+        if nhd_gdb:
+            calc_watershed_subtype(nhd_gdb, sheds_fc, fits_naming_standard)
 
     # assign states to zone
     print('State assignment...')
     lagosGIS.zone_prep.find_states(sheds_fc, STATES_GEO, zone_name)
     # glaciation status
-    lagosGIS.zone_prep.calc_glaciation(sheds_fc, zoneid, zone_name)
+    lagosGIS.zone_prep.calc_glaciation(sheds_fc, GLACIAL_EXTENT, zoneid, zone_name)
 
     # mbgconhull metrics
     print('Adding convex hull metrics...')

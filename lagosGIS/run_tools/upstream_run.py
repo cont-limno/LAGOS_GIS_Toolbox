@@ -19,7 +19,7 @@ FINAL_OUTPUT = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-04-19
 
 def upstream_run_list():
     run_list = make_run_list(HU4)
-    great_lakes =['0418', '0420', '0424', '0427', '0429', '0430']
+    great_lakes =['0418', '0420', '0427', '0429', '0430']
     run_list.extend(great_lakes)
     run_list.remove('0415')
     plus_name = 'NHDPLUS_H_{}_HU4_GDB.gdb'
@@ -27,56 +27,58 @@ def upstream_run_list():
 
     for p, h in zip(paths, run_list):
         output_path = os.path.join(OUTPUT_DIR, 'upstream_{}'.format(h))
-        print(output_path)
-        upstream.count(p, output_path)
+
+        if not arcpy.Exists(output_path):
+            print(output_path)
+            upstream.count(p, output_path)
 
 upstream_run_list()
 
-# #---MERGE-------------------------------------------------------
-#
-# # get files
-# print("Directory walk...")
-# walk = arcpy.da.Walk(OUTPUT_DIR, datatype="Table")
-# output_list = []
-# for dirpath, dirnames, filenames in walk:
-#     for f in filenames:
-#         if f.startswith("upstream"):
-#             output_list.append(os.path.join(dirpath, f))
-#
-#
-# rules_field_list = ['lake_lakes1ha_upstream_n',
-#                    'lake_lakes1ha_upstream_ha',
-#                    'lake_lakes4ha_upstream_n',
-#                    'lake_lakes4ha_upstream_ha',
-#                    'lake_lakes10ha_upstream_n',
-#                    'lake_lakes10ha_upstream_ha']
-#
-# priorities = [1, 2, 3, 4, 5, 6]
-# rules = ["max", "max", "max", "max", "max", "max"]
-#
-#
-# # Step 1: Select only necessary fields from output tables pre-merge
-# # Not necessary for these tables
-#
-# # Step 2: Merge the tables together
-# merge_subregion_outputs.merge_matching_master(output_list, FINAL_OUTPUT,
-#                                               MASTER_LAKES, join_field='Permanent_Identifier')
-#
-# # Step 3: Add lagoslakeid
-# master_ids = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['Permanent_Identifier', 'lagoslakeid'])}
-#
-# arcpy.AddField_management(FINAL_OUTPUT, 'lagoslakeid', 'LONG')
-# with arcpy.da.UpdateCursor(FINAL_OUTPUT, ['Permanent_Identifier', 'lagoslakeid']) as cursor:
-#     for row in cursor:
-#         row[1] = master_ids[row[0]]
-#         cursor.updateRow(row)
-#
-# # Step 4: Delete duplicates using the rule-based de-duplication
-# arcpy.DeleteIdentical_management(FINAL_OUTPUT, ['lagoslakeid'] + rules_field_list)
-# arcpy.AddIndex_management(FINAL_OUTPUT, 'lagoslakeid', 'IDX_lagoslakeid')
-# stored_rules = merge_subregion_outputs.store_rules(rules_field_list, priorities, rules)
-# merge_subregion_outputs.deduplicate(FINAL_OUTPUT, stored_rules)
-#
-# # Clean up the table some
-# arcpy.DeleteField_management(FINAL_OUTPUT, 'nhd_merge_id')
-# arcpy.DeleteField_management(FINAL_OUTPUT, 'Permanent_Identifier')
+#---MERGE-------------------------------------------------------
+
+# get files
+print("Directory walk...")
+walk = arcpy.da.Walk(OUTPUT_DIR, datatype="Table")
+output_list = []
+for dirpath, dirnames, filenames in walk:
+    for f in filenames:
+        if f.startswith("upstream"):
+            output_list.append(os.path.join(dirpath, f))
+
+
+rules_field_list = ['lake_lakes1ha_upstream_n',
+                   'lake_lakes1ha_upstream_ha',
+                   'lake_lakes4ha_upstream_n',
+                   'lake_lakes4ha_upstream_ha',
+                   'lake_lakes10ha_upstream_n',
+                   'lake_lakes10ha_upstream_ha']
+
+priorities = [1, 2, 3, 4, 5, 6]
+rules = ["max", "max", "max", "max", "max", "max"]
+
+
+# Step 1: Select only necessary fields from output tables pre-merge
+# Not necessary for these tables
+
+# Step 2: Merge the tables together
+merge_subregion_outputs.merge_matching_master(output_list, FINAL_OUTPUT,
+                                              MASTER_LAKES, join_field='Permanent_Identifier')
+
+# Step 3: Add lagoslakeid
+master_ids = {r[0]: r[1] for r in arcpy.da.SearchCursor(MASTER_LAKES, ['Permanent_Identifier', 'lagoslakeid'])}
+
+arcpy.AddField_management(FINAL_OUTPUT, 'lagoslakeid', 'LONG')
+with arcpy.da.UpdateCursor(FINAL_OUTPUT, ['Permanent_Identifier', 'lagoslakeid']) as cursor:
+    for row in cursor:
+        row[1] = master_ids[row[0]]
+        cursor.updateRow(row)
+
+# Step 4: Delete duplicates using the rule-based de-duplication
+arcpy.DeleteIdentical_management(FINAL_OUTPUT, ['lagoslakeid'] + rules_field_list)
+arcpy.AddIndex_management(FINAL_OUTPUT, 'lagoslakeid', 'IDX_lagoslakeid')
+stored_rules = merge_subregion_outputs.store_rules(rules_field_list, priorities, rules)
+merge_subregion_outputs.deduplicate(FINAL_OUTPUT, stored_rules)
+
+# Clean up the table some
+arcpy.DeleteField_management(FINAL_OUTPUT, 'nhd_merge_id')
+arcpy.DeleteField_management(FINAL_OUTPUT, 'Permanent_Identifier')

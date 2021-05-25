@@ -188,6 +188,11 @@ print('nws shape')
 nws_shp_export = os.path.join(OUT_GDB, 'nws')
 nws_shape = lagosGIS.select_fields(nws, nws_shp_export, ['lagoslakeid', 'nws_zoneid'])
 
+# catchment layer
+cat = os.path.join(CURRENT_WORKING_GDB, 'catchment')
+cat_shp_export = os.path.join(OUT_GDB, 'catchment')
+cat_shape = lagosGIS.select_fields(cat, cat_shp_export, ['lagoslakeid', 'Permanent_Identifier', 'NHDPlusID', 'SourceFC', 'Permanent_Identifier', 'VPUID'])
+
 # # --------------------------GEO tables--------------
 # arcpy.env.workspace = 'in_memory'
 # CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'

@@ -12,13 +12,13 @@ import merge_subregion_outputs
 
 HU4 = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Spatial_Classifications\hu4'
 PLUS_DIR = r'F:\Continental_Limnology\Data_Downloaded\NHDPlus_High_Resolution_COMPLETE\Unzipped_Original\Vectors'
-OUTPUT_DIR = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-04-19_ConnMetrics_AllPlus\2021-04-19_ConnClass_AllPlus.gdb'
+OUTPUT_DIR =  r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-01-12_ConnRerun_WithClosed\2021-01-12_ConnRerun_WithClosed_NewNHD.gdb'
 MASTER_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
-FINAL_OUTPUT = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-04-19_ConnMetrics_AllPlus\2021-04-19_ConnClass_AllPlus.gdb/lake_connectivity'
+FINAL_OUTPUT =  r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-01-12_ConnRerun_WithClosed\2021-01-12_ConnRerun_WithClosed_NewNHD.gdb\lake_connectivity'
 
 def conn_run_list():
     run_list = make_run_list(HU4)
-    great_lakes =['0418', '0420', '0424', '0427', '0429', '0430']
+    great_lakes =['0418', '0420', '0427', '0429', '0430']
     run_list.extend(great_lakes)
     run_list.remove('0415')
     plus_name = 'NHDPLUS_H_{}_HU4_GDB.gdb'
@@ -26,8 +26,9 @@ def conn_run_list():
 
     for p, h in zip(paths, run_list):
         output_path = os.path.join(OUTPUT_DIR, 'conn_{}'.format(h))
-        print(output_path)
-        conn.classify(p, output_path)
+        if not arcpy.Exists(output_path):
+            print(output_path)
+            conn.classify(p, output_path)
 
 conn_run_list()
 
@@ -47,8 +48,8 @@ rules_field_list = ['lake_connectivity_class',
 
 priorities = [1, 3, 2]
 rules = ["custom_sort", "custom_sort", "min"]
-sort = [['DrainageLk', 'Drainage', 'ClosedLk', 'Closed', 'Headwater', 'Isolated'],
-        ['DrainageLk', 'Drainage', 'ClosedLk', 'Closed', 'Headwater', 'Isolated'],
+sort = [['DrainageLk', 'Drainage', 'TerminalLk', 'ClosedLk', 'Terminal', 'Closed', 'Headwater', 'Isolated'],
+        ['DrainageLk', 'Drainage', 'TerminalLk', 'ClosedLk', 'Terminal', 'Closed', 'Headwater', 'Isolated'],
         None]
 
 # Step 1: Select only necessary fields from output tables pre-merge

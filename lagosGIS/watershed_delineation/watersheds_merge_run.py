@@ -160,3 +160,10 @@ with arcpy.da.UpdateCursor(output_nws, ['lagoslakeid']) as cursor2:
 # fix ws_equalsnws and then also use that to redefine the ws_subtype (since it is determined
 # by the equality)
 # A re-run should fix the same thing the dissolve did and not require the manual fixes
+
+
+# # Other necessary tasks
+# 1) Refresh lake_missingws
+# 2) Refresh ws_zoneid, nws_zoneid to be null when no ws/nws and populated when there is in LAKES layer
+# both the points and polygons
+# 3) Add lat lon to all layers

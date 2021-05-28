@@ -7,7 +7,7 @@
 import os
 import arcpy
 import upstream_lakes as upstream
-from watershed_delineation.watersheds_toolchain_v2 import make_run_list
+from watershed_delineation.watersheds_toolchain import make_run_list
 import merge_subregion_outputs
 
 

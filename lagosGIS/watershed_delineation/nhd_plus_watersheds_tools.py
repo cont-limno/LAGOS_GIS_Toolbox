@@ -283,10 +283,11 @@ def make_hydrodem(burned_raster, hydrodem_raster_out):
     except:
         arcpy.AddMessage("Tool did not run. Check for correct installation of TauDEM tools.")
 
-def flow_direction(hydrodem_raster, flow_direction_raster_out):
+def flow_direction(hydrodem_raster, nhd_fdr, flow_direction_raster_out):
     """
     Create the flow direction raster for the subregion.
     :param hydrodem_raster: The modified or final hydrodem raster
+    :param nhd_fdr: The fdr raster from NHDPlus
     :param flow_direction_raster_out: The output raster containing the flow directions
     :return:
     """
@@ -294,7 +295,7 @@ def flow_direction(hydrodem_raster, flow_direction_raster_out):
     arcpy.AddMessage('Flow direction started at {}...'.format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
     flow_dir = arcpy.sa.FlowDirection(hydrodem_raster)
     # enforce same bounds as NHD fdr, so catchments have same HU4 boundary
-    flow_dir_clipped = arcpy.sa.Con(arcpy.sa.IsNull(hydrodem_raster), hydrodem_raster, flow_dir)
+    flow_dir_clipped = arcpy.sa.Con(arcpy.sa.IsNull(nhd_fdr), nhd_fdr, flow_dir)
     flow_dir_clipped.save(flow_direction_raster_out)
     arcpy.CheckInExtension('Spatial')
 

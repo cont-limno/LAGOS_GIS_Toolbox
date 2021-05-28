@@ -12,7 +12,7 @@ arcpy.env.workspace = 'in_memory'
 arcpy.env.overwriteOutput = True
 CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.9.gdb'
 OUT_FOLDER = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-05-20_Export-LOCUS'
-OUT_GDB = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-05-20_Export-LOCUS\2021-05-20_gis_locus.gdb'
+OUT_GDB = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-05-20_Export-LOCUS\gis_locus_v1.0.gdb'
 
 #---------- LOCUS tables--------------
 

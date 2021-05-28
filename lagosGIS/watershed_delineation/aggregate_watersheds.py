@@ -232,8 +232,8 @@ def aggregate_watersheds(catchments_fc, nhd_gdb, eligible_lakes_fc, output_fc,
             u_cursor.updateRow((permid, inflag))
 
     # Step 7: Clean up results a bit and output results: eliminate slivers smaller than NHD raster cell, clip to HU4
-    clipped = AN.Clip(merged_sheds, hu4, output_fc)
-    result = DM.EliminatePolygonPart(clipped, 'refined1', 'AREA', part_area='99', part_option='ANY')
+    clipped = AN.Clip(merged_sheds, hu4, 'clipped')
+    result = DM.EliminatePolygonPart(clipped, output_fc, 'AREA', part_area='99', part_option='ANY')
 
     try:
         DM.DeleteField(result, 'ORIG_FID')

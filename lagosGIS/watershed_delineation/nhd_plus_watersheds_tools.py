@@ -5,7 +5,7 @@
 # tool type: re-usable (ArcGIS Toolbox)--tools called in individual scripts to make tools
 
 import os
-import datetime as dt
+from datetime import datetime as dt
 import subprocess as sp
 from collections import defaultdict
 from arcpy import management as DM

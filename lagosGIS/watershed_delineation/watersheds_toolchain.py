@@ -15,8 +15,7 @@ from zipfile import ZipFile
 import arcpy
 
 import NHDNetwork
-from watershed_delineation import aggregate_watersheds, make_gridcode, nhd_plus_watersheds_tools as nt
-import lagosGIS
+from watershed_delineation import aggregate_watersheds, nhd_plus_watersheds_tools as nt
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'revise_hydrodem', 'fel', 'fdr',
               'delineate_catchments', 'interlake', 'network')

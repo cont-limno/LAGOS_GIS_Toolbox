@@ -15,7 +15,8 @@ from zipfile import ZipFile
 import arcpy
 
 import NHDNetwork
-from watershed_delineation import aggregate_watersheds, make_gridcode, nhd_plus_watersheds_tools as nt
+from watershed_delineation import aggregate_watersheds, nhd_plus_watersheds_tools as nt
+from deprecated import make_gridcode, mosaic_dems as mosaic
 import lagosGIS
 
 TOOL_ORDER = ('update_grid_codes', 'add_lake_seeds', 'fix_hydrodem', 'fel', 'fdr',
@@ -369,9 +370,8 @@ def patch_on_network_flag():
 
 def run_alternate(huc4, last_tool='network', wait=False, out_dir = '', burn_override=True):
     arcpy.env.overwriteOutput = True
-    from watershed_delineation import mosaic_dems as mosaic
-    from watershed_delineation.burn_dems import burn_streams
-    from watershed_delineation.make_catseed import make_catseed as make_catseed
+    from deprecated.burn_dems import burn_streams
+    from deprecated.make_catseed import make_catseed as make_catseed
 
     NED_DIR = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Zipped'
     NED_FOOTPRINT = r'D:\Continental_Limnology\Data_Downloaded\3DEP_National_Elevation_Dataset\Unzipped Original\ned_13arcsec_g.shp'

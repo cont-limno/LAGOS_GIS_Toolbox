@@ -9,8 +9,8 @@ import os
 import arcpy
 import lagosGIS
 import watershed_delineation.postprocess_watersheds as postprocess
-from watershed_delineation.watersheds_toolchain_v2 import make_run_list
-from watershed_delineation.watersheds_toolchain_v2 import HU4
+from watershed_delineation.watersheds_toolchain import make_run_list
+from watershed_delineation.watersheds_toolchain import HU4
 import merge_subregion_outputs
 
 LAGOS_LAKES = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Lakes\LAGOS_US_All_Lakes_1ha'

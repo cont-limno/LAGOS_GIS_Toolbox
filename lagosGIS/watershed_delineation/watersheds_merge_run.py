@@ -70,7 +70,7 @@ for hu4 in run_list:
         arcpy.AddField_management(ws, 'VPUID', 'TEXT', field_length=4)
         arcpy.CalculateField_management(ws, 'VPUID', "'{}'".format(hu4), 'PYTHON')
 
-add lagoslakeid to catchments
+# add lagoslakeid to catchments
 permid_lagosid = {r[0]: r[1] for r in arcpy.da.SearchCursor(LAGOS_LAKES, ['Permanent_Identifier', 'lagoslakeid'])}
 for hu4 in run_list:
     print(hu4)
@@ -81,7 +81,7 @@ for hu4 in run_list:
             row[1] = permid_lagosid.get(row[0])
             u_cursor.updateRow(row)
 
-post-process ws individually
+# post-process ws individually
 for hu4 in run_list:
     ws = LAKE_SHEDS_PATH.format(hu4=hu4)
     nws = NETWORK_SHEDS_PATH.format(hu4=hu4)

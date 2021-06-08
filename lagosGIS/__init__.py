@@ -17,7 +17,8 @@ __all__ = ["lake_connectivity_classification",
            "aggregate_watersheds",
            "line_density",
            "point_density",
-           "zone_prep"]
+           "zone_prep",
+           "zonal_attribution_of_polygon_data"]
 
 import os
 import arcpy
@@ -40,6 +41,7 @@ from point_attribution_of_raster_data import point_attribution_of_raster_data
 from line_density import calc_density as line_density
 from PointDensityInPolygons import points_in_zones as point_density
 from watershed_delineation.aggregate_watersheds import aggregate_watersheds as aggregate_watersheds
+from zonal_attribution_of_polygon_data import zonal_attribution_of_polygon_data
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):

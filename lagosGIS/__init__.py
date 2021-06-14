@@ -16,6 +16,7 @@ __all__ = ["lake_connectivity_classification",
            "calc_watershed_equality",
            "aggregate_watersheds",
            "line_density",
+           "stream_density",
            "point_density",
            "zone_prep",
            "zonal_attribution_of_polygon_data"]
@@ -39,6 +40,7 @@ from watershed_delineation.postprocess_watersheds import calc_watershed_subtype
 from watershed_delineation.postprocess_watersheds import calc_watershed_equality
 from point_attribution_of_raster_data import point_attribution_of_raster_data
 from line_density import calc_density as line_density
+from stream_density import calc_density as stream_density
 from PointDensityInPolygons import points_in_zones as point_density
 from watershed_delineation.aggregate_watersheds import aggregate_watersheds as aggregate_watersheds
 from zonal_attribution_of_polygon_data import zonal_attribution_of_polygon_data

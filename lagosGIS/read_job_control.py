@@ -105,6 +105,8 @@ def read_job_control(job_control_csv, start_line = -1, end_line = -1, validate=F
                 except Exception as e:
                     exceptions.append(e.message)
                     print('WARNING: {}'.format(e.message))
+            else:
+                print("{} already exists.".format(output))
 
 
             # Keep in_memory workspace from carrying over to the next call

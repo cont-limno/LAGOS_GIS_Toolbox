@@ -15,8 +15,12 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
     arcpy.AddMessage("Cracking lines...")
     lines_identity = arcpy.Identity_analysis(lines_fc, zones_fc, 'lines_identity')
     arcpy.AddMessage("Summarizing results...")
+    print("Calculating length...")
     arcpy.AddField_management(lines_identity, 'length_m', 'DOUBLE')
-    arcpy.CalculateField_management(lines_identity, 'length_m', '!shape.length!', 'PYTHON')
+    with arcpy.da.UpdateCursor(lines_identity, ['length_m', 'SHAPE@LENGTH']) as cursor:
+        for row in cursor:
+            row[0] = row[1]
+            cursor.updateRow(row)
 
     # make permanent-only layer
     perm_query = 'FCode NOT IN ({})'.format(','.join(intermit_fcodes))
@@ -24,16 +28,19 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
 
     def summarize_cracked(cracked_lines, density_field_name):
         # calc total length grouped by zone (numerator)
+        print("Statistics...")
         lines_stat = arcpy.Statistics_analysis(cracked_lines, 'lines_stat', 'length_m SUM', zone_field)
         lines_stat_full = lagosGIS.one_in_one_out(lines_stat, zones_fc, zone_field, 'lines_stat_full')
 
         # get area of zones for density calc (denominator)
+        print("Getting zone areas...")
         zones_area = {}
         with arcpy.da.SearchCursor(zones_fc, [zone_field, 'SHAPE@']) as cursor:
             for row in cursor:
                 zones_area[row[0]] = row[1].getArea(units='HECTARES')
 
         # calc the density by dividing
+        print("Calculating density...")
         arcpy.AddField_management(lines_stat_full, density_field_name, 'DOUBLE')
         with arcpy.da.UpdateCursor(lines_stat_full, [zone_field, density_field_name, 'SUM_length_m']) as cursor:
             for row in cursor:

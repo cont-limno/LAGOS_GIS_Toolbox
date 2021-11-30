@@ -117,7 +117,7 @@ def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_tabl
         elif isinstance(x, float):
             x_10 = round(x, 10)
             x_int = int(round(x, 0))
-            out_value = str(x_int if x_10 == x_int else x_10)
+            out_value = str(x_int if x_10 == x_int else '{:.10f}'.format(x_10))
             if out_value == '-0':
                 out_value = '0'
             return out_value

@@ -45,10 +45,9 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                     need_selection = True
 
     if need_selection:
-        whereClause = '''
-                    ("lake_waterarea_ha" >= 4 AND "FCode" IN %s)''' % (fcodes,)
-        arcpy.Select_analysis(temp_lakes, "lakes_4ha", whereClause)
-        temp_lakes = os.path.join(arcpy.env.workspace, "lakes_4ha")
+        whereClause = '''"FCode" IN %s''' % (fcodes,)
+        arcpy.Select_analysis(temp_lakes, "lakes_lagos", whereClause)
+        temp_lakes = os.path.join(arcpy.env.workspace, "lakes_lagos")
 
 
     selections = [
@@ -59,11 +58,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"lake_connectivity_class" = 'Headwater'""",
             """"lake_connectivity_class" = 'Drainage'""",
             """"lake_connectivity_class" = 'DrainageLk'""",
+            """"lake_connectivity_class" = 'Terminal'""",
+            """"lake_connectivity_class" = 'TerminalLk'""",
 
             """"lake_connectivity_permanent" = 'Isolated'""",
             """"lake_connectivity_permanent" = 'Headwater'""",
             """"lake_connectivity_permanent" = 'Drainage'""",
             """"lake_connectivity_permanent" = 'DrainageLk'""",
+            """"lake_connectivity_permanent" = 'Terminal'""",
+            """"lake_connectivity_permanent" = 'TerminalLk'""",
             
             # 4 hectare selections
             """"lake_waterarea_ha" >= 4""",
@@ -72,11 +75,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'Headwater'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'Drainage'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'TerminalLk'""",
 
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Isolated'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Headwater'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Drainage'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'TerminalLk'""",
 
             # 10 hectare selections
             """"lake_waterarea_ha" >= 10""",
@@ -85,11 +92,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'Headwater'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'Drainage'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'TerminalLk'""",
     
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Isolated'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Headwater'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Drainage'""",
-            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'DrainageLk'"""
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'TerminalLk'"""
                 ]
 
     temp_tables = ['lakes1ha_all',
@@ -98,11 +109,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 'lakes1ha_headwater',
                 'lakes1ha_drainage',
                 'lakes1ha_drainagelk',
+                'lakes1ha_terminal',
+                'lakes1ha_terminallk',
 
                 'lakes1ha_isolatedperm',
                 'lakes1ha_headwaterperm',
                 'lakes1ha_drainageperm',
                 'lakes1ha_drainagelkperm',
+                'lakes1ha_terminalperm',
+                'lakes1ha_terminallkperm',
 
                 'lakes4ha_all',
 
@@ -110,11 +125,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 'lakes4ha_headwater',
                 'lakes4ha_drainage',
                 'lakes4ha_drainagelk',
+                'lakes4ha_terminal',
+                'lakes4ha_terminallk',
 
                 'lakes4ha_isolatedperm',
                 'lakes4ha_headwaterperm',
                 'lakes4ha_drainageperm',
                 'lakes4ha_drainagelkperm',
+                'lakes4ha_terminalperm',
+                'lakes4ha_terminallkperm',
 
                 'lakes10ha_all',
 
@@ -122,11 +141,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                'lakes10ha_headwater',
                'lakes10ha_drainage',
                'lakes10ha_drainagelk',
+               'lakes10ha_terminal',
+               'lakes10ha_terminallk',
 
                'lakes10ha_isolatedperm',
                'lakes10ha_headwaterperm',
                'lakes10ha_drainageperm',
-               'lakes10ha_drainagelkperm'
+               'lakes10ha_drainagelkperm',
+               'lakes10ha_terminalperm',
+               'lakes10ha_terminallkperm'
                 ]
 
     for sel, temp_table in zip(selections, temp_tables):

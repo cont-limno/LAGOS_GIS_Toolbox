@@ -13,9 +13,9 @@ import lagosGIS
 def trim_watershed_slivers(watersheds_fc, lakes_fc, output_fc):
     arcpy.Intersect_analysis([watersheds_fc, lakes_fc], output_fc)
     # want to drop any intersections < 10% of area of the lake, as long as it overlaps shed by 10%+, will count
-    arcpy.Select_analysis(output_fc, 'in_memory/select', 'Shape_Area < (.1 * lake_waterarea_ha) * 10000')
+    arcpy.Select_analysis(output_fc, 'in_memory/slivers', 'Shape_Area < (.1 * lake_waterarea_ha) * 10000')
     arcpy.Delete_management(output_fc) # used this as a temp fc so we could have Shape_Area calculated
-    arcpy.Erase_analysis(watersheds_fc, 'in_memory/select', output_fc)
+    arcpy.Erase_analysis(watersheds_fc, 'in_memory/slivers', output_fc)
     return output_fc
 
 

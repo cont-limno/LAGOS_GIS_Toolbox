@@ -1,6 +1,6 @@
 # filename: export_to_csv.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS, GEO, CONN
 # tool type: re-usable (ArcGIS Toolbox)
 

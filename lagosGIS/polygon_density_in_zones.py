@@ -1,13 +1,9 @@
-#-------------------------------------------------------------------------------
-# Name:        module1
-# Purpose:
-#
-# Author:      smithn78
-#
-# Created:     21/05/2014
-# Copyright:   (c) smithn78 2014
-# Licence:     <your licence>
-#-------------------------------------------------------------------------------
+# filename: polygon_density_in_zones.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
 import arcpy
 
 

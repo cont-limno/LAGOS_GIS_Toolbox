@@ -1,6 +1,6 @@
 # filename: merge_subregion_outputs.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: re-usable (not in ArcGIS Toolbox)
 # purpose: These functions assist with merging and deduplicating GIS outputs for analyses that had to be run at the

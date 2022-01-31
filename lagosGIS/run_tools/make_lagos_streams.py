@@ -1,9 +1,8 @@
 # filename: make_lagos_streams.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): GEO
-# tool type: code journal, no ArcGIS toolbox
-# status: work in progress
+# tool type: code journal
 
 import os
 import re
@@ -35,27 +34,27 @@ def stream_process(gdb):
 
     return out_streams
 
-# # make a stream layer with Strahler for each gdb
-# for gdb in gdb_list:
-#     print(gdb)
-#     stream_process(gdb)
-#
-# # then merge to region
-# arcpy.env.workspace = OUTPUT_GDB
-# for region in regions:
-#     wildcard = 'streams_{}*'.format(region)
-#     print wildcard
-#     fcs = arcpy.ListFeatureClasses(wildcard)
-#     print(fcs)
-#     streams_all = 'streams_all_{}'.format(region)
-#     streams_24k = 'streams_24k_{}'.format(region)
-#     if not arcpy.Exists(streams_all):
-#         lagosGIS.efficient_merge(fcs, streams_all)
-#         arcpy.Select_analysis(streams_all, streams_24k, 'VisibilityFilter >= 24000')
-#
-#
-# streams_all_all = [os.path.join(OUTPUT_GDB, 'streams_all_{}'.format(region)) for region in regions if region not in ('10', '01', '02', '03')]
-#
+# make a stream layer with Strahler for each gdb
+for gdb in gdb_list:
+    print(gdb)
+    stream_process(gdb)
+
+# then merge to region
+arcpy.env.workspace = OUTPUT_GDB
+for region in regions:
+    wildcard = 'streams_{}*'.format(region)
+    print wildcard
+    fcs = arcpy.ListFeatureClasses(wildcard)
+    print(fcs)
+    streams_all = 'streams_all_{}'.format(region)
+    streams_24k = 'streams_24k_{}'.format(region)
+    if not arcpy.Exists(streams_all):
+        lagosGIS.efficient_merge(fcs, streams_all)
+        arcpy.Select_analysis(streams_all, streams_24k, 'VisibilityFilter >= 24000')
+
+
+streams_all_all = [os.path.join(OUTPUT_GDB, 'streams_all_{}'.format(region)) for region in regions if region not in ('10', '01', '02', '03')]
+
 all_streams_nhdhr = os.path.join(OUTPUT_GDB, 'all_streams_nhdhr')
 all_nhdarea = os.path.join(OUTPUT_GDB, 'all_nhdarea')
 artificial_paths = os.path.join(OUTPUT_GDB, 'artificial_paths')
@@ -65,24 +64,24 @@ midreach = os.path.join(OUTPUT_GDB, 'midreach')
 river = os.path.join(OUTPUT_GDB, 'river')
 
 
-# lagosGIS.efficient_merge(streams_all_all, all_streams_nhdhr))
+lagosGIS.efficient_merge(streams_all_all, all_streams_nhdhr)
 
-# # # Merge all NHDArea polygons with StreamRiver ftype (460)
-# # nhd_areas = [os.path.join(gdb, 'NHDArea') for gdb in gdb_list]
-# # lagosGIS.efficient_merge(nhd_areas, all_nhdarea, 'FType = 460')
-#
-# # find artificial paths that are associated with StreamRiver polygons
-# print("artificial paths")
-# artificial_paths = arcpy.Select_analysis(all_streams_nhdhr, artificial_paths, 'FType = 558')
-# arcpy.Select_analysis(all_streams_nhdhr, final_streams, 'FType NOT IN (566, 558)')
-# area_permids = [r[0] for r in arcpy.da.SearchCursor(all_nhdarea, 'Permanent_Identifier')]
-# with arcpy.da.UpdateCursor(artificial_paths, ['WBArea_Permanent_Identifier']) as cursor:
-#     for row in cursor:
-#         if row[0] not in area_permids:
-#             cursor.deleteRow()
-#
-# #append
-# arcpy.Append_management(artificial_paths, final_streams)
+# Merge all NHDArea polygons with StreamRiver ftype (460)
+nhd_areas = [os.path.join(gdb, 'NHDArea') for gdb in gdb_list]
+lagosGIS.efficient_merge(nhd_areas, all_nhdarea, 'FType = 460')
+
+# find artificial paths that are associated with StreamRiver polygons
+print("artificial paths")
+artificial_paths = arcpy.Select_analysis(all_streams_nhdhr, artificial_paths, 'FType = 558')
+arcpy.Select_analysis(all_streams_nhdhr, final_streams, 'FType NOT IN (566, 558)')
+area_permids = [r[0] for r in arcpy.da.SearchCursor(all_nhdarea, 'Permanent_Identifier')]
+with arcpy.da.UpdateCursor(artificial_paths, ['WBArea_Permanent_Identifier']) as cursor:
+    for row in cursor:
+        if row[0] not in area_permids:
+            cursor.deleteRow()
+
+#append
+arcpy.Append_management(artificial_paths, final_streams)
 
 print("river")
 arcpy.Select_analysis(final_streams, river, 'StreamOrder >= 7')

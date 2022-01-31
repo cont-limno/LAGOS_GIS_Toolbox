@@ -1,6 +1,6 @@
 # filename: lake_from_to.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): CONN
 # tool type: re-usable (not ArcGIS Toolbox)
 # status: This code was a PROTOTYPE and was replaced with alternate Python code for the CONN database. It produces

@@ -1,3 +1,9 @@
+# filename: line_density_in_zones.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
 import os
 import arcpy
 import lagosGIS

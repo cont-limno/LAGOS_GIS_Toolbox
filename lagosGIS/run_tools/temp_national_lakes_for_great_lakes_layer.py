@@ -1,3 +1,9 @@
+# filename: temp_national_lakes_for_great_lakes_layer.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): all
+# tool type: code journal, internal use
+
 import arcpy
 
 # Locations. Change these for your system. To re-run this code, you can always run this whole section.

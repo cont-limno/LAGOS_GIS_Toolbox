@@ -1,3 +1,9 @@
+# filename: zonal_summary_of_classed_polygons.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
 import csv
 import os
 import arcpy

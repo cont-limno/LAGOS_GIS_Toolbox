@@ -1,6 +1,6 @@
 # filename: make_lagos_lakes.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: code journal (no ArcGIS Toolbox)
 

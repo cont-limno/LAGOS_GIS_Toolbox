@@ -1,7 +1,7 @@
 # filename: export_gis_and_info_tables.py
 # author: Nicole J Smith
-# version: 2.0 Beta
-# LAGOS module(s): LOCUS
+# version: 2.0
+# LAGOS module(s): LOCUS, GEO
 # tool type: code journal, internal use only
 
 import os

@@ -1,6 +1,6 @@
 # filename: nhd_merge_helpers.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: re-usable (NO ArcGIS Toolbox)
 

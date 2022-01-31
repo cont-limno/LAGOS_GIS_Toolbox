@@ -1,3 +1,9 @@
+# filename: test_lagosGIS.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): all
+# tool type: re-usable (NOT in ArcGIS Toolbox)
+
 import os
 import sys
 import arcpy

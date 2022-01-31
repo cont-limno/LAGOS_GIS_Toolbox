@@ -1,5 +1,9 @@
-# Filename: PointDensityInPolygon.py
-# Purpose: Gives the density of points in polygons by point/hectare and point/sqkm.
+# filename: point_density_in_zones.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
 import os
 import arcpy
 

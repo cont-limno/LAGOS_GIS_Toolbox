@@ -1,4 +1,10 @@
-import os
+# filename: preprocess_padus.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
+
 import time
 import arcpy
 from arcpy import management as DM

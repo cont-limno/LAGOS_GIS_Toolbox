@@ -1,3 +1,9 @@
+# filename: read_job_control
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (NOT in ArcGIS Toolbox)
+
 import csv
 import os
 import time

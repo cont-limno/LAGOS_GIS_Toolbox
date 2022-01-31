@@ -1,6 +1,6 @@
 # filename: georeference.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LIMNO
 # tool type: limited re-usability as code (change constants by hand for your computer)
 

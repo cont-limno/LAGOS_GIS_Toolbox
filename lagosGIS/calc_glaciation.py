@@ -1,3 +1,9 @@
+# filename: calc_glaciation.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): LOCUS, GEO
+# tool type: re-usable (NOT in ArcGIS Toolbox)
+
 import os
 
 import arcpy

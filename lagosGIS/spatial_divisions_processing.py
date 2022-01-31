@@ -1,9 +1,8 @@
 # filename: spatial_divisions_processing.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): GEO
 # tool type: code journal
-# status: working and re-usable internally, minor edits needed for GEO publication
 
 import csv
 import os

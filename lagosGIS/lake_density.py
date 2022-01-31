@@ -50,7 +50,6 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
         arcpy.Select_analysis(temp_lakes, "lakes_lagos", whereClause)
         temp_lakes = os.path.join(arcpy.env.workspace, "lakes_lagos")
 
-    TODO: Restore!
     if 'ws' in zones_fc:
         zones_fc = trim_watershed_slivers(zones_fc, lakes_fc, 'sliverless_sheds')
 

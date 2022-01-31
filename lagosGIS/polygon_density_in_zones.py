@@ -15,7 +15,7 @@ import arcpy
 import lagosGIS
 
 
-def polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
+def calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
     old_workspace = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
     arcpy.SetLogHistory(False)
@@ -91,7 +91,7 @@ def main():
     polygons_of_interest = arcpy.GetParameterAsText(2)
     interest_selection_expr = arcpy.GetParameterAsText(3)
     output_table = arcpy.GetParameterAsText(4)
-    polygons_in_zones(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
+    calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
 
 if __name__ == '__main__':
     main()

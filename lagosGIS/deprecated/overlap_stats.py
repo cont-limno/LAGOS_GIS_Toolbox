@@ -1,7 +1,7 @@
 import os
 import arcpy
 import lagosGIS
-import zonal_tabarea
+import zonal_summary_of_raster_data
 
 def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_table, is_thematic):
     temp_out_tables = ['in_memory/' + os.path.basename(zfc) + "_temp_table" for zfc in non_overlapping_zones_list]
@@ -9,7 +9,7 @@ def stats_overlap(non_overlapping_zones_list, zone_field, in_value_raster, out_t
     arcpy.CheckOutExtension("Spatial")
     for zones, temp_table in zip(non_overlapping_zones_list, temp_out_tables):
         lagosGIS.multi_msg('Calculating statistics for layer {0}'.format(zones))
-        zonal_tabarea.stats_area_table(zones, zone_field, in_value_raster, temp_table, is_thematic)
+        zonal_summary_of_raster_data.stats_area_table(zones, zone_field, in_value_raster, temp_table, is_thematic)
     arcpy.CheckInExtension("Spatial")
 
     # doing this append/copy method instead of merge prevents problems with

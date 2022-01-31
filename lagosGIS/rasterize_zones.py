@@ -8,7 +8,7 @@ os.chdir(this_files_dir)
 SNAP_RASTER = '../common_grid.tif'
 CELL_SIZE = 90
 
-def multi_convert_to_raster(polygon_fc_list, output_workspace):
+def rasterize(polygon_fc_list, output_workspace):
 
     for polygon_fc in polygon_fc_list:
         if 'hu12' in polygon_fc or 'buff' in polygon_fc or ('ws' in polygon_fc and 'nws' not in polygon_fc):
@@ -34,7 +34,7 @@ def main():
     polygon_fc_input = arcpy.GetParameterAsText(0)
     polygon_fc_list = polygon_fc_input.split(";")
     output_workspace = arcpy.GetParameterAsText(1)
-    multi_convert_to_raster(polygon_fc_list, output_workspace)
+    rasterize(polygon_fc_list, output_workspace)
 
 if __name__ == '__main__':
     main()

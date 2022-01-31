@@ -1,4 +1,4 @@
-# filename: export_mgdb.py
+# filename: export_gis_and_info_tables.py
 # author: Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS
@@ -194,72 +194,99 @@ cat_shp_export = os.path.join(OUT_GDB, 'catchment')
 cat_shape = lagosGIS.select_fields(cat, cat_shp_export, ['lagoslakeid', 'Permanent_Identifier', 'NHDPlusID', 'SourceFC', 'Permanent_Identifier', 'VPUID'])
 
 # # --------------------------GEO tables--------------
-# arcpy.env.workspace = 'in_memory'
-# CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
-# OUT_FOLDER = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2020-10-27_Export-GEOGIS'
-# OUT_GDB = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2020-10-27_Export-GEOGIS\'geo_gis_2020-10-27.gdb'
+arcpy.env.workspace = 'in_memory'
+CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.9.gdb'
+OUT_FOLDER = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-11-28_Export-GEOGIS'
+OUT_GDB = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-11-28_Export-GEOGIS\gis_geo_v1.0.gdb'
+
+zones = ['buff100',
+         'buff500',
+         'nws',
+         'ws',
+         'hu12',
+         'hu8',
+         'hu4',
+         'county',
+         'state',
+         'wwf',
+         'mlra',
+         'bailey',
+         'neon',
+         'omernik3',
+         'epanutr']
 #
-# zones = ['buff100',
-#          'buff500',
-#          'nws',
-#          'ws',
-#          'hu12',
-#          'hu8',
-#          'hu4',
-#          'county',
-#          'state',
-#          'wwf',
-#          'mlra',
-#          'bailey',
-#          'neon',
-#          'omernik3',
-#          'epanutr']
-#
-# CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb'
-#
-#
-# def export_zone(zone_name):
-#     import os
-#     import arcpy
-#     zone_fc = os.path.join(CURRENT_WORKING_GDB, zone_name)
-#     field_vars = ['zoneid',
-#                   'sourceid',
-#                   'name',
-#                   'fips',
-#                   'states',
-#                   'area_ha',
-#                   'perimeter_m',
-#                   'originalarea_pct',
-#                   'lat_decdeg',
-#                   'lon_decdeg',
-#                   'inusa_pct',
-#                   'onlandborder',
-#                   'oncoast',
-#                   'ismultipart']
-#     if not arcpy.ListFields(zone_fc, field_vars[3]):
-#         field_vars.pop(3)
-#     lake_zones = ['buff100', 'buff500', 'nws', 'ws']
-#     if zone_name in lake_zones:
-#         field_vars.remove('sourceid')
-#         field_vars.remove('name')
-#         field_vars.remove('originalarea_pct')
-#     if zone_name == 'state':
-#         field_vars.remove('states')
-#     field_list = ['{}_{}'.format(zone_name, f) for f in field_vars]
-#     if 'sourceid' in field_list[1]:
-#         field_list[1] = arcpy.ListFields(zone_fc, '*sourceid*')[0].name
-#     print field_list
-#     for f in field_list:
-#         if not arcpy.ListFields(zone_fc, f):
-#             print f
-#     temp_zone_fc = lagosGIS.select_fields(zone_fc, 'temp_zone_fc', field_list, convert_to_table=True)
-#     lagosGIS.export_to_csv(temp_zone_fc, OUT_FOLDER,
-#                                               new_table_name='{}_information'.format(zone_name),
-#                                               rename_fields=False, export_qa_version=False)
-#     arcpy.Delete_management(temp_zone_fc)
-#     # zone_shp_export = os.path.join(OUT_GDB, zone_name)
-#     # lagosGIS.select_fields(zone_fc, zone_shp_export, ['{}_zoneid'.format(zone_name)])
-#
-#
-# for z in zones[:2]:
-#         export_zone(z)
+CURRENT_WORKING_GDB = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.9.gdb'
+
+
+def export_zone(zone_name):
+    import os
+    import arcpy
+    zone_fc = os.path.join(CURRENT_WORKING_GDB, zone_name)
+    field_vars = ['zoneid',
+                  'sourceid',
+                  'name',
+                  'fips',
+                  'states',
+                  'area_ha',
+                  'perimeter_m',
+                  'originalarea_pct',
+                  'lat_decdeg',
+                  'lon_decdeg',
+                  'inusa_pct',
+                  'onlandborder',
+                  'oncoast',
+                  'ismultipart']
+    if not arcpy.ListFields(zone_fc, field_vars[3]):
+        field_vars.pop(3)
+    lake_zones = ['buff100', 'buff500', 'nws', 'ws']
+    if zone_name in lake_zones:
+        field_vars.remove('sourceid')
+        field_vars.remove('name')
+        field_vars.remove('originalarea_pct')
+    if zone_name == 'state':
+        field_vars.remove('states')
+    field_list = ['{}_{}'.format(zone_name, f) for f in field_vars]
+    if 'sourceid' in field_list[1]:
+        field_list[1] = arcpy.ListFields(zone_fc, '*sourceid*')[0].name
+    print field_list
+    for f in field_list:
+        if not arcpy.ListFields(zone_fc, f):
+            print f
+    temp_zone_fc = lagosGIS.select_fields(zone_fc, 'temp_zone_fc', field_list, convert_to_table=True)
+    lagosGIS.export_to_csv(temp_zone_fc, OUT_FOLDER,
+                                              new_table_name='{}_information'.format(zone_name),
+                                              rename_fields=False, export_qa_version=False)
+    arcpy.Delete_management(temp_zone_fc)
+    # zone_shp_export = os.path.join(OUT_GDB, zone_name)
+    # lagosGIS.select_fields(zone_fc, zone_shp_export, ['{}_zoneid'.format(zone_name)])
+
+
+for z in zones:
+        export_zone(z)
+
+def export_glaciation(zone_name):
+    import os
+    import arcpy
+    zone_fc = os.path.join(CURRENT_WORKING_GDB, zone_name)
+    field_vars = ['zoneid',
+                  'glaciatedlatewisc_pct']
+    field_list = ['{}_{}'.format(zone_name, f) for f in field_vars]
+    print field_list
+    for f in field_list:
+        if not arcpy.ListFields(zone_fc, f):
+            print f
+    temp_zone_fc = lagosGIS.select_fields(zone_fc, 'temp_zone_fc', field_list, convert_to_table=True)
+    lagosGIS.export_to_csv(temp_zone_fc, OUT_FOLDER,
+                           new_table_name='{}_glaciatedlatewisc'.format(zone_name),
+                           rename_fields=False, export_qa_version=False)
+    arcpy.Delete_management(temp_zone_fc)
+
+for z in zones[2:4]:
+    export_glaciation(z)
+
+arcpy.env.workspace = CURRENT_WORKING_GDB
+for z in zones:
+    print z
+    shp_export = os.path.join(OUT_GDB, z)
+    zoneid = '{}_zoneid'.format(z)
+    shape = lagosGIS.select_fields(z, shp_export, [zoneid])

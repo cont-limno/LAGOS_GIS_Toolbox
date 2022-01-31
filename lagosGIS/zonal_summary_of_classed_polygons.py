@@ -4,7 +4,7 @@ import arcpy
 import lagosGIS
 
 
-def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=''):
+def summarize(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=''):
 
     def rename_to_standard(table, numeric=False):
         arcpy.AddMessage("Renaming.")
@@ -36,6 +36,7 @@ def zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, out_table, 
 
     arcpy.env.workspace = 'in_memory'
     tab = arcpy.TabulateIntersection_analysis(zone_fc, zone_field, class_fc, 'tab', class_field, xy_tolerance='0.001 Meters')
+    print([f.name for f in arcpy.ListFields(tab)])
     # guard against all numeric values--can't pivot when that is the case
     vals = [r[0] for r in arcpy.da.SearchCursor(tab, class_field)]
     all_numeric = all([str.isdigit(str(v)) for v in vals])
@@ -68,7 +69,7 @@ def main():
     output_table = arcpy.GetParameterAsText(3)
     class_field = arcpy.GetParameterAsText(4)
     rename_tag = arcpy.GetParameterAsText(5)
-    zonal_attribution_of_polygon_data(zone_fc, zone_field, class_fc, output_table, class_field, rename_tag)
+    summarize(zone_fc, zone_field, class_fc, output_table, class_field, rename_tag)
 
 if __name__ == '__main__':
     main()

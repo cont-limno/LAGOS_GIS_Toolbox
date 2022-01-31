@@ -2,7 +2,7 @@
 import os, time
 import arcpy
 from arcpy import env
-import zonal_tabarea
+import zonal_summary_of_raster_data
 
 # leave this function alone if you're just trying to reuse the script
 def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
@@ -63,8 +63,8 @@ def batch_raster_attribution(all_rasters, all_extents, zone_field, out_gdb,
                         with open(log_file, 'a') as f:
                             f.write(start_msg + '\n')
                     try:
-                        zonal_tabarea.stats_area_table(e, zone_field, r, out_table,
-                                                    is_thematic)
+                        zonal_summary_of_raster_data.stats_area_table(e, zone_field, r, out_table,
+                                                                      is_thematic)
                         elapsed_time = (time.time() - t)/60
                         finish_msg = "Table {0} completed in {1} minutes.".format(
                                 os.path.basename(out_table), elapsed_time)

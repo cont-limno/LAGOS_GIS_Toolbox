@@ -3,7 +3,7 @@
 import os
 import arcpy
 
-def points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selection_expr = '', rename_label = ''):
+def calc(zone_fc, zone_field, points_fc, output_table, interest_selection_expr ='', rename_label =''):
     arcpy.env.workspace = 'in_memory'
     if interest_selection_expr:
         arcpy.MakeFeatureLayer_management(points_fc, "selected_points", interest_selection_expr)
@@ -42,7 +42,7 @@ def main():
     points_fc = arcpy.GetParameterAsText(2)
     output_table = arcpy.GetParameterAsText(4)
     interest_selection_expr = arcpy.GetParameterAsText(3)
-    points_in_zones(zone_fc, zone_field, points_fc, output_table, interest_selection_expr)
+    calc(zone_fc, zone_field, points_fc, output_table, interest_selection_expr)
 
 def test():
     test_gdb = '../TestData_0411.gdb'
@@ -50,7 +50,7 @@ def test():
     zone_field = 'ZoneID'
     points_fc = os.path.join(test_gdb, 'Dams')
     output_table = 'C:/GISData/Scratch/Scratch.gdb/test_points_tool'
-    points_in_zones(zone_fc, zone_field, points_fc, output_table, '')
+    calc(zone_fc, zone_field, points_fc, output_table, '')
 
 if __name__ == '__main__':
     main()

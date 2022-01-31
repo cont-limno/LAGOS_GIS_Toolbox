@@ -1,4 +1,4 @@
-# filename: create_zones_log.py
+# filename: spatial_divisions_processing.py
 # author: Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): GEO
@@ -11,6 +11,8 @@ import sys
 import arcpy
 from arcpy import management as DM
 from arcpy import analysis as AN
+
+import calc_glaciation
 from lagosGIS import create_temp_GDB
 
 # files accessed by this script
@@ -195,7 +197,7 @@ def process_zone(zone_fc, output, zone_name, zone_id_field, zone_name_field, oth
     zone_prep.find_states(trimmed, STATE_FC_FINDSTATE)
 
     # glaciation status
-    zone_prep.calc_glaciation(trimmed, GLACIAL_EXTENT, 'ZoneID')
+    calc_glaciation.calc(trimmed, GLACIAL_EXTENT, 'ZoneID')
 
     # preface the names with the division prefix if needed
     DM.DeleteField(trimmed, 'ORIG_FID')
@@ -406,7 +408,7 @@ def process_buffer_zones(zones_fc, zone_name=''):
     zone_prep.find_states(zones_fc, STATE_FC_FINDSTATE, zone_name)
 
     # glaciation status
-    zone_prep.calc_glaciation(zones_fc, GLACIAL_EXTENT, zoneid, zone_name)
+    calc_glaciation.calc(zones_fc, GLACIAL_EXTENT, zoneid, zone_name)
 
     # fix
 

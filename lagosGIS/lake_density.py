@@ -2,7 +2,7 @@
 # this does all the lake stuff at once for a given extent
 import os
 import arcpy
-import polygons_in_zones
+import polygon_density_in_zones
 import lagosGIS
 
 # Since the ws & nws layers were left with the jagged "rasterization" lines, they sometimes overlap lakes outside
@@ -13,18 +13,19 @@ import lagosGIS
 def trim_watershed_slivers(watersheds_fc, lakes_fc, output_fc):
     arcpy.Intersect_analysis([watersheds_fc, lakes_fc], output_fc)
     # want to drop any intersections < 10% of area of the lake, as long as it overlaps shed by 10%+, will count
-    arcpy.Select_analysis(output_fc, 'in_memory/select', 'Shape_Area < (.1 * lake_waterarea_ha) * 10000')
+    arcpy.Select_analysis(output_fc, 'in_memory/slivers', 'Shape_Area < (.1 * lake_waterarea_ha) * 10000')
     arcpy.Delete_management(output_fc) # used this as a temp fc so we could have Shape_Area calculated
-    arcpy.Erase_analysis(watersheds_fc, 'in_memory/select', output_fc)
+    arcpy.Erase_analysis(watersheds_fc, 'in_memory/slivers', output_fc)
     return output_fc
 
 
-def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
+def calc_all(zones_fc, zone_field, lakes_fc, output_table):
 
     # make sure we're only using the right types of lakes, our feature
     # class excludes everything else but this is a guarantee this will
     # get checked at some point
     arcpy.env.workspace = 'in_memory'
+    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
 
     temp_lakes = 'temp_lakes'
     arcpy.CopyFeatures_management(lakes_fc, temp_lakes)
@@ -45,11 +46,12 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                     need_selection = True
 
     if need_selection:
-        whereClause = '''
-                    ("lake_waterarea_ha" >= 4 AND "FCode" IN %s)''' % (fcodes,)
-        arcpy.Select_analysis(temp_lakes, "lakes_4ha", whereClause)
-        temp_lakes = os.path.join(arcpy.env.workspace, "lakes_4ha")
+        whereClause = '''"FCode" IN %s''' % (fcodes,)
+        arcpy.Select_analysis(temp_lakes, "lakes_lagos", whereClause)
+        temp_lakes = os.path.join(arcpy.env.workspace, "lakes_lagos")
 
+    if 'ws' in zones_fc:
+        zones_fc = trim_watershed_slivers(zones_fc, lakes_fc, 'sliverless_sheds')
 
     selections = [
             # all lake selections
@@ -59,11 +61,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"lake_connectivity_class" = 'Headwater'""",
             """"lake_connectivity_class" = 'Drainage'""",
             """"lake_connectivity_class" = 'DrainageLk'""",
+            """"lake_connectivity_class" = 'Terminal'""",
+            """"lake_connectivity_class" = 'TerminalLk'""",
 
             """"lake_connectivity_permanent" = 'Isolated'""",
             """"lake_connectivity_permanent" = 'Headwater'""",
             """"lake_connectivity_permanent" = 'Drainage'""",
             """"lake_connectivity_permanent" = 'DrainageLk'""",
+            """"lake_connectivity_permanent" = 'Terminal'""",
+            """"lake_connectivity_permanent" = 'TerminalLk'""",
             
             # 4 hectare selections
             """"lake_waterarea_ha" >= 4""",
@@ -72,11 +78,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'Headwater'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'Drainage'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_class" = 'TerminalLk'""",
 
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Isolated'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Headwater'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Drainage'""",
             """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 4 AND "lake_connectivity_permanent" = 'TerminalLk'""",
 
             # 10 hectare selections
             """"lake_waterarea_ha" >= 10""",
@@ -85,11 +95,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'Headwater'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'Drainage'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_class" = 'TerminalLk'""",
     
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Isolated'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Headwater'""",
             """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Drainage'""",
-            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'DrainageLk'"""
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'DrainageLk'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'Terminal'""",
+            """"lake_waterarea_ha" >= 10 AND "lake_connectivity_permanent" = 'TerminalLk'"""
                 ]
 
     temp_tables = ['lakes1ha_all',
@@ -98,11 +112,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 'lakes1ha_headwater',
                 'lakes1ha_drainage',
                 'lakes1ha_drainagelk',
+                'lakes1ha_terminal',
+                'lakes1ha_terminallk',
 
                 'lakes1ha_isolatedperm',
                 'lakes1ha_headwaterperm',
                 'lakes1ha_drainageperm',
                 'lakes1ha_drainagelkperm',
+                'lakes1ha_terminalperm',
+                'lakes1ha_terminallkperm',
 
                 'lakes4ha_all',
 
@@ -110,11 +128,15 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                 'lakes4ha_headwater',
                 'lakes4ha_drainage',
                 'lakes4ha_drainagelk',
+                'lakes4ha_terminal',
+                'lakes4ha_terminallk',
 
                 'lakes4ha_isolatedperm',
                 'lakes4ha_headwaterperm',
                 'lakes4ha_drainageperm',
                 'lakes4ha_drainagelkperm',
+                'lakes4ha_terminalperm',
+                'lakes4ha_terminallkperm',
 
                 'lakes10ha_all',
 
@@ -122,16 +144,20 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
                'lakes10ha_headwater',
                'lakes10ha_drainage',
                'lakes10ha_drainagelk',
+               'lakes10ha_terminal',
+               'lakes10ha_terminallk',
 
                'lakes10ha_isolatedperm',
                'lakes10ha_headwaterperm',
                'lakes10ha_drainageperm',
-               'lakes10ha_drainagelkperm'
+               'lakes10ha_drainagelkperm',
+               'lakes10ha_terminalperm',
+               'lakes10ha_terminallkperm'
                 ]
 
     for sel, temp_table in zip(selections, temp_tables):
         arcpy.AddMessage("Creating temporary table called {0} for lakes where {1}".format(temp_table, sel))
-        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
+        polygon_density_in_zones.calc(zones_fc, zone_field, temp_lakes, temp_table, sel)
         new_fields = ['Poly_ha', 'Poly_pct', 'Poly_n', 'Poly_nperha']
         for f in new_fields:
             arcpy.AlterField_management(temp_table, f, f.replace('Poly', temp_table))
@@ -164,7 +190,7 @@ def main():
     zone_field = arcpy.GetParameterAsText(1)
     lakes_fc = arcpy.GetParameterAsText(2)
     output_table = arcpy.GetParameterAsText(3)
-    lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table)
+    calc_all(zones_fc, zone_field, lakes_fc, output_table)
 
 if __name__ == '__main__':
     main()

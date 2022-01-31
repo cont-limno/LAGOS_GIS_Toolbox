@@ -2,7 +2,7 @@ import arcpy
 import lagosGIS
 
 
-def point_attribution_of_raster_data(zone_points, zone_field, in_value_raster, out_table, rename_tag='', units=''):
+def attribution(zone_points, zone_field, in_value_raster, out_table, rename_tag='', units=''):
     arcpy.env.workspace = 'in_memory'
     arcpy.CheckOutExtension("Spatial")
 
@@ -30,7 +30,7 @@ def main():
     out_table = arcpy.GetParameterAsText(3)
     rename_tag = arcpy.GetParameterAsText(4)
     units = arcpy.GetParameterAsText(5)
-    point_attribution_of_raster_data(zone_points, zone_field, in_value_raster, out_table, rename_tag, units)
+    attribution(zone_points, zone_field, in_value_raster, out_table, rename_tag, units)
 
 if __name__ == '__main__':
     main()

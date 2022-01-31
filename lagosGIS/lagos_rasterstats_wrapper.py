@@ -1,6 +1,6 @@
 import os
 import arcpy
-import zonal_tabarea
+import zonal_summary_of_raster_data
 
 def wrapper(lagos_zone_rasters_list, raster, variable_basename = '', is_thematic=False):
     """

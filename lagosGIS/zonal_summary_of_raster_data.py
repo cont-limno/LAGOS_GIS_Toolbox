@@ -9,15 +9,9 @@ import lagosGIS
 
 
 def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',
-                    rename_tag='', units='', debug_mode=False):
+                    rename_tag='', units=''):
     orig_env = env.workspace
-    if debug_mode:
-        env.overwriteOutput = True
-        temp_gdb = lagosGIS.create_temp_GDB('zonal_tabarea')
-        env.workspace = temp_gdb
-        arcpy.AddMessage('Debugging workspace located at {}'.format(temp_gdb))
-    else:
-        env.workspace = 'in_memory'
+    env.workspace = 'in_memory'
     arcpy.SetLogHistory(False)
     arcpy.CheckOutExtension("Spatial")
     
@@ -54,13 +48,12 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
                     arcpy.DeleteField_management(t, vf.name)
 
             arcpy.AlterField_management(t, 'COUNT', 'CELL_COUNT')
-            drop_fields = ['ZONE_CODE', 'COUNT', 'AREA']
-            if not debug_mode:
-                for df in drop_fields:
-                    try:
-                        arcpy.DeleteField_management(t, df)
-                    except:
-                        continue
+            drop_fields = ['ZONE_CODE', 'COUNT', 'AREA', 'MAJORITY', 'MEDIAN', 'MINORITY', 'RANGE', 'SUM', 'VARIETY']
+            for df in drop_fields:
+                try:
+                    arcpy.DeleteField_management(t, df)
+                except:
+                    continue
 
         # Set up environments for alignment between zone raster and theme raster
         if isinstance(zone_fc, arcpy.Result):
@@ -91,8 +84,13 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         # # in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
         if not is_thematic:
             arcpy.AddMessage("Calculating Zonal Statistics...")
-            temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster,
+            if 'elevation' in rename_tag:
+                temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster,
+                                                                    'temp_zonal_table', 'DATA', 'ALL')
+            else:
+                temp_entire_table = arcpy.sa.ZonalStatisticsAsTable(zone_raster, zone_field, in_value_raster,
                                                                 'temp_zonal_table', 'DATA', 'MEAN')
+
 
         if is_thematic:
             # for some reason env.cellSize doesn't work
@@ -181,9 +179,8 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         count_diff = in_count - out_count
 
         # cleanup
-        if not debug_mode:
-            for item in ['temp_zonal_table', temp_entire_table, 'convertraster']:  # don't add zone_raster, orig
-                arcpy.Delete_management(item)
+        for item in ['temp_zonal_table', temp_entire_table, 'convertraster']:  # don't add zone_raster, orig
+            arcpy.Delete_management(item)
         arcpy.ResetEnvironments()
         env.workspace = orig_env  # hope this prevents problems using list of FCs from workspace as batch
         arcpy.CheckInExtension("Spatial")
@@ -271,8 +268,22 @@ def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic
         lagosGIS.rename_field(table, 'datacoveragepct', new_datacov_name, deleteOld=True)
         # DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
         if not is_thematic:
-            new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_')  # if no units, just rename_tag
-            lagosGIS.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
+            if 'elevation' in rename_tag:
+                new_mean_name = '{}_mean_{}'.format(rename_tag, units).rstrip('_')
+                lagosGIS.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
+
+                new_min_name = '{}_min_{}'.format(rename_tag, units).rstrip('_')
+                lagosGIS.rename_field(table, 'MIN', new_min_name, deleteOld=True)
+
+                new_max_name = '{}_max_{}'.format(rename_tag, units).rstrip('_')
+                lagosGIS.rename_field(table, 'MAX', new_max_name, deleteOld=True)
+
+                new_sd_name = '{}_sd_{}'.format(rename_tag, units).rstrip('_')
+                lagosGIS.rename_field(table, 'STD', new_sd_name, deleteOld=True)
+            else:
+                new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_')  # if no units, just rename_tag
+                lagosGIS.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
+
             # DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
         else:
             # look up the values based on the rename tag

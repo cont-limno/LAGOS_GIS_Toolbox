@@ -17,12 +17,13 @@ __all__ = ["lake_connectivity_classification",
            "zonal_summary_of_raster_data",
            "zonal_summary_of_classed_polygons",
            "point_attribution_of_raster_data",
+           "summarize_raster_for_all_zones",
 
            "spatialize_lakes",
            "georeference_lakes",
 
            "export_to_csv",
-            "zone_prep",
+            "zone_prep"
     ]
 
 import os
@@ -45,6 +46,7 @@ from lake_density import calc_all as lake_density
 from flatten_overlapping_zones import flatten as flatten_overlaps
 from rasterize_zones import rasterize as rasterize_zones
 from zonal_summary_of_raster_data import calc as zonal_summary_of_raster_data
+from summarize_raster_for_all_zones import summarize as summarize_raster_for_all_zones
 
 from zonal_summary_of_classed_polygons import summarize as zonal_summary_of_classed_polygons
 from point_attribution_of_raster_data import attribution as point_attribution_of_raster_data

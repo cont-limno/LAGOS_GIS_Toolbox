@@ -2,7 +2,7 @@
 # this does all the lake stuff at once for a given extent
 import os
 import arcpy
-import polygons_in_zones
+import polygon_density_in_zones
 import lagosGIS
 
 # Since the ws & nws layers were left with the jagged "rasterization" lines, they sometimes overlap lakes outside
@@ -157,7 +157,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
 
     for sel, temp_table in zip(selections, temp_tables):
         arcpy.AddMessage("Creating temporary table called {0} for lakes where {1}".format(temp_table, sel))
-        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
+        polygon_density_in_zones.polygons_in_zones(zones_fc, zone_field, temp_lakes, temp_table, sel)
         new_fields = ['Poly_ha', 'Poly_pct', 'Poly_n', 'Poly_nperha']
         for f in new_fields:
             arcpy.AlterField_management(temp_table, f, f.replace('Poly', temp_table))

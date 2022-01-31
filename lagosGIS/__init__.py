@@ -36,23 +36,23 @@ from watershed_delineation.aggregate_watersheds import aggregate_watersheds as a
 from watershed_delineation.postprocess_watersheds import calc_watershed_subtype
 from watershed_delineation.postprocess_watersheds import calc_watershed_equality
 
-from point_density_in_zones import points_in_zones as point_density_in_zones
-from line_density_in_zones import calc_density as line_density_in_zones
-from polygon_density_in_zones import polygons_in_zones as polygon_density_in_zones
-from stream_density import calc_density as stream_density
-from lake_density import lakes_in_zones as lake_density
+from point_density_in_zones import calc as point_density_in_zones
+from line_density_in_zones import calc as line_density_in_zones
+from polygon_density_in_zones import calc as polygon_density_in_zones
+from stream_density import calc_all as stream_density
+from lake_density import calc_all as lake_density
 
-from flatten_overlaps import flatten_overlaps as flatten_overlaps
-from rasterize_zones import multi_convert_to_raster as rasterize_zones
-from zonal_summary_of_raster_data import handle_overlaps as zonal_summary_of_raster_data
+from flatten_overlapping_zones import flatten as flatten_overlaps
+from rasterize_zones import rasterize as rasterize_zones
+from zonal_summary_of_raster_data import calc as zonal_summary_of_raster_data
 
 from zonal_summary_of_classed_polygons import summarize as zonal_summary_of_classed_polygons
-from point_attribution_of_raster_data import point_attribution_of_raster_data
+from point_attribution_of_raster_data import attribution as point_attribution_of_raster_data
 
 from georeference import spatialize_lakes
 from georeference import georeference_lakes
 
-from export_to_csv import TableToCSV as export_to_csv
+from export_to_csv import export as export_to_csv
 import zone_prep
 
 

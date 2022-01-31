@@ -6,6 +6,7 @@ from datetime import datetime as dt
 
 def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', rename_label=''):
     arcpy.env.workspace = 'in_memory'
+    arcpy.env.outputCoordinatesystem = arcpy.SpatialReference(102039)
     if rename_label:
         out_density_field = '{}_mperha'.format(rename_label)
     else:
@@ -15,8 +16,6 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
         lines_prep = arcpy.Select_analysis(lines_fc, 'lines_prep', where_clause)
     else:
         lines_prep = lines_fc
-
-    # TODO: Add projection check
 
     # Perform identity analysis to join fields and crack lines at polygon boundaries
     arcpy.AddMessage("Cracking lines... {}".format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
@@ -58,7 +57,7 @@ def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', ren
                 cursor.deleteRow()
 
     # delete extra field and ensure all input zones have output row
-    print("Cleanup")
+    print("Cleanup {}".format(dt.now().strftime("%Y-%m-%d %H:%M:%S")))
     arcpy.DeleteField_management(lines_stat_full, 'SUM_length_m')
     arcpy.DeleteField_management(lines_stat_full, 'FREQUENCY')
 

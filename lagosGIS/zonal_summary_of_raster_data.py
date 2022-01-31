@@ -8,8 +8,8 @@ from collections import defaultdict
 import lagosGIS
 
 
-def handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',
-                    rename_tag='', units=''):
+def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',
+         rename_tag='', units=''):
     orig_env = env.workspace
     env.workspace = 'in_memory'
     arcpy.SetLogHistory(False)
@@ -343,8 +343,8 @@ def main():
     rename_tag = arcpy.GetParameterAsText(6) # optional
     units = arcpy.GetParameterAsText(7) # optional
 
-    handle_overlaps(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table,
-                    rename_tag, units)
+    calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table,
+         rename_tag, units)
 
 if __name__ == '__main__':
     main()

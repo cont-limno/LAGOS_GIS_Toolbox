@@ -1,4 +1,4 @@
-# filename: flatten_overlaps.py
+# filename: flatten_overlapping_zones.py
 # author: Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): GEO
@@ -11,7 +11,7 @@ from arcpy import management as DM
 from arcpy import analysis as AN
 
 
-def flatten_overlaps(zone_fc, zone_field, output_fc, output_table, cluster_tolerance=' 3 Meters'):
+def flatten(zone_fc, zone_field, output_fc, output_table, cluster_tolerance=' 3 Meters'):
     orig_env = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
 
@@ -88,7 +88,7 @@ def main():
     output_fc = arcpy.GetParameterAsText(2)
     output_table = arcpy.GetParameterAsText(3)
     cluster_tolerance = arcpy.GetParameterAsText(4)
-    flatten_overlaps(zone_fc, zone_field, output_fc, output_table, cluster_tolerance)
+    flatten(zone_fc, zone_field, output_fc, output_table, cluster_tolerance)
 
 if __name__ == '__main__':
     main()

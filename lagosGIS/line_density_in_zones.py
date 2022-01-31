@@ -4,7 +4,7 @@ import lagosGIS
 from datetime import datetime as dt
 
 
-def calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause='', rename_label=''):
+def calc(zones_fc, zone_field, lines_fc, out_table, where_clause='', rename_label=''):
     arcpy.env.workspace = 'in_memory'
     arcpy.env.outputCoordinatesystem = arcpy.SpatialReference(102039)
     if rename_label:
@@ -75,7 +75,7 @@ def main():
     out_table = arcpy.GetParameterAsText(3)
     where_clause = arcpy.GetParameterAsText(4)
     rename_label = arcpy.GetParameterAsText(5)
-    calc_density(zones_fc, zone_field, lines_fc, out_table, where_clause, rename_label)
+    calc(zones_fc, zone_field, lines_fc, out_table, where_clause, rename_label)
 
 
 

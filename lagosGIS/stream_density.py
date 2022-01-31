@@ -3,7 +3,7 @@ import arcpy
 import lagosGIS
 
 
-def calc_density(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
+def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
     arcpy.env.workspace = 'in_memory'
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     if zone_prefix:
@@ -134,7 +134,7 @@ def main():
     lines_fc = arcpy.GetParameterAsText(2)
     out_table = arcpy.GetParameterAsText(3)
     zone_prefix = arcpy.GetParameterAsText(4)
-    calc_density(zones_fc, zone_field, lines_fc, out_table, zone_prefix)
+    calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix)
 
 
 if __name__ == '__main__':

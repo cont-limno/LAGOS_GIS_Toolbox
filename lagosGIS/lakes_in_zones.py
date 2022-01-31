@@ -25,6 +25,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
     # class excludes everything else but this is a guarantee this will
     # get checked at some point
     arcpy.env.workspace = 'in_memory'
+    arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
 
     temp_lakes = 'temp_lakes'
     arcpy.CopyFeatures_management(lakes_fc, temp_lakes)
@@ -49,6 +50,7 @@ def lakes_in_zones(zones_fc, zone_field, lakes_fc, output_table):
         arcpy.Select_analysis(temp_lakes, "lakes_lagos", whereClause)
         temp_lakes = os.path.join(arcpy.env.workspace, "lakes_lagos")
 
+    TODO: Restore!
     if 'ws' in zones_fc:
         zones_fc = trim_watershed_slivers(zones_fc, lakes_fc, 'sliverless_sheds')
 

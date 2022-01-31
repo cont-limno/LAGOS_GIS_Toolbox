@@ -84,10 +84,10 @@ river = os.path.join(OUTPUT_GDB, 'river')
 # #append
 # arcpy.Append_management(artificial_paths, final_streams)
 
-# print("river")
-# arcpy.Select_analysis(final_streams, river, 'StreamOrder >= 7')
-# print("midreach")
-# arcpy.Select_analysis(final_streams, midreach, 'StreamOrder > 3 AND StreamOrder <= 6')
+print("river")
+arcpy.Select_analysis(final_streams, river, 'StreamOrder >= 7')
+print("midreach")
+arcpy.Select_analysis(final_streams, midreach, 'StreamOrder > 3 AND StreamOrder <= 6')
 print("headwater")
 arcpy.Select_analysis(final_streams, headwater, 'StreamOrder <= 3 OR StreamOrder IS NULL') # StreamOrder = 1, 2, 3, -9, None
 

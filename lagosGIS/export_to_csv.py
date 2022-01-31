@@ -85,8 +85,8 @@ def rename_variables(file, prefix = ''):
 
     shutil.move(tempfile.name, file)
 
-def TableToCSV(in_table, out_folder, output_schema = True, prefix = '', new_table_name = '',
-               rename_fields = True, export_qa_version = True, field_list = []):
+def export(in_table, out_folder, output_schema = True, prefix ='', new_table_name ='',
+           rename_fields = True, export_qa_version = True, field_list = []):
     if arcpy.env.workspace == 'in_memory' and ':' not in in_table:
         name = os.path.basename(str(in_table))
     else:
@@ -171,7 +171,7 @@ def main():
     rename_fields = arcpy.GetParameter(3)
     prefix = arcpy.GetParameter(4)
     new_table_name = arcpy.GetParameterAsText(5)
-    TableToCSV(in_table, out_folder, output_schema, rename_fields=rename_fields, prefix=prefix, new_table_name=new_table_name)
+    export(in_table, out_folder, output_schema, rename_fields=rename_fields, prefix=prefix, new_table_name=new_table_name)
 
 if __name__ == '__main__':
     main()

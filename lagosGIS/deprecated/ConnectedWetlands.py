@@ -19,7 +19,7 @@ import os
 import arcpy
 from arcpy import env
 import lagosGIS
-from polygons_in_zones import polygons_in_zones
+from polygon_density_in_zones import calc
 
 def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     env.workspace = 'in_memory'
@@ -45,7 +45,7 @@ def connected_wetlands(lakes_fc, lake_id_field, wetlands_fc, out_table):
     for sel, temp_table in zip(selections, temp_tables):
         print("Creating temporary table for wetlands where {0}".format(sel))
         # this function adds the count and the area using the lake as the zone
-        polygons_in_zones('lakes_30m', lake_id_field, wetlands_fc, temp_table, sel, contrib_area = True)
+        calc('lakes_30m', lake_id_field, wetlands_fc, temp_table, sel, contrib_area = True)
 
         # make good field names now rather than later
         for f in new_fields:

@@ -4,7 +4,7 @@ import os
 import arcpy
 
 import lagosGIS
-import polygons_in_zones
+import polygon_density_in_zones
 
 def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_wetlands = True):
 
@@ -64,7 +64,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 arcpy.Dissolve_management(selected_wetlands, 'dissolved_wetlands', multi_part = 'SINGLE_PART')
                 dissolved_temp_table = temp_table.replace('Undissolved', 'Dissolved')
                 temp_tables.append(dissolved_temp_table)
-                polygons_in_zones.polygons_in_zones(zones_fc, zone_field, 'dissolved_wetlands', dissolved_temp_table, '')
+                polygon_density_in_zones.calc(zones_fc, zone_field, 'dissolved_wetlands', dissolved_temp_table, '')
                 new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
                 avg_size_field = dissolved_temp_table + '_AvgSize_ha'
                 arcpy.AddField_management(dissolved_temp_table, avg_size_field , 'DOUBLE')
@@ -72,7 +72,7 @@ def wetlands_in_zones(zones_fc, zone_field, wetlands_fc, output_table, dissolve_
                 for f in new_fields:
                     lagosGIS.rename_field(dissolved_temp_table, f, f.replace('Poly', dissolved_temp_table), True)
 
-        polygons_in_zones.polygons_in_zones(zones_fc, zone_field, selected_wetlands, temp_table, '')
+        polygon_density_in_zones.calc(zones_fc, zone_field, selected_wetlands, temp_table, '')
         new_fields = ['Poly_Overlapping_AREA_ha', 'Poly_Contributing_AREA_ha', 'Poly_Overlapping_AREA_pct', 'Poly_Count']
         avg_size_field = temp_table + '_AvgSize_ha'
         arcpy.AddField_management(temp_table, avg_size_field , 'DOUBLE')

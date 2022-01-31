@@ -8,8 +8,7 @@ import os
 import arcpy
 from arcpy import management as DM
 from arcpy import analysis as AN
-import make_lagos_lakes
-
+from run_tools import make_lagos_lakes
 
 # Calculate zoneids for the lakes
 LAKES_POINT = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.7.gdb\Lakes\LAGOS_US_All_Lakes_1ha_points'

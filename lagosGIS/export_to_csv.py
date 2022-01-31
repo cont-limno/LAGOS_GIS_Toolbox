@@ -1,4 +1,4 @@
-# filename: Export2CSV.py
+# filename: export_to_csv.py
 # author: Nicole J Smith
 # version: 2.0 Beta
 # LAGOS module(s): LOCUS, GEO, CONN

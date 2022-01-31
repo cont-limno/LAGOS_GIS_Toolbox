@@ -7,6 +7,7 @@
 import arcpy
 from arcpy import management as DM
 
+import calc_glaciation
 import lagosGIS
 import lagosGIS.zone_prep
 import NHDNetwork
@@ -279,7 +280,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
     print('State assignment...')
     lagosGIS.zone_prep.find_states(sheds_fc, STATES_GEO, zone_name)
     # glaciation status
-    lagosGIS.zone_prep.calc_glaciation(sheds_fc, GLACIAL_EXTENT, zoneid, zone_name)
+    calc_glaciation.calc(sheds_fc, GLACIAL_EXTENT, zoneid, zone_name)
 
     # mbgconhull metrics
     print('Adding convex hull metrics...')

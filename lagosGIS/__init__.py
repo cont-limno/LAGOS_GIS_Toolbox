@@ -1,51 +1,63 @@
 __all__ = ["lake_connectivity_classification",
-           "zonal_attribution_of_raster_data",
-           "efficient_merge",
-           "export_to_csv",
            "upstream_lakes",
-           "spatialize_lakes",
-           "georeference_lakes",
-           "multi_convert_to_raster",
-           "lake_from_to",
-           "polygons_in_zones",
-           "lakes_in_zones",
-           "point_attribution_of_raster_data",
            "locate_lake_outlets",
            "locate_lake_inlets",
+           "aggregate_watersheds",
            "calc_watershed_subtype",
            "calc_watershed_equality",
-           "aggregate_watersheds",
-           "line_density",
+
+           "point_density_in_zones",
+           "line_density_in_zones",
+           "polygon_density_in_zones",
            "stream_density",
-           "point_density",
-           "zone_prep",
-           "zonal_attribution_of_polygon_data"]
+           "lake_density",
+
+           "flatten_overlaps",
+           "rasterize_zones",
+           "zonal_summary_of_raster_data",
+           "zonal_summary_of_classed_polygons",
+           "point_attribution_of_raster_data",
+
+           "spatialize_lakes",
+           "georeference_lakes",
+
+           "export_to_csv",
+            "zone_prep",
+    ]
 
 import os
 import arcpy
 import tempfile
 from lake_connectivity_classification import classify as lake_connectivity_classification
-from zonal_tabarea import handle_overlaps as zonal_attribution_of_raster_data
-from Export2CSV import TableToCSV as export_to_csv
 from upstream_lakes import count as upstream_lakes
-from georeference import spatialize_lakes
-from georeference import georeference_lakes
-from multi_convert_to_raster import multi_convert_to_raster
-from deprecated.lake_from_to import lake_from_to
-from polygons_in_zones import polygons_in_zones
-from lakes_in_zones import lakes_in_zones
 from locate_lake_outlets import locate_lake_outlets
 from locate_lake_inlets import locate_lake_inlets
+from watershed_delineation.aggregate_watersheds import aggregate_watersheds as aggregate_watersheds
 from watershed_delineation.postprocess_watersheds import calc_watershed_subtype
 from watershed_delineation.postprocess_watersheds import calc_watershed_equality
-from point_attribution_of_raster_data import point_attribution_of_raster_data
-from line_density import calc_density as line_density
+
+from point_density_in_zones import points_in_zones as point_density_in_zones
+from line_density_in_zones import calc_density as line_density_in_zones
+from polygon_density_in_zones import polygons_in_zones as polygon_density_in_zones
 from stream_density import calc_density as stream_density
-from PointDensityInPolygons import points_in_zones as point_density
-from watershed_delineation.aggregate_watersheds import aggregate_watersheds as aggregate_watersheds
-from zonal_attribution_of_polygon_data import zonal_attribution_of_polygon_data
+from lake_density import lakes_in_zones as lake_density
+
+from flatten_overlaps import flatten_overlaps as flatten_overlaps
+from rasterize_zones import multi_convert_to_raster as rasterize_zones
+from zonal_summary_of_raster_data import handle_overlaps as zonal_summary_of_raster_data
+
+from zonal_summary_of_classed_polygons import summarize as zonal_summary_of_classed_polygons
+from point_attribution_of_raster_data import point_attribution_of_raster_data
+
+from georeference import spatialize_lakes
+from georeference import georeference_lakes
+
+from export_to_csv import TableToCSV as export_to_csv
+import zone_prep
+
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)
+
 def efficient_merge(feature_class_or_table_list, output_fc, filter =''):
     fc_count = len(feature_class_or_table_list)
     all_exist_test = all(arcpy.Exists(fct) for fct in feature_class_or_table_list)
@@ -128,7 +140,7 @@ def select_fields(feature_class_or_table, output, field_list, convert_to_table =
     :param feature_class_or_table: The feature class or table to select from.
     :param output: The path to the output feature class or table.
     :param field_list: A list of fields to be selected.
-    :param convert_to_table: Optional, boolean. Default True. Whether to return the output as the Table dataset type.
+    :param convert_to_table: Optional, boolean. Default False. Whether to return the output as the Table dataset type.
     :return: ArcGIS Result object.
     '''
     input_type = arcpy.Describe(feature_class_or_table).dataType

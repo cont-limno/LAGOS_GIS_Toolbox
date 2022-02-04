@@ -9,7 +9,7 @@ from arcpy import management as DM
 
 import calc_glaciation
 import lagosGIS
-import lagosGIS.zone_prep
+import lagosGIS.spatial_divisions_processing
 import NHDNetwork
 
 LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\Derived_Land_Borders'
@@ -278,7 +278,7 @@ def process_ws(sheds_fc, zone_name, network_fc ='', nhd_gdb='', fits_naming_stan
 
     # assign states to zone
     print('State assignment...')
-    lagosGIS.zone_prep.find_states(sheds_fc, STATES_GEO, zone_name)
+    lagosGIS.spatial_divisions_processing.find_states(sheds_fc, STATES_GEO, zone_name)
     # glaciation status
     calc_glaciation.calc(sheds_fc, GLACIAL_EXTENT, zoneid, zone_name)
 

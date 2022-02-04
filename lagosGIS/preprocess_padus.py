@@ -17,7 +17,7 @@ def preprocess(padus_combined_fc, output_fc):
     protection types. This tool "flattens" the PADUS2_0Combined_Marined_Fee_Designation_Easement dataset so that the
     Own_Type, GAP_Sts, and IUCN_Cat fields are values are retained, renamed, and filtered for one primary value per
     region according to the following rules:
-    Own_Type -> "agency". "Fee" type > "Easement" > "Marine" > "Designation
+    Own_Type -> "agency" variable in LAGOS-US. Rule is FeatClass "Fee" > "Easement" > "Marine" > "Designation"
     GAP_Sts -> "gap" . Highest GAP status preferentially retained.
     IUCN_Cat -> "iucn". Lowest number codes preferentially retained, then "Other", last "Unassigned".
     :param padus_combined_fc:

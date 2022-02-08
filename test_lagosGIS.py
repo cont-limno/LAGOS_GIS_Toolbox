@@ -24,7 +24,6 @@ __all__ = ["lake_connectivity_classification",
             "locate_lake_inlets",
             "aggregate_watersheds",
             "calc_watershed_subtype",
-            "calc_watershed_equality",
 
             "point_density_in_zones",
             "line_density_in_zones",
@@ -39,9 +38,6 @@ __all__ = ["lake_connectivity_classification",
             "point_attribution_of_raster_data",
             "summarize_raster_for_all_zones",
             "preprocess_padus",
-
-            "spatialize_lakes",
-            "georeference_lakes",
 
             "export_to_csv"]
 
@@ -63,15 +59,14 @@ def locate_lake_inlets(out_fc):
 
 
 def aggregate_watersheds(out_fc):
-    pass
+    catchments_fc = os.path.join(TEST_DATA_GDB, 'catchment')
+    lagosGIS.aggregate_watersheds(catchments_fc, TEST_DATA_GDB, 'Lakes_1ha', out_fc, mode='interlake')
 
 
-def calc_watershed_subtype():
-    pass
-
-
-def calc_watershed_equality():
-    pass
+def calc_watershed_subtype(out_fc):
+    interlake_fc_orig = os.path.join(TEST_DATA_GDB, 'ws')
+    interlake_fc = arcpy.CopyFeatures_management(interlake_fc_orig, out_fc)
+    lagosGIS.calc_watershed_subtype(TEST_DATA_GDB, interlake_fc, fits_naming_standard=True)
 
 
 def point_density_in_zones(out_table, selection_expression=''):
@@ -79,7 +74,7 @@ def point_density_in_zones(out_table, selection_expression=''):
     lagosGIS.point_density_in_zones(hu12, 'hu12_zoneid', points_fc, out_table, selection_expression)
 
 
-def line_density_in_zone(out_table, selection_expression=''):
+def line_density_in_zones(out_table, selection_expression=''):
     lines_fc = os.path.join(TEST_DATA_GDB, 'Streams')
     lagosGIS.point_density_in_zones(hu12, 'hu12_zoneid', lines_fc, out_table, selection_expression)
 
@@ -129,8 +124,9 @@ def zonal_summary_of_raster_data(out_table, overlaps=False, is_thematic=False):
                                         unflat_table=unflat_table, rename_tag=rename_tag, units=units)
 
 
-def zonal_summary_of_classed_polygons():
-    pass
+def zonal_summary_of_classed_polygons(out_table):
+    class_fc = os.path.join(TEST_DATA_GDB, 'padus_processed')
+    lagosGIS.zonal_summary_of_classed_polygons(hu12, 'hu12_zoneid', class_fc, out_table, 'agency')
 
 
 def point_attribution_of_raster_data(out_table):
@@ -144,20 +140,14 @@ def summarize_raster_for_all_zones():
     pass
 
 
-def preprocess_padus():
-    pass
+def preprocess_padus(out_fc):
+    padus_original = os.path.join(TEST_DATA_GDB, 'padus_original')
+    lagosGIS.preprocess_padus(padus_original, out_fc)
 
 
-def spatialize_lakes():
-    pass
-
-
-def georeference_lakes():
-    pass
-
-
-def export_to_csv():
-    pass
+def export_to_csv(out_folder):
+    in_table = os.path.join(TEST_DATA_GDB, 'buff500_unflat')
+    lagosGIS.export_to_csv(in_table, out_folder)
 
 
 def test_all(out_gdb):
@@ -171,10 +161,9 @@ def test_all(out_gdb):
     locate_lake_inlets()
     aggregate_watersheds()
     calc_watershed_subtype()
-    calc_watershed_equality()
 
     point_density_in_zones()
-    line_density_in_zone()
+    line_density_in_zones()
     polygon_density_in_zones()
     stream_density()
     lake_density()
@@ -186,8 +175,5 @@ def test_all(out_gdb):
     point_attribution_of_raster_data()
     summarize_raster_for_all_zones()
     preprocess_padus()
-
-    spatialize_lakes()
-    georeference_lakes()
 
     export_to_csv()

@@ -13,8 +13,6 @@ import lagosGIS
 def summarize(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=''):
 
     def rename_to_standard(table, numeric=False):
-        arcpy.AddMessage("Renaming.")
-
         # look up the values based on the rename tag
         this_files_dir = os.path.dirname(os.path.abspath(__file__))
         os.chdir(this_files_dir)
@@ -25,7 +23,7 @@ def summarize(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=
                        for row in reader if row['main_feature'] in rename_tag and row['main_feature']}
             if numeric:
                 mapping = {'{}{}'.format(class_field, k):v for k, v in mapping.items()}
-            arcpy.AddMessage(mapping)
+            arcpy.AddMessage('Renaming fields: {}'.format(mapping))
 
         # update them
         for old, new in mapping.items():
@@ -42,7 +40,6 @@ def summarize(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=
 
     arcpy.env.workspace = 'in_memory'
     tab = arcpy.TabulateIntersection_analysis(zone_fc, zone_field, class_fc, 'tab', class_field, xy_tolerance='0.001 Meters')
-    print([f.name for f in arcpy.ListFields(tab)])
     # guard against all numeric values--can't pivot when that is the case
     vals = [r[0] for r in arcpy.da.SearchCursor(tab, class_field)]
     all_numeric = all([str.isdigit(str(v)) for v in vals])

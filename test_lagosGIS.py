@@ -11,7 +11,6 @@ import arcpy
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import lagosGIS
 
-
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 TEST_DATA_GDB = os.path.abspath(os.path.join(os.curdir, 'TestData_0411.gdb'))
 hu12 = os.path.join(TEST_DATA_GDB, 'hu12')
@@ -42,8 +41,8 @@ __all__ = ["lake_connectivity_classification",
             "export_to_csv"]
 
 
-def lake_connectivity_classification(out_feature_class):
-    lagosGIS.lake_connectivity_classification(TEST_DATA_GDB, out_feature_class)
+def lake_connectivity_classification(out_fc):
+    lagosGIS.lake_connectivity_classification(TEST_DATA_GDB, out_fc)
 
 
 def upstream_lakes(out_table):
@@ -59,8 +58,9 @@ def locate_lake_inlets(out_fc):
 
 
 def aggregate_watersheds(out_fc):
-    catchments_fc = os.path.join(TEST_DATA_GDB, 'catchment')
-    lagosGIS.aggregate_watersheds(catchments_fc, TEST_DATA_GDB, 'Lakes_1ha', out_fc, mode='interlake')
+    catchments_fc = os.path.join(TEST_DATA_GDB, 'catchments')
+    lakes_fc = os.path.join(TEST_DATA_GDB, 'Lakes_1ha')
+    lagosGIS.aggregate_watersheds(catchments_fc, TEST_DATA_GDB, lakes_fc, out_fc, mode='interlake')
 
 
 def calc_watershed_subtype(out_fc):
@@ -75,17 +75,17 @@ def point_density_in_zones(out_table, selection_expression=''):
 
 
 def line_density_in_zones(out_table, selection_expression=''):
-    lines_fc = os.path.join(TEST_DATA_GDB, 'Streams')
+    lines_fc = os.path.join(TEST_DATA_GDB, 'lagos_streams')
     lagosGIS.point_density_in_zones(hu12, 'hu12_zoneid', lines_fc, out_table, selection_expression)
 
 
 def polygon_density_in_zones(out_table, selection_expression=''):
     polygons_fc = os.path.join(TEST_DATA_GDB, 'Lakes_1ha')
-    lagosGIS.polygon_density_in_zones(hu12, 'ZoneID', polygons_fc, out_table, selection_expression)
+    lagosGIS.polygon_density_in_zones(hu12, 'hu12_zoneid', polygons_fc, out_table, selection_expression)
 
 
 def stream_density(out_table):
-    lines_fc = os.path.join(TEST_DATA_GDB, 'Streams')
+    lines_fc = os.path.join(TEST_DATA_GDB, 'lagos_streams')
     lagosGIS.stream_density(hu12, 'hu12_zoneid', lines_fc, out_table, zone_prefix='hu12')
 
 
@@ -94,13 +94,15 @@ def lake_density(out_table):
     lagosGIS.lake_density(hu12, 'hu12_zoneid', polygons_fc, out_table)
 
 
-def flatten_overlaps(out_fc, out_table):
+def flatten_overlaps(out_fc, out_table=''):
+    if not out_table:
+        out_table = out_fc + '_unflat'
     zones_fc = os.path.join(TEST_DATA_GDB, 'buff500')
     lagosGIS.flatten_overlaps(zones_fc, 'buff500_zoneid', out_fc, out_table)
 
 
-def rasterize_zones():
-    lagosGIS.rasterize_zones([hu12], TEST_DATA_GDB)
+def rasterize_zones(out_gdb):
+    lagosGIS.rasterize_zones([hu12], out_gdb)
 
 
 def zonal_summary_of_raster_data(out_table, overlaps=False, is_thematic=False):
@@ -126,13 +128,13 @@ def zonal_summary_of_raster_data(out_table, overlaps=False, is_thematic=False):
 
 def zonal_summary_of_classed_polygons(out_table):
     class_fc = os.path.join(TEST_DATA_GDB, 'padus_processed')
-    lagosGIS.zonal_summary_of_classed_polygons(hu12, 'hu12_zoneid', class_fc, out_table, 'agency')
+    lagosGIS.zonal_summary_of_classed_polygons(hu12, 'hu12_zoneid', class_fc, out_table, 'agency', 'agency')
 
 
 def point_attribution_of_raster_data(out_table):
     zone_points = os.path.join(TEST_DATA_GDB, 'Lakes_1ha_Point')
     in_value_raster = os.path.join(TEST_DATA_GDB, 'Total_Nitrogen_Deposition_2006')
-    lagosGIS.attribution(zone_points, 'Permanent_Identifier', in_value_raster, out_table,
+    lagosGIS.point_attribution_of_raster_data(zone_points, 'Permanent_Identifier', in_value_raster, out_table,
                                               'lake_wetdepinorgnitrogen', 'kgperha')
 
 
@@ -151,29 +153,28 @@ def export_to_csv(out_folder):
 
 
 def test_all(out_gdb):
+    """
+    Tests mony functions in lagosGIS. Takes about 5 minutes to run.
+    :param out_gdb: A file geodatabase to save the test outputs to.
+    :return: None
+    """
+
     if not arcpy.Exists(out_gdb):
         arcpy.CreateFileGDB_management(os.path.dirname(out_gdb), os.path.basename(out_gdb))
     dt_prefix = datetime.now().strftime("%b%d_%H%M")
     print("All test files will start with date-time prefix {}".format(dt_prefix))
-    lake_connectivity_classification()
-    upstream_lakes()
-    locate_lake_outlets()
-    locate_lake_inlets()
-    aggregate_watersheds()
-    calc_watershed_subtype()
-
-    point_density_in_zones()
-    line_density_in_zones()
-    polygon_density_in_zones()
-    stream_density()
-    lake_density()
-
-    flatten_overlaps()
-    rasterize_zones()
-    zonal_summary_of_raster_data()
-    zonal_summary_of_classed_polygons()
-    point_attribution_of_raster_data()
-    summarize_raster_for_all_zones()
-    preprocess_padus()
-
-    export_to_csv()
+    for method in __all__:
+        if method == 'rasterize_zones':
+            eval_str = '''{}('{}')'''.format(method, out_gdb)
+            print('TESTING:' + eval_str)
+            eval(eval_str)
+            old_name = os.path.join(out_gdb, 'hu12_raster')
+            new_name = os.path.join(out_gdb, '{}_rasterize_zones'.format(dt_prefix))
+            arcpy.Rename_management(old_name, new_name)
+        elif method in ('summarize_raster_for_all_zones', 'export_to_csv'):
+            continue # skip
+        else:
+            eval_str = '''{}(os.path.join('{}', '{}_{}'))'''.format(method, out_gdb, dt_prefix, method)
+            print('TESTING:' + eval_str)
+            eval(eval_str)
+        print('')

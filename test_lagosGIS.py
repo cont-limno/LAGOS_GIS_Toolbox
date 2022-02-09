@@ -154,7 +154,8 @@ def export_to_csv(out_folder):
 
 def test_all(out_gdb):
     """
-    Tests mony functions in lagosGIS. Takes about 5 minutes to run.
+    Sets up tests for many tests in LAGOS GIS Toolbox using the test data included and saves the outputs to a common
+    file geodatabase. Takes about 5 minutes to run.
     :param out_gdb: A file geodatabase to save the test outputs to.
     :return: None
     """
@@ -178,3 +179,11 @@ def test_all(out_gdb):
             print('TESTING:' + eval_str)
             eval(eval_str)
         print('')
+
+def main():
+    out_gdb = arcpy.GetParameterAsText(0)
+    test_all(out_gdb)
+
+
+if __name__ == '__main__':
+    main()

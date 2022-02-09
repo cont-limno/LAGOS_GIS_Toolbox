@@ -1,5 +1,9 @@
-# Lakes in Zones, the new one
-# this does all the lake stuff at once for a given extent
+# filename: lake_density.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
 import os
 import arcpy
 import polygon_density_in_zones

@@ -1,6 +1,6 @@
 # filename: watersheds_toolchain.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: code journal (no ArcGIS Toolbox, workstation-specific paths)
 # purpose: This code was used to string together the watersheds tools in the correct order for LAGOS, as well as

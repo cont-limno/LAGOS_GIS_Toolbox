@@ -1,6 +1,6 @@
 # filename: dams_link_lake_junctions_doit.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): CONN
 # tool type: code journal, internal use, batch run
 

@@ -1,6 +1,6 @@
 # filename: mosaic_dems.py
 # author: Ed Bissell, Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: re-usable (ArcGIS Toolbox)
 # purpose:  The purpose of this script is to create a directory of NED tiles for a NHD subregion and

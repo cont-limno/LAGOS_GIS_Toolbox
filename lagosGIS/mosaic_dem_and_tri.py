@@ -1,5 +1,10 @@
+# filename: mosaic_dem_and_tri.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: code journal, modify paths by hand
+
 import os
-import re
 import subprocess
 import zipfile
 import arcpy

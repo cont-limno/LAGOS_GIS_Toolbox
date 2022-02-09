@@ -1,6 +1,6 @@
 # filename: do_national_outlets_inlets.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): CONN
 # tool type: code journal, batch run
 

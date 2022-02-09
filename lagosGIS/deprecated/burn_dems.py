@@ -1,6 +1,6 @@
 # filename: burn_dems.py
 # author: Scott Stopyak, Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: re-usable (ArcGIS Toolbox)
 

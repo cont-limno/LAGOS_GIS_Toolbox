@@ -1,6 +1,6 @@
 # filename: make_hydrodem_toolbox.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: re-usable (ArcGIS Toolbox)
 

@@ -1,6 +1,6 @@
 # filename: locate_lake_inlets.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): CONN
 # tool type: re-usable (not in ArcGIS Toolbox)
 

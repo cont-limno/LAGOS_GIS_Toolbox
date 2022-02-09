@@ -18,12 +18,13 @@ __all__ = ["lake_connectivity_classification",
            "zonal_summary_of_classed_polygons",
            "point_attribution_of_raster_data",
            "summarize_raster_for_all_zones",
+           "preprocess_padus",
 
            "spatialize_lakes",
            "georeference_lakes",
 
            "export_to_csv",
-            "zone_prep"
+           "spatial_divisions_processing"
     ]
 
 import os
@@ -47,6 +48,7 @@ from flatten_overlapping_zones import flatten as flatten_overlaps
 from rasterize_zones import rasterize as rasterize_zones
 from zonal_summary_of_raster_data import calc as zonal_summary_of_raster_data
 from summarize_raster_for_all_zones import summarize as summarize_raster_for_all_zones
+from preprocess_padus import preprocess as preprocess_padus
 
 from zonal_summary_of_classed_polygons import summarize as zonal_summary_of_classed_polygons
 from point_attribution_of_raster_data import attribution as point_attribution_of_raster_data
@@ -55,7 +57,7 @@ from georeference import spatialize_lakes
 from georeference import georeference_lakes
 
 from export_to_csv import export as export_to_csv
-import zone_prep
+import spatial_divisions_processing
 
 
 LAGOS_FCODE_LIST = (39000,39004,39009,39010,39011,39012,43600,43613,43615,43617,43618,43619,43621)

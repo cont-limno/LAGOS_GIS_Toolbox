@@ -1,18 +1,8 @@
-#-------------------------------------------------------------------------------
-# Name:        NHD_merge_utility
-# Purpose: Merges features from pre-staged NHD subregion downloads, deletes ID
-# duplicates by saving only the one with the latest FDate, and deletes geographic
-# duplicates (different IDs) by saving the one with the latest FDate).
-#
-# Requirements: 1) nhdDir = Directory containing all the NHD subregions you want to merge
-#               2) fcName = Feature class name for features you want to merge
-#               3) outputDir = Output directory
-#
-# Author:      nicolejeansmith
-#
-# Created:     2016-12-20
-
-#-------------------------------------------------------------------------------
+# filename: NHD_merge_utility.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): LOCUS, GEO
+# tool type: re-usable (ArcGIS Toolbox)
 
 # Merge any of the NHD-based layers into a seamless layer and apply a selection if desired
 # do not delete any duplicates

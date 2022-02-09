@@ -1,13 +1,9 @@
-#-------------------------------------------------------------------------------
-# Name:        module1
-# Purpose:
-#
-# Author:      smithn78
-#
-# Created:     21/05/2014
-# Copyright:   (c) smithn78 2014
-# Licence:     <your licence>
-#-------------------------------------------------------------------------------
+# filename: polygon_density_in_zones.py
+# author: Nicole J Smith
+# version: 2.0
+# LAGOS module(s): GEO
+# tool type: re-usable (ArcGIS Toolbox)
+
 import arcpy
 
 
@@ -25,7 +21,6 @@ def calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selec
     if arcpy.Exists(selected_polys):
         arcpy.env.overwriteOutput = True
 
-    arcpy.AddMessage('Copying/selecting polygon features...')
     if interest_selection_expr:
         arcpy.Select_analysis(polygons_of_interest, selected_polys, interest_selection_expr)
     else:
@@ -66,7 +61,6 @@ def calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selec
     arcpy.AddField_management(spjoin_fc, 'Poly_nperha', 'DOUBLE')
     arcpy.CalculateField_management(spjoin_fc, 'Poly_nperha', '!Poly_n!/!shape.area@hectares!', 'PYTHON')
 
-    arcpy.AddMessage('Refining output...')
     arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_n", 'Poly_nperha'])
     final_fields = ['Poly_ha', 'Poly_pct', 'Poly_n', 'Poly_nperha']
 
@@ -82,7 +76,6 @@ def calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selec
         arcpy.Delete_management(item)
     arcpy.env.workspace = old_workspace
 
-    arcpy.AddMessage('Polygons in zones tool complete.')
     arcpy.SetLogHistory(True)
 
 def main():

@@ -1,6 +1,6 @@
 # filename: NHDNetwork.py
 # author: Nicole J Smith
-# version: 2.0 Beta
+# version: 2.0
 # LAGOS module(s): LOCUS
 # tool type: re-usable (NOT IN ArcGIS Toolbox)
 
@@ -108,7 +108,7 @@ class NHDNetwork:
         # the following should have no effect on other users besides LAGOS use,
         # but will be used to modify .define_lakes so that it includes any permanent_id
         # found in the LAGOS population, regardless of its size or FType in NHDPlus Plus HR
-        self.lagos_pop_path = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
+        self.lagos_pop_path = r'F:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.9.gdb\Lakes\LAGOS_US_All_Lakes_1ha'
 
     # ---UTILITIES FOR HIGHER METHODS-----------------------------------------------------------------------------------
     def prepare_upstream(self, force_refresh=False):

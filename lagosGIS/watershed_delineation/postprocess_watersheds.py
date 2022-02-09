@@ -7,10 +7,10 @@
 import arcpy
 from arcpy import management as DM
 
-import calc_glaciation
+
 import lagosGIS
-import lagosGIS.spatial_divisions_processing
-import NHDNetwork
+import lagosGIS.calc_glaciation as calc_glaciation
+import lagosGIS.NHDNetwork as NHDNetwork
 
 LAND_BORDER =  r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\Derived_Land_Borders'
 COASTLINE = r'D:\Continental_Limnology\Data_Working\LAGOS_US_GIS_Data_v0.8.gdb\NonPublished\TIGER_Coastline'

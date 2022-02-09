@@ -56,7 +56,7 @@ def calc_watershed_subtype(nhd_gdb, interlake_fc, fits_naming_standard=True):
     if fits_naming_standard:
         permid = 'ws_permanent_identifier'
         eq = 'ws_equalsnws'
-        vpuid = 'ws_vpuid'
+        vpuid = 'VPUID'
 
     else:
         permid = 'Permanent_Identifier'

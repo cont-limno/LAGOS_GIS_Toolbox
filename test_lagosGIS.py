@@ -163,11 +163,11 @@ def test_all(out_gdb):
     if not arcpy.Exists(out_gdb):
         arcpy.CreateFileGDB_management(os.path.dirname(out_gdb), os.path.basename(out_gdb))
     dt_prefix = datetime.now().strftime("%b%d_%H%M")
-    print("All test files will start with date-time prefix {}".format(dt_prefix))
+    arcpy.AddMessage("All test files will start with date-time prefix {}".format(dt_prefix))
     for method in __all__:
         if method == 'rasterize_zones':
             eval_str = '''{}('{}')'''.format(method, out_gdb)
-            print('TESTING:' + eval_str)
+            arcpy.AddMessage('\n' + 'TESTING: ' + eval_str)
             eval(eval_str)
             old_name = os.path.join(out_gdb, 'hu12_raster')
             new_name = os.path.join(out_gdb, '{}_rasterize_zones'.format(dt_prefix))
@@ -176,9 +176,9 @@ def test_all(out_gdb):
             continue # skip
         else:
             eval_str = '''{}(os.path.join('{}', '{}_{}'))'''.format(method, out_gdb, dt_prefix, method)
-            print('TESTING:' + eval_str)
+            arcpy.AddMessage('\n' + 'TESTING: ' + eval_str)
             eval(eval_str)
-        print('')
+
 
 def main():
     out_gdb = arcpy.GetParameterAsText(0)

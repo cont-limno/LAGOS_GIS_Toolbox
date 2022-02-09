@@ -8,7 +8,7 @@
 import time
 import arcpy
 from arcpy import management as DM
-from lagosGIS import select_fields
+import lagosGIS
 
 
 def preprocess(padus_combined_fc, output_fc):
@@ -30,8 +30,7 @@ def preprocess(padus_combined_fc, output_fc):
     # Prep: Select only the fields needed, remove curves (densify) which prevents problems with geometry
     # that prevents DeleteIdentical based on Shape
     padus_fields = ['FeatClass', 'Own_Type', 'GAP_Sts', 'IUCN_Cat']
-    arcpy.AddMessage('{} select...'.format(time.ctime()))
-    padus_select = select_fields(padus_combined_fc, 'padus_select', padus_fields, convert_to_table=False)
+    padus_select = lagosGIS.select_fields(padus_combined_fc, 'padus_select', padus_fields, convert_to_table=False)
     arcpy.Densify_edit(padus_select, 'OFFSET', max_deviation = '1 Meters')
     arcpy.AddMessage('{} union...'.format(time.ctime()))
 
@@ -66,7 +65,6 @@ def preprocess(padus_combined_fc, output_fc):
                  'Other Conservation Area': 8,
                  'Unassigned': 9}
 
-    arcpy.AddMessage('{}  calculate...'.format(time.ctime()))
     with arcpy.da.UpdateCursor(union, cursor_fields) as cursor:
         for row in cursor:
             id1, id2, fc1, fc2, gap1, gap2, iucn1, iucn2, own1, own2, agency, gap, iucn, flag, areacalc, areashp = row
@@ -103,13 +101,13 @@ def preprocess(padus_combined_fc, output_fc):
 
     # Sort so that merged polygons are retained in DeleteIdentical, and delete identical shapes to end
     # up with just the merged polygons and non-overlapping polygons
-    arcpy.AddMessage('{}  sort...'.format(time.ctime()))
+    arcpy.AddMessage('{} sort...'.format(time.ctime()))
     sorted_fc = DM.Sort(large_enough, 'sorted_fc', [['merge_flag', 'DESCENDING']])
 
-    arcpy.AddMessage('{}  delete identical shape...'.format(time.ctime()))
+    arcpy.AddMessage('{} delete identical shape...'.format(time.ctime()))
     DM.DeleteIdentical(sorted_fc, "Shape")
     output_fields = [fid1, fid2] + new_fields
-    output_fc = select_fields(sorted_fc, output_fc, output_fields)
+    output_fc = lagosGIS.select_fields(sorted_fc, output_fc, output_fields)
 
     # cleanup
     for item in [padus_select, union, sorted_fc, large_enough]:

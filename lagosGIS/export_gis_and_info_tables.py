@@ -3,6 +3,8 @@
 # version: 2.0
 # LAGOS module(s): LOCUS, GEO
 # tool type: code journal, internal use only
+# purpose: Includes the specifications to export GIS layers and information tables from the internal spatial extents
+# file geodatabase. This was for LAGOS-US internal use.
 
 import os
 import arcpy

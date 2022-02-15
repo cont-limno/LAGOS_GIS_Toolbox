@@ -63,10 +63,10 @@ def spatialize_sites(lake_points_csv, out_fc, in_x_field, in_y_field, in_crs='NA
     return out_fc
 
 
-def georeference_lakes(sample_sites_point_fc, out_fc, site_id_field,
-                       lake_name_field, lake_county_field='', state='',
-                       master_gdb=r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb'
-                       ):
+def georeference_lake_sites(sample_sites_point_fc, out_fc, site_id_field,
+                            lake_name_field, lake_county_field='', state='',
+                            master_gdb=r'C:\Users\smithn78\Dropbox\CL_HUB_GEO\Lake_Georeferencing\Masters_for_georef.gdb'
+                            ):
     """
     Evaluate water quality sampling point locations and either assign the point to a lake polygon or flag the
     point for manual review. This function is meant to be used as the first of two steps in a semi-automated linking
@@ -85,15 +85,27 @@ def georeference_lakes(sample_sites_point_fc, out_fc, site_id_field,
     described in the variables MASTER_LAKES_FC, MASTER_LAKES_LINES, MASTER_STREAMS_FC, and MASTER_XWALK in this script
     :return: A point feature class containing the original input rows with the following fields added to document and
     control the semi-automated linking process.
-        -Auto_Comment:
-        -Manual_Review:
-        -Shared_Words:
-        -Linked_lagoslakeid:
-        -GEO_Discovered_Name:
-        -Duplicate_Candidate:
-        -Is_Legacy_Link:
-        -Total_points_in_lake_poly:
-        -Note
+        -Auto_Comment: Match status of site suggested by georeference_lakes. Permitted values:
+            'Exact location link'
+            'Linked by common name and location'
+            'Linked by common location'
+            'Not linked because represented as river in NHD'
+            'LAGOS-NE legacy link'
+            'Not linked"
+        -Comment: Match status of site finalized after review. (Edit this field during review.)
+        -Manual_Review: Numeric value indicating level of scrutiny to apply to suggested link, with higher values
+        indicating matches with less confidence.
+        -Shared_Words: Lake name elements common to the site and the linked lake
+        -Linked_lagoslakeid: The lagoslakeid for the LAGOS-US lake polygon linked to the sampling site. (Edit this field
+        during review.)
+        -GEO_Discovered_Name: A column to add any additional names for the lake discovered during lake linking review.
+        -Duplicate_Candidate: A Y/N flag indicating whether multiple suggested links are included in the dataset (Delete
+        one of the rows after choosing the best one in manual review.)
+        -Is_Legacy_Link: A Y/N flag indicating whether the site identifier was detected in the LAGOS-NE legacy site
+        identifiers list provided in the LAGOS-US lake_link crosswalk.
+        -Total_points_in_lake_poly: The number of unique site identifiers suggested to be linked to the same LAGOS-US
+        lake as this site, including this site in the count.
+        -Note: A field provided for any free-form notes and comments about linking determinations during manual review.
     """
 
     # ---SETUP----------------------------------------------------------------------------------------------------

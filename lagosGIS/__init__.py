@@ -21,7 +21,7 @@ __all__ = ["lake_connectivity_classification",
            "preprocess_padus",
 
            "spatialize_sites",
-           "georeference_lakes",
+           "georeference_lake_sites",
 
            "export_to_csv",
            "spatial_divisions_processing"
@@ -54,7 +54,7 @@ from zonal_summary_of_classed_polygons import summarize as zonal_summary_of_clas
 from point_attribution_of_raster_data import attribution as point_attribution_of_raster_data
 
 from georeference import spatialize_sites
-from georeference import georeference_lakes
+from georeference import georeference_lake_sites
 
 from export_to_csv import export as export_to_csv
 import spatial_divisions_processing

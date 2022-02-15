@@ -171,6 +171,12 @@ zones = ['buff100',
 
 # ---EXPORT LOCUS TABLES & GIS-------------------------------------------------------------------------------------
 def export_locus(export_info=True, export_gis=True):
+    """
+    Export the tables that comprise LAGOS-US LOCUS module.
+    :param export_info: Boolean. Whether to export *_information.csv tables
+    :param export_gis: Boolean. Whether to export GIS datasets
+    :return: None
+    """
     if export_info:
         # lake_information
         print('lake_information')
@@ -220,8 +226,17 @@ def export_locus(export_info=True, export_gis=True):
         lagosGIS.select_fields(cat, cat_shp_export, cat_fields)
 
 
-# ---EXPORT GEO TABLES & GIS-------------------------------------------------------------------------------------
+# ---EXPORT GEO INFORMATION & GIS-------------------------------------------------------------------------------------
 def export_zone(zone_name, export_info=True, export_gis=True, export_glaciation=True):
+    """
+    Exports a single spatial division's information table and GIS dataset for LAGOS-US GEO spatial divisions. Does not
+    export the rest of the GEO module!
+    :param zone_name: Shortname/prefix for the spatial division to be exported
+    :param export_info: Boolean. Whether to export *_information.csv table
+    :param export_gis: Boolean. Whether to export GIS dataset
+    :param export_glaciation: Boolean. Whether to export glaciation metric to table named "*_glaciatedlatewisc"
+    :return: None
+    """
     zone_fc = os.path.join(CURRENT_WORKING_GDB, zone_name)
 
     if export_info:

@@ -76,7 +76,7 @@ def point_density_in_zones(out_table, selection_expression=''):
 
 def line_density_in_zones(out_table, selection_expression=''):
     lines_fc = os.path.join(TEST_DATA_GDB, 'lagos_streams')
-    lagosGIS.point_density_in_zones(hu12, 'hu12_zoneid', lines_fc, out_table, selection_expression)
+    lagosGIS.line_density_in_zones(hu12, 'hu12_zoneid', lines_fc, out_table, selection_expression)
 
 
 def polygon_density_in_zones(out_table, selection_expression=''):

@@ -35,7 +35,6 @@ __all__ = ["lake_connectivity_classification",
             "zonal_summary_of_raster_data",
             "zonal_summary_of_classed_polygons",
             "point_attribution_of_raster_data",
-            "summarize_raster_for_all_zones",
             "preprocess_padus",
 
             "export_to_csv"]
@@ -136,10 +135,6 @@ def point_attribution_of_raster_data(out_table):
     in_value_raster = os.path.join(TEST_DATA_GDB, 'Total_Nitrogen_Deposition_2006')
     lagosGIS.point_attribution_of_raster_data(zone_points, 'Permanent_Identifier', in_value_raster, out_table,
                                               'lake_wetdepinorgnitrogen', 'kgperha')
-
-
-def summarize_raster_for_all_zones():
-    pass
 
 
 def preprocess_padus(out_fc):

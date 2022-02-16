@@ -16,13 +16,42 @@ import lagosGIS
 
 def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table='',
          rename_tag='', units=''):
+    """
+    Calculates the mean raster value in each zone or summarizes categorical raster data as a percent of each zone
+    depending on the input raster type.
+    :param zone_fc: Zones polygon feature class
+    :param zone_field: Unique identifier for each zone
+    :param in_value_raster: Raster dataset for which to summarize all values for each zone
+    :param out_table: Output table to save the result
+    :param is_thematic: Boolean. Whether the raster dataset to be summarized is thematic/categorical data (True), or
+    continuous/numerical data (False).
+    :param unflat_table: (Optional) If the zones provided are derived from zones that originally overlapped, provide
+    the location of the overlapping vs. non-overlapping identifier mapping table.
+    :param rename_tag: (Optional) A variable name to include in all output columns
+    :param units: (Optional) A units suffix to append to all output columns
+    :return: Out_table location
+    """
+
     orig_env = env.workspace
     env.workspace = 'in_memory'
     arcpy.SetLogHistory(False)
     arcpy.CheckOutExtension("Spatial")
-    
+
+    # ---DEFINE FUNCTIONS-----------------------------------------------------------------------------------------
     def stats_area_table(zone_fc=zone_fc, zone_field=zone_field, in_value_raster=in_value_raster,
                          out_table=out_table, is_thematic=is_thematic):
+        """
+        Runs Zonal Statistics as Table for continuous data or Tabulate Area for thematic/categorical data and refines
+        the output to prepare the table for being included in LAGOS-US.
+        :param zone_fc: Zones feature class
+        :param zone_field: Unique identifier for each zone
+        :param in_value_raster: Raster dataset for which to summarize all values for each zone
+        :param out_table: Output table to save the result
+        :param is_thematic: Boolean. Whether the raster dataset to be summarized is thematic/categorical data (True), or
+    continuous/numerical data (False).
+        :return:
+        """
+
         def refine_zonal_output(t):
             """Makes a nicer output for this tool. Rename some fields, drop unwanted
                 ones, calculate percentages using raster AREA before deleting that
@@ -61,6 +90,7 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
                 except:
                     continue
 
+        # SETUP---------------------------------------------------------------------------------------------------
         # Set up environments for alignment between zone raster and theme raster
         if isinstance(zone_fc, arcpy.Result):
             zone_fc = zone_fc.getOutput(0)
@@ -71,6 +101,7 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
         env.cellSize = common_grid
         env.extent = zone_fc
 
+        # Convert zones to raster if provided as polygon feature class
         zone_desc = arcpy.Describe(zone_fc)
         zone_raster = 'convertraster'
         if zone_desc.dataType not in ['RasterDataset', 'RasterLayer']:
@@ -88,6 +119,8 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
         # I tested and there is no need to resample the raster being summarized. It will be resampled correctly
         # internally in the following tool given that the necessary environments are set above (cell size, snap).
         # # in_value_raster = arcpy.Resample_management(in_value_raster, 'in_value_raster_resampled', CELL_SIZE)
+
+        # ---RUN STATS---------------------------------------------------------------------------------------------
         if not is_thematic:
             arcpy.AddMessage("Calculating Zonal Statistics...")
             if 'elevation' in rename_tag:
@@ -98,6 +131,7 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
                                                                 'temp_zonal_table', 'DATA', 'MEAN')
 
 
+        # POST-PROCESSING OUTPUT-----------------------------------------------------------------------------------
         if is_thematic:
             # for some reason env.cellSize doesn't work
             # calculate/doit
@@ -192,20 +226,24 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
         arcpy.CheckInExtension("Spatial")
 
         return [stats_result, count_diff]
-    
+
     def unflatten(intermediate_table):
+        """
+        Uses a weighted average to reconstitute mean value for original zone when provided a stats table based on
+        the "flattened" zone regions.
+        :param intermediate_table: Output of stats_area_table
+        :return: A list containing two elements 1) the output stats table with the final value calculated for each zone
+        2) The count of rows missing any data
+        """
+
+        # ---SETUP-----------------------------------------------------------------------------------------------
+        # names
         flat_zoneid = zone_field
         unflat_zoneid = zone_field.replace('flat', '')
         zone_type = [f.type for f in arcpy.ListFields(zone_fc, flat_zoneid)][0]
-        # Set up the output table (can't do this until the prior tool is run)
-        # if os.path.dirname(out_table):
-        #     out_path = os.path.dirname(out_table)
-        # else:
-        #     out_path = orig_env
 
+        # create table and get fields to add
         unflat_result = DM.CreateTable('in_memory', os.path.basename(out_table))
-
-        # get the fields to add to the table
         editable_fields = [f for f in arcpy.ListFields(intermediate_table)
                            if f.editable and f.name.lower() != flat_zoneid.lower()]
 
@@ -214,22 +252,25 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
         for f in editable_fields:
             DM.AddField(unflat_result, f.name, f.type, field_length=f.length)
 
-        # map original zone ids to new zone ids
+        # ---FIND ORIGINAL VS FLAT ZONE MAPPING-----------------------------------------------------------------
         original_flat = defaultdict(list)
         with arcpy.da.SearchCursor(unflat_table, [unflat_zoneid, flat_zoneid]) as cursor:
             for row in cursor:
                 if row[1] not in original_flat[row[0]]:
                     original_flat[row[0]].append(row[1])
 
+        # ---DO THE CALCULATION----------------------------------------------------------------------------------
         # Use CELL_COUNT as weight for means to calculate final values for each zone.
         fixed_fields = [unflat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct']
         other_field_names = [f.name for f in editable_fields if f.name not in fixed_fields]
         i_cursor = arcpy.da.InsertCursor(unflat_result, fixed_fields + other_field_names)  # open output table cursor
+        # read component stats
         flat_stats = {r[0]: r[1:] for r in arcpy.da.SearchCursor(
             intermediate_table, [flat_zoneid, 'ORIGINAL_COUNT', 'CELL_COUNT', 'datacoveragepct'] + other_field_names)}
 
         count_diff = 0
         for zid, unflat_ids in original_flat.items():
+            # get values needed to do the math
             valid_unflat_ids = [id for id in unflat_ids if id in flat_stats] # skip flatpolys not rasterized
             area_vec = [flat_stats[id][0] for id in valid_unflat_ids]  # ORIGINAL_COUNT specified in 0 index earlier
             cell_vec = [flat_stats[id][1] for id in valid_unflat_ids]
@@ -268,11 +309,14 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
         return [unflat_result, count_diff]
 
     def rename_to_standard(table):
+        """Construct output variable names from the rename_tag, units, and zone feature class name.
+        Substitutes variable name parts from the mappings in geo_metric_provenance.csv if the variables
+        are to fit the LAGOS-US standard."""
         arcpy.AddMessage("Renaming.")
         # datacoverage just gets tag
         new_datacov_name = '{}_datacoveragepct'.format(rename_tag)
         lagosGIS.rename_field(table, 'datacoveragepct', new_datacov_name, deleteOld=True)
-        # DM.AlterField(out_table, 'datacoveragepct', new_datacov_name, clear_field_alias=True)
+
         if not is_thematic:
             if 'elevation' in rename_tag:
                 new_mean_name = '{}_mean_{}'.format(rename_tag, units).rstrip('_')
@@ -290,7 +334,6 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
                 new_mean_name = '{}_{}'.format(rename_tag, units).rstrip('_')  # if no units, just rename_tag
                 lagosGIS.rename_field(table, 'MEAN', new_mean_name, deleteOld=True)
 
-            # DM.AlterField(out_table, 'MEAN', new_mean_name, clear_field_alias=True)
         else:
             # look up the values based on the rename tag
             geo_file = os.path.abspath('../geo_metric_provenance.csv')
@@ -311,7 +354,9 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
                     except:
                         lagosGIS.rename_field(table, old_fname, new_fname, deleteOld=True)
         return table
-    
+
+    # ---RUN ------------------------------------------------------------------------------------------------------
+    # Determine whether user provided "flattened zones" that need re-constitution and run stats
     if unflat_table:
         if not arcpy.Exists(unflat_table):
             raise Exception('Unflat_table must exist.')
@@ -320,22 +365,23 @@ def calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_ta
     else:
         named_as_original = stats_area_table(out_table='named_as_original')
 
+    # Rename all fields to match desired output, if elected
     if rename_tag:
         named_as_standard = rename_to_standard(named_as_original[0])
         out_table = DM.CopyRows(named_as_standard, out_table)
     else:
         out_table = DM.CopyRows(named_as_original[0], out_table)
 
+    # Check counts and alert user if there are fewer zones in the output than were in the input
     total_count_diff = named_as_original[1]
-
     if total_count_diff > 0:
         warn_msg = ("WARNING: {0} zones have null zonal statistics. There are 2 possible reasons:\n"
                     "1) Presence of zones that are fully outside the extent of the raster summarized.\n"
                     "2) Zones are too small relative to the raster resolution.".format(total_count_diff))
         arcpy.AddWarning(warn_msg)
 
+    # Clean up
     arcpy.SetLogHistory(True)
-
     return out_table
 
 
@@ -344,13 +390,13 @@ def main():
     zone_field = arcpy.GetParameterAsText(1)
     unflat_table = arcpy.GetParameterAsText(2)
     in_value_raster = arcpy.GetParameterAsText(3)
-    is_thematic = arcpy.GetParameter(4) # boolean
+    is_thematic = arcpy.GetParameter(4)  # boolean
     out_table = arcpy.GetParameterAsText(5)
-    rename_tag = arcpy.GetParameterAsText(6) # optional
-    units = arcpy.GetParameterAsText(7) # optional
-
+    rename_tag = arcpy.GetParameterAsText(6)  # optional
+    units = arcpy.GetParameterAsText(7)  # optional
     calc(zone_fc, zone_field, in_value_raster, out_table, is_thematic, unflat_table,
          rename_tag, units)
+
 
 if __name__ == '__main__':
     main()

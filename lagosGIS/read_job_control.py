@@ -64,7 +64,7 @@ def read_job_control(job_control_csv, start_line=-1, end_line=-1, validate=False
     with open(job_control_csv) as csv_file:
         reader = csv.DictReader(csv_file)
         lines = [line for line in reader]
-        if not lines.keys() == csv_header:
+        if not lines[0].keys().sort() == csv_header.sort():
             raise Exception("""CSV file is not in the required format. Please provide a file with the header as follows:
                             \n{}""".format(csv_header))
         if isinstance(start_line, int) and \

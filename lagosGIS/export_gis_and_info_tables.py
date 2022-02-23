@@ -17,6 +17,7 @@ OUT_FOLDER_LOCUS = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-0
 OUT_GDB_LOCUS = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-05-20_Export-LOCUS\gis_locus_v1.0.gdb'
 OUT_FOLDER_GEO = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-11-28_Export-GEOGIS'
 OUT_GDB_GEO = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-11-28_Export-GEOGIS\gis_geo_v1.0.gdb'
+OUT_GDB_SIMPLE = r'D:\Continental_Limnology\Data_Working\Tool_Execution\2021-11-28_Export-GEOGIS\simple_gis_geo_v1.0.gdb'
 FIELD_WARN_MSG = "WARNING: Specified fields missing from input dataset ({})"
 
 # ---SET UP EXPORT NAMES/REQUIREMENTS-----------------------------------------------------------------------------
@@ -153,6 +154,9 @@ cat_fields = ['lagoslakeid',
               'Permanent_Identifier',
               'VPUID']
 
+# great lakes
+
+
 # geo spatial divisions
 zones = ['buff100',
          'buff500',
@@ -229,16 +233,18 @@ def export_locus(export_info=True, export_gis=True):
 
 
 # ---EXPORT GEO INFORMATION & GIS-------------------------------------------------------------------------------------
-def export_zone(zone_name, export_info=True, export_gis=True, export_glaciation=True):
+def export_zone(zone_name, export_info=True, export_gis=True, export_simple_gis=True, export_glaciation=True):
     """
     Exports a single spatial division's information table and GIS dataset for LAGOS-US GEO spatial divisions. Does not
     export the rest of the GEO module!
     :param zone_name: Shortname/prefix for the spatial division to be exported
     :param export_info: Boolean. Whether to export *_information.csv table
-    :param export_gis: Boolean. Whether to export GIS dataset
+    :param export_gis: Boolean. Whether to export GIS database
+    :param export_simple_gis: Boolean. Whether to export simple GIS database
     :param export_glaciation: Boolean. Whether to export glaciation metric to table named "*_glaciatedlatewisc"
     :return: None
     """
+
     zone_fc = os.path.join(CURRENT_WORKING_GDB, zone_name)
 
     if export_info:
@@ -284,9 +290,25 @@ def export_zone(zone_name, export_info=True, export_gis=True, export_glaciation=
 
     if export_gis:
         # zone shape layers
-        print('{} shape layer'.format(zone_name))
-        zone_shp_export = os.path.join(OUT_GDB_GEO, zone_name)
-        lagosGIS.select_fields(zone_fc, zone_shp_export, ['{}_zoneid'.format(zone_name)])
+        if zone_name not in ('ws', 'nws'):  # which were published in LOCUS already
+            print('{} shape layer'.format(zone_name))
+            zone_shp_export = os.path.join(OUT_GDB_GEO, zone_name)
+            lagosGIS.select_fields(zone_fc, zone_shp_export, ['{}_zoneid'.format(zone_name)])
+
+    if export_simple_gis:
+        # simple shape layers
+        # created with
+        # SimplifyPolygon(zone_fc, out_fc, "BEND_SIMPLIFY, "2500 Meters", error_option="RESOLVE_ERRORS")
+        print('{} simple shape layer'.format(zone_name))
+        zone_fc = os.path.join(CURRENT_WORKING_GDB, 'simple_' + zone_name)
+        simple_shp_export = os.path.join(OUT_GDB_SIMPLE, 'simple_' + zone_name)
+        lagosGIS.select_fields(zone_fc, simple_shp_export, ['{}_zoneid'.format(zone_name)])
+
+        # HU12 gets two options because it's on the edge of usability
+        if zone_name == 'hu12':
+            zone_poly_fc = zone_fc + '_poly'
+            simple_poly_export = simple_shp_export + '_poly'
+            lagosGIS.select_fields(zone_poly_fc, simple_poly_export, ['{}_zoneid'.format(zone_name)])
 
     if export_glaciation:
         field_list = ['{}_{}'.format(zone_name, f) for f in ['zoneid', 'glaciatedlatewisc_pct']]
@@ -300,6 +322,10 @@ def export_zone(zone_name, export_info=True, export_gis=True, export_glaciation=
 
 
 # ---RUN ALL-----------------------------------------------------------------------------------------------------
-export_locus()
+# export_locus()
 for z in zones:
-    export_zone(z)
+    export_zone(z, False, True, False, False)
+
+# # add lake to simple gis
+# simple_lake = os.path.join(OUT_GDB_SIMPLE, 'simple_lake')
+# lagosGIS.select_fields(lake_fc + '_points', simple_lake, ['lagoslakeid'])

@@ -299,6 +299,7 @@ def export_zone(zone_name, export_info=True, export_gis=True, export_simple_gis=
         # simple shape layers
         # created with
         # SimplifyPolygon(zone_fc, out_fc, "BEND_SIMPLIFY, "2500 Meters", error_option="RESOLVE_ERRORS")
+        # or 5000 Meter tolerance for HU12
         print('{} simple shape layer'.format(zone_name))
         zone_fc = os.path.join(CURRENT_WORKING_GDB, 'simple_' + zone_name)
         simple_shp_export = os.path.join(OUT_GDB_SIMPLE, 'simple_' + zone_name)
@@ -322,10 +323,18 @@ def export_zone(zone_name, export_info=True, export_gis=True, export_simple_gis=
 
 
 # ---RUN ALL-----------------------------------------------------------------------------------------------------
-# export_locus()
+# RUN LOCUS
+export_locus()
+
+# RUN GEO
 for z in zones:
-    export_zone(z, False, True, False, False)
+    if z not in ['ws', 'nws']:
+        export_gis = False
+    else:
+        export_gis = True
+    export_zone(z, True, export_gis, True, True)
+
 
 # # add lake to simple gis
-# simple_lake = os.path.join(OUT_GDB_SIMPLE, 'simple_lake')
-# lagosGIS.select_fields(lake_fc + '_points', simple_lake, ['lagoslakeid'])
+simple_lake = os.path.join(OUT_GDB_SIMPLE, 'simple_lake')
+lagosGIS.select_fields(lake_fc + '_points', simple_lake, ['lagoslakeid'])

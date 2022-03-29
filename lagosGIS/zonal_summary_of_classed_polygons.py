@@ -17,7 +17,7 @@ def summarize(zone_fc, zone_field, class_fc, out_table, class_field, rename_tag=
     :param zone_field: Unique identifier for each zone
     :param class_fc: Polygon feature class containing classed data to be summarized
     :param out_table: Output table to save the result
-    :param class_field: Field name containing the class values to summarize individuall
+    :param class_field: Field name containing the class values to summarize individually
     :param rename_tag: (Optional) Text string containing variable name to insert into all output column names
     :return: None
     """

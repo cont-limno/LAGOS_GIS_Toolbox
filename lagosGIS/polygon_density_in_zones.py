@@ -11,39 +11,43 @@ import arcpy
 import lagosGIS
 
 
-def calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr):
+def calc(zone_fc, zone_field, polygons_of_interest, output_table, where_clause=''):
+    """
+    Calculates total area and percent of zonal polygon occupied by polygons of interest for polygon features such as
+    lakes.
+    :param zone_fc: Zones polygon feature class
+    :param zone_field: Unique identifier for each zone
+    :param polygons_of_interest: Polygon feature class to be summarized
+    :param output_table: Output table to save the result
+    :param where_clause: (Optional) Query (SQL where clause) to filter the polygons of interest before summary
+    :return: None
+    """
+
+    # Setup
     old_workspace = arcpy.env.workspace
     arcpy.env.workspace = 'in_memory'
-    arcpy.SetLogHistory(False)
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     selected_polys = 'selected_polys'
-    # fixes some stupid ArcGIS thing with the interactive Python window
     if arcpy.Exists(selected_polys):
         arcpy.env.overwriteOutput = True
 
-    if interest_selection_expr:
-        arcpy.Select_analysis(polygons_of_interest, selected_polys, interest_selection_expr)
+    if where_clause:
+        arcpy.Select_analysis(polygons_of_interest, selected_polys, where_clause)
     else:
         arcpy.CopyFeatures_management(polygons_of_interest, selected_polys)
 
-    # use tabulate intersection for the areas overlapping
+    # Calculate area and percentage of polygons of interest that overlap zones
     arcpy.AddMessage('Tabulating intersection between zones and polygons...')
     tab_table = arcpy.TabulateIntersection_analysis(zone_fc, zone_field, selected_polys,
                                         'tabulate_intersection_table')
 
-    # area was calculated in map units which was m2 so convert to hectares
+    # Convert area to hectares from m2 and rename percentage
     arcpy.AddField_management(tab_table, 'Poly_ha', 'DOUBLE')
     arcpy.CalculateField_management(tab_table, 'Poly_ha', '!AREA!/10000', 'PYTHON')
-
-
-    # just change the name of the percent field
     arcpy.AlterField_management(tab_table, 'PERCENTAGE', 'Poly_pct')
     arcpy.CalculateField_management(tab_table, 'Poly_pct', 'min(!Poly_pct!, 100)', 'PYTHON') # fix rar val slightly 100+
 
-    # Now just get the count as there is no other area metric anymore
-
-    # stupid bit of code that allows at least a few pre-existing "Join_Count" fields to
-    # not mess up the next bit in which we re-name that output field
+    # Guarantee that a new "Join_Count" field (produced with Spatial Join) is the one to use in upcoming calculations
     join_count_fnames = ['Join_Count', 'Join_Count_1', 'Join_Count_12']
 
     for fname in join_count_fnames:
@@ -53,30 +57,27 @@ def calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selec
             join_count_field_name = fname
             break
 
-    # and now we proceed with said join
+    # Spatial join to get count of polygons intersecting zone
     spjoin_fc = arcpy.SpatialJoin_analysis(zone_fc, selected_polys, 'spatial_join_output')
     arcpy.AlterField_management(spjoin_fc, join_count_field_name, 'Poly_n')
 
-    # Add the density
+    # Add and calculate density field from count
     arcpy.AddField_management(spjoin_fc, 'Poly_nperha', 'DOUBLE')
     arcpy.CalculateField_management(spjoin_fc, 'Poly_nperha', '!Poly_n!/!shape.area@hectares!', 'PYTHON')
-
     arcpy.JoinField_management(tab_table, zone_field, spjoin_fc, zone_field, ["Poly_n", 'Poly_nperha'])
     final_fields = ['Poly_ha', 'Poly_pct', 'Poly_n', 'Poly_nperha']
 
-    # make output nice
+    # Refine output, one row out for every one row in and null values mean 0 polygons in zone
     arcpy.env.overwriteOutput = False
     lagosGIS.one_in_one_out(tab_table, zone_fc, zone_field, output_table)
 
     lagosGIS.redefine_nulls(output_table, final_fields, [0, 0, 0, 0])
 
-    # clean up
-    # can't delete all of in_memory because this function is meant to be called from another one that uses in_memory
+    # Cleanup
     for item in [selected_polys, tab_table, spjoin_fc]:
         arcpy.Delete_management(item)
     arcpy.env.workspace = old_workspace
 
-    arcpy.SetLogHistory(True)
 
 def main():
     zone_fc = arcpy.GetParameterAsText(0)
@@ -85,6 +86,7 @@ def main():
     interest_selection_expr = arcpy.GetParameterAsText(3)
     output_table = arcpy.GetParameterAsText(4)
     calc(zone_fc, zone_field, polygons_of_interest, output_table, interest_selection_expr)
+
 
 if __name__ == '__main__':
     main()

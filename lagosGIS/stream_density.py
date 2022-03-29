@@ -10,6 +10,18 @@ import lagosGIS
 
 
 def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
+    """
+    Convenience function that runs a modified version of Line Density in Zones for all LAGOS-US stream metrics.
+    :param zones_fc: Zones polygon feature class
+    :param zone_field: Unique identifier for each zone
+    :param lines_fc: LAGOS-US streams polyline feature class (derived from NHDPllus HR) containing all streams to be
+    summarized
+    :param out_table: Output table to save the result
+    :param zone_prefix: (Optional) Text string containing zone shortname to prefix all output column names
+    :return: None
+    """
+
+    # Set up
     arcpy.env.workspace = 'in_memory'
     arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(102039)
     if zone_prefix:
@@ -27,10 +39,11 @@ def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
 
     intermit_fcodes = ['46003', '46007']
 
-    # Keep only necessary columns from zones
+    # Select only necessary columns from zones for speed
     zones_only = lagosGIS.select_fields(zones_fc, 'in_memory/zones_only', [zone_field], convert_to_table=False)
 
-    # Perform identity analysis to join fields and crack lines at polygon boundaries
+    # ---EMULATES line_density_in_zones.py, BUT RE-USES IDENTITY RESULT FOR ALL CALCULATIONS---------------------------
+    # Perform identity analysis to crack lines at polygon boundaries
     arcpy.AddMessage("Cracking lines...")
     lines_identity = arcpy.Identity_analysis(lines_fc, zones_only, 'lines_identity', cluster_tolerance='1 meters')
     arcpy.AddField_management(lines_identity, 'length_m', 'DOUBLE')
@@ -39,19 +52,17 @@ def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
             row[0] = row[1]
             cursor.updateRow(row)
 
-    # make permanent-only layer
+    # make Permanent-only layer
     perm_query = 'FCode NOT IN ({})'.format(','.join(intermit_fcodes))
     lines_identity_perm = arcpy.Select_analysis(lines_identity, 'lines_identity_perm', perm_query)
 
-    # make strahler grouped layers
+    # make Strahler grouped layers
     rivers_query = 'StreamOrder >= 7'
     midreaches_query = 'StreamOrder > 3 AND StreamOrder <= 6'
     headwaters_query = 'StreamOrder <= 3 OR StreamOrder IS NULL'
     lines_identity_rivers = arcpy.Select_analysis(lines_identity, 'lines_identity_rivers', rivers_query)
     lines_identity_midreaches = arcpy.Select_analysis(lines_identity, 'lines_identity_midreaches', midreaches_query)
     lines_identity_headwaters = arcpy.Select_analysis(lines_identity, 'lines_identity_headwaters', headwaters_query)
-
-
 
     def summarize_cracked(cracked_lines, density_field_name):
         # calc total length grouped by zone (numerator)
@@ -70,7 +81,7 @@ def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
             for row in cursor:
                 zid, mperha, msum = row
                 if msum is None:
-                    msum = 0 # replace NULL values with 0 which is physically accurate here
+                    msum = 0  # replace NULL values with 0 which is physically accurate here
                 if zid:
                     mperha = msum/zones_area[zid]
                     row = (zid, mperha, msum)
@@ -79,7 +90,7 @@ def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
                 else:
                     cursor.deleteRow()
 
-        # delete extra field and ensure all input zones have output row
+        # Delete extra fields
         arcpy.DeleteField_management(lines_stat_full, 'SUM_length_m')
         arcpy.DeleteField_management(lines_stat_full, 'FREQUENCY')
 
@@ -91,14 +102,14 @@ def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
 
         return summarized
 
-    # run summaries
+    # Run summaries for each subgroup
     streams_summary = summarize_cracked(lines_identity, streams_density_field)
     perm_summary = summarize_cracked(lines_identity_perm, perm_density_field)
     rivers_summary = summarize_cracked(lines_identity_rivers, rivers_density_field)
     midreaches_summary = summarize_cracked(lines_identity_midreaches, midreaches_density_field)
     headwaters_summary = summarize_cracked(lines_identity_headwaters, headwaters_density_field)
 
-    # put all tables together
+    # Put all tables together--cursor goes faster than join
     arcpy.AddField_management(streams_summary, perm_density_field, 'DOUBLE')
     arcpy.AddField_management(streams_summary, rivers_density_field, 'DOUBLE')
     arcpy.AddField_management(streams_summary, midreaches_density_field, 'DOUBLE')
@@ -127,6 +138,7 @@ def calc_all(zones_fc, zone_field, lines_fc, out_table, zone_prefix=''):
     for item in [lines_identity, lines_identity_perm, streams_summary, perm_summary, rivers_summary,
                  midreaches_summary, headwaters_summary]:
         arcpy.Delete_management(item)
+
 
 def main():
     # Parameters

@@ -20,24 +20,23 @@ def preprocess(padus_combined_fc, output_fc):
     Own_Type -> "agency" variable in LAGOS-US. Rule is FeatClass "Fee" > "Easement" > "Marine" > "Designation"
     GAP_Sts -> "gap" . Highest GAP status preferentially retained.
     IUCN_Cat -> "iucn". Lowest number codes preferentially retained, then "Other", last "Unassigned".
-    :param padus_combined_fc:
-    :param output_fc:
-    :return:
+    :param padus_combined_fc: The PADUS2_0Combined_Marined_Fee_Designation_Easement dataset from the PADUS database
+    :param output_fc: Output feature class to save the result
+    :return: Result object for output feature class
     """
-
-    arcpy.env.workspace = 'in_memory'
 
     # Prep: Select only the fields needed, remove curves (densify) which prevents problems with geometry
     # that prevents DeleteIdentical based on Shape
+    arcpy.env.workspace = 'in_memory'
     padus_fields = ['FeatClass', 'Own_Type', 'GAP_Sts', 'IUCN_Cat']
     padus_select = lagosGIS.select_fields(padus_combined_fc, 'padus_select', padus_fields, convert_to_table=False)
     arcpy.Densify_edit(padus_select, 'OFFSET', max_deviation = '1 Meters')
     arcpy.AddMessage('{} union...'.format(time.ctime()))
 
-    # self-union
+    # Self-union to create new features from overlapping regions between polygons
     union = arcpy.Union_analysis([padus_select, padus_select], 'union', 'ALL', cluster_tolerance='1 Meters')
 
-    # self-union creates duplicates, remove
+    # Remove full duplicates resulting from self-union before further processing
     fid1 = 'FID_padus_select'
     fid2 = 'FID_padus_select_1'
     padus_fields_1 = padus_fields + [f + '_1' for f in padus_fields]
@@ -45,7 +44,7 @@ def preprocess(padus_combined_fc, output_fc):
     arcpy.AddMessage('{} delete identical round 1...'.format(time.ctime()))
     DM.DeleteIdentical(union, padus_fields_1)
 
-    # calculate the new class values based on the overlaid polygons
+    # Setup for new class fields
     new_fields = ['agency', 'gap', 'iucn', 'merge_flag', 'area_m2']
     cursor_fields = sorted(padus_fields_1) + new_fields + ['SHAPE@AREA']
     DM.AddField(union, 'agency', 'TEXT', field_length=5)
@@ -54,6 +53,9 @@ def preprocess(padus_combined_fc, output_fc):
     DM.AddField(union, 'merge_flag', 'TEXT', field_length=1)
     DM.AddField(union, 'area_m2', 'DOUBLE')
 
+    # Establish rules for class priority for each polygon
+    # If polygon was an overlapping region, these rules will select which class value is assigned from the multiple
+    # originals, if they were not the same already
     owner_rule = {'Fee': 1, 'Easement': 2, 'Marine': 3, 'Designation': 4}
     iucn_rule = {'Ia': 1,
                  'Ib': 2,
@@ -65,25 +67,28 @@ def preprocess(padus_combined_fc, output_fc):
                  'Other Conservation Area': 8,
                  'Unassigned': 9}
 
+    # Calculate the new class values according to the rules above
     with arcpy.da.UpdateCursor(union, cursor_fields) as cursor:
         for row in cursor:
             id1, id2, fc1, fc2, gap1, gap2, iucn1, iucn2, own1, own2, agency, gap, iucn, flag, areacalc, areashp = row
             flag = 'N'
-            # take fee first, designation last to pull owner type from
+            # Take Fee feature class type first, Designation fc type last. Pull owner value from that feature class type
             if owner_rule[fc1] < owner_rule[fc2]:
                 agency = own1
             else:
                 agency = own2
 
-            # most protected gap
+            # Take most protected GAP value
             gap = min([gap1, gap2])
 
-            # numbered iucn over other or unassigned; use numbers as priority order
+            # Take numbered IUCN over "other" or "unassigned"; use numbers as priority order
             if iucn_rule[iucn1] < iucn_rule[iucn2]:
                 iucn = iucn1
             else:
                 iucn = iucn2
 
+            # Set merge flag to 'Y' if any output field contains a value that had to be resolved among multiple
+            # original polygons
             if fc1 <> fc2 or own1 <> own2 or gap1 <> gap2 or iucn1 <> iucn2:
                 flag = 'Y'
 
@@ -92,15 +97,14 @@ def preprocess(padus_combined_fc, output_fc):
             row = (id1, id2, fc1, fc2, gap1, gap2, iucn1, iucn2, own1, own2, agency, gap, iucn, flag, areacalc, areashp)
             cursor.updateRow(row)
 
-
-    # Prep for DeleteIdentical: Dispose of small polygons (they cause trouble, don't effect
+    # Prep for DeleteIdentical: Dispose of polygons under 4 sq. m (they cause trouble, don't effect
     # stats enough to bother) and repair geometry on the rest.
     large_enough = arcpy.Select_analysis(union, 'large_enough', 'area_m2 > 4')
     arcpy.AddMessage('{} repair...'.format(time.ctime()))
     DM.RepairGeometry(large_enough)
 
-    # Sort so that merged polygons are retained in DeleteIdentical, and delete identical shapes to end
-    # up with just the merged polygons and non-overlapping polygons
+    # Sort so that merged polygons are highest/retained in DeleteIdentical
+    # Delete identical shapes to end up with just the merged polygons and polygons from non-overlapping regions
     arcpy.AddMessage('{} sort...'.format(time.ctime()))
     sorted_fc = DM.Sort(large_enough, 'sorted_fc', [['merge_flag', 'DESCENDING']])
 
@@ -109,15 +113,17 @@ def preprocess(padus_combined_fc, output_fc):
     output_fields = [fid1, fid2] + new_fields
     output_fc = lagosGIS.select_fields(sorted_fc, output_fc, output_fields)
 
-    # cleanup
+    # Clean up
     for item in [padus_select, union, sorted_fc, large_enough]:
         DM.Delete(item)
     return output_fc
+
 
 def main():
     padus_combined_fc = arcpy.GetParameterAsText(0)
     output_fc = arcpy.GetParameterAsText(1)
     preprocess(padus_combined_fc, output_fc)
+
 
 if __name__ == '__main__':
     main()
